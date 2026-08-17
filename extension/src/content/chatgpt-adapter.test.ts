@@ -53,4 +53,23 @@ describe('ChatGPTAdapter prompt insertion', () => {
     await new ChatGPTAdapter().insert('preset');
     expect(warn).toHaveBeenCalledWith('[Cosmetology] ChatGPT composer not found');
   });
+
+  it('rechecks an initially unloaded generated image when its load event fires', () => {
+    const document = useDom('<article data-testid="conversation-turn-4"><div data-message-author-role="assistant"><div class="markdown"></div></div><div data-testid="image-generation"><img src="https://files.oaiusercontent.com/generated.png"></div></article>');
+    const message = document.querySelector<HTMLElement>('[data-message-author-role="assistant"]')!;
+    const image = document.querySelector<HTMLImageElement>('img')!;
+    const loaded = vi.fn();
+    const adapter = new ChatGPTAdapter();
+
+    expect(adapter.getBestGeneratedImage(message, loaded)).toBeUndefined();
+    Object.defineProperties(image, {
+      naturalWidth: {value: 1024, configurable: true},
+      naturalHeight: {value: 1024, configurable: true},
+      complete: {value: true, configurable: true}
+    });
+    image.dispatchEvent(new Event('load'));
+
+    expect(loaded).toHaveBeenCalledOnce();
+    expect(adapter.getBestGeneratedImage(message)?.url).toBe('https://files.oaiusercontent.com/generated.png');
+  });
 });

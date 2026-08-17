@@ -19,6 +19,23 @@ export interface ChatGPTImage {
   height?: number;
 }
 
+export interface ImageInspection {
+  messageId: string;
+  imageElements: number;
+  validImages: number;
+  elements: Array<{
+    tag: string;
+    srcType: 'blob' | 'data' | 'https' | 'other';
+    naturalWidth: number;
+    naturalHeight: number;
+    renderedWidth: number;
+    renderedHeight: number;
+    declaredWidth: number;
+    declaredHeight: number;
+  }>;
+  images: ChatGPTImage[];
+}
+
 function blobToDataUrl(blob: Blob) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
@@ -35,6 +52,19 @@ function bestSource(image: HTMLImageElement) {
   }).filter(candidate => candidate.url).sort((a, b) => b.size - a.size)[0]?.url;
   const linked = image.closest<HTMLAnchorElement>('a[href]')?.href;
   return srcset || linked || image.currentSrc || image.src;
+}
+
+function sourceType(url: string): ImageInspection['elements'][number]['srcType'] {
+  if (url.startsWith('blob:')) return 'blob';
+  if (url.startsWith('data:')) return 'data';
+  if (url.startsWith('https:')) return 'https';
+  return 'other';
+}
+
+function assistantTurnRoot(message: HTMLElement) {
+  // Current ChatGPT turns can render generated-media blocks as siblings of the
+  // .markdown node (and sometimes of the author-role node) inside the turn.
+  return message.closest<HTMLElement>('[data-testid^="conversation-turn-"], article') ?? message;
 }
 
 function isUsableComposer(element: HTMLElement) {
@@ -92,6 +122,7 @@ function replaceContentEditable(editor: HTMLElement, text: string) {
 }
 
 export class ChatGPTAdapter {
+  private pendingImageLoads = new WeakSet<HTMLImageElement>();
   findMessages() { return [...document.querySelectorAll<HTMLElement>(S.messages)]; }
   contentRoot(message: HTMLElement) { return message.querySelector<HTMLElement>('.markdown') ?? message; }
 
@@ -120,20 +151,69 @@ export class ChatGPTAdapter {
     }
   }
 
-  getImages(message: HTMLElement): ChatGPTImage[] {
-    return [...this.contentRoot(message).querySelectorAll<HTMLImageElement>('img')]
-      .map(image => ({
-        url: bestSource(image),
-        alt: image.alt || undefined,
-        width: image.naturalWidth || image.width || undefined,
-        height: image.naturalHeight || image.height || undefined
+  inspectAssistantMessageImages(message: HTMLElement, onImageLoad?: () => void): ImageInspection {
+    const root = assistantTurnRoot(message);
+    const elements = [...root.querySelectorAll<HTMLImageElement>('img')].filter(image => !image.closest('[data-social-publisher], [aria-hidden="true"]'));
+    const details = elements.map(image => {
+      const url = bestSource(image);
+      const rect = image.getBoundingClientRect();
+      if ((!image.complete || image.naturalWidth === 0 || image.naturalHeight === 0) && onImageLoad && !this.pendingImageLoads.has(image)) {
+        this.pendingImageLoads.add(image);
+        const loaded = () => {
+          this.pendingImageLoads.delete(image);
+          image.removeEventListener('error', failed);
+          onImageLoad();
+        };
+        const failed = () => {
+          this.pendingImageLoads.delete(image);
+          image.removeEventListener('load', loaded);
+        };
+        image.addEventListener('load', loaded, {once: true});
+        image.addEventListener('error', failed, {once: true});
+      }
+      return {
+        element: image,
+        url,
+        tag: image.tagName.toLowerCase(),
+        srcType: sourceType(url),
+        naturalWidth: image.naturalWidth,
+        naturalHeight: image.naturalHeight,
+        renderedWidth: Math.round(rect.width),
+        renderedHeight: Math.round(rect.height),
+        declaredWidth: image.width,
+        declaredHeight: image.height
+      };
+    });
+    const valid = details.filter(item => {
+      if (!item.url || item.url.startsWith('data:image/svg') || /\.svg(?:[?#]|$)/i.test(item.url)) return false;
+      const width = Math.max(item.naturalWidth, item.renderedWidth, item.element.width);
+      const height = Math.max(item.naturalHeight, item.renderedHeight, item.element.height);
+      return width >= 200 && height >= 200;
+    });
+    return {
+      messageId: message.dataset.messageId || assistantTurnRoot(message).dataset.testid || message.id || 'unknown',
+      imageElements: elements.length,
+      validImages: valid.length,
+      elements: details.map(({element: _element, url: _url, ...detail}) => detail),
+      images: valid.map(item => ({
+        url: item.url,
+        alt: item.element.alt || undefined,
+        width: Math.max(item.naturalWidth, item.renderedWidth, item.element.width) || undefined,
+        height: Math.max(item.naturalHeight, item.renderedHeight, item.element.height) || undefined
       }))
-      .filter(image => Boolean(image.url) && (image.width === undefined || image.height === undefined || image.width > 200 && image.height > 200));
+    };
   }
 
-  getBestImage(message: HTMLElement) {
-    return this.getImages(message).sort((a, b) => (b.width ?? 0) * (b.height ?? 0) - (a.width ?? 0) * (a.height ?? 0))[0];
+  getAssistantMessageImages(message: HTMLElement, onImageLoad?: () => void) {
+    return this.inspectAssistantMessageImages(message, onImageLoad).images;
   }
+
+  getBestGeneratedImage(message: HTMLElement, onImageLoad?: () => void) {
+    return this.getAssistantMessageImages(message, onImageLoad).sort((a, b) => (b.width ?? 0) * (b.height ?? 0) - (a.width ?? 0) * (a.height ?? 0))[0];
+  }
+
+  getImages(message: HTMLElement) { return this.getAssistantMessageImages(message); }
+  getBestImage(message: HTMLElement) { return this.getBestGeneratedImage(message); }
 
   async resolveImageForDownload(image: ChatGPTImage): Promise<ChatGPTImage> {
     if (!image.url.startsWith('blob:')) return image;
@@ -143,5 +223,18 @@ export class ChatGPTAdapter {
   }
 
   images(message: HTMLElement) { return this.getImages(message).map(image => image.url); }
-  observe(cb: () => void) { let timer = 0; const observer = new MutationObserver(() => { clearTimeout(timer); timer = window.setTimeout(cb, 200); }); observer.observe(document.querySelector('main') ?? document.body, {childList: true, subtree: true}); return observer; }
+  observe(cb: () => void) {
+    let timer = 0;
+    const observer = new MutationObserver(() => {
+      clearTimeout(timer);
+      timer = window.setTimeout(cb, 200);
+    });
+    observer.observe(document.querySelector('main') ?? document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['src', 'srcset', 'href', 'width', 'height', 'data-src']
+    });
+    return observer;
+  }
 }

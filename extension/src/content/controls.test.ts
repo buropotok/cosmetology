@@ -10,6 +10,7 @@ function useDom(text: string) {
     Element: dom.window.Element,
     HTMLElement: dom.window.HTMLElement,
     HTMLTextAreaElement: dom.window.HTMLTextAreaElement,
+    MutationObserver: dom.window.MutationObserver,
     Event: dom.window.Event,
     InputEvent: dom.window.InputEvent
   });
@@ -85,10 +86,17 @@ describe('assistant message controls', () => {
     [...document.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === 'Фото без текста')!.click();
     expect(insert).toHaveBeenCalledWith(expect.stringContaining('без текста и надписей'), true);
 
-    document.querySelector('main')!.insertAdjacentHTML('beforeend', '<div data-message-author-role="assistant"><div class="markdown"><img src="https://files.oaiusercontent.com/a.png" width="1024" height="1024"></div></div>');
+    const observer = new ChatGPTAdapter().observe(decorate);
+    document.querySelector('main')!.insertAdjacentHTML('beforeend', '<article data-testid="conversation-turn-2"><div data-message-author-role="assistant"><div class="markdown"></div></div><div data-testid="image-generation"></div></article>');
+    await new Promise(resolve => setTimeout(resolve, 250));
+    expect([...document.querySelectorAll<HTMLButtonElement>('button')].map(button => button.textContent)).not.toContain('Использовать');
+    document.querySelector('[data-testid="image-generation"]')!.insertAdjacentHTML('beforeend', '<img src="https://files.oaiusercontent.com/a.png" width="1024" height="1024">');
+    await new Promise(resolve => setTimeout(resolve, 250));
     decorate();
     expect([...document.querySelectorAll<HTMLButtonElement>('button')].map(button => button.textContent)).toContain('Использовать');
+    expect(document.querySelectorAll('[data-social-publisher="image-candidate"]')).toHaveLength(1);
     [...document.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === 'Использовать')!.click();
+    observer.disconnect();
 
     expect(sendMessage).toHaveBeenLastCalledWith({type: 'OPEN_PUBLISHER', draft: expect.objectContaining({
       originalText: 'Полный пост', publicationText: 'Полный пост', imageMode: 'illustration', image: expect.objectContaining({url: 'https://files.oaiusercontent.com/a.png'})
@@ -104,9 +112,12 @@ describe('assistant message controls', () => {
     const {decorate} = await import('./controls');
 
     decorate();
+    document.querySelector('.markdown')!.insertAdjacentHTML('beforeend', '<img src="https://files.oaiusercontent.com/old.png" width="1024" height="1024">');
     [...document.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === 'Опубликовать')!.click();
     [...document.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === 'Фото с инфографикой и текстом')!.click();
     expect(insert).toHaveBeenCalledWith(expect.stringContaining('хорошо читаемой инфографики'), true);
+    decorate();
+    expect([...document.querySelectorAll<HTMLButtonElement>('button')].map(button => button.textContent)).not.toContain('Использовать');
     document.querySelector('main')!.insertAdjacentHTML('beforeend', '<div data-message-author-role="assistant"><div class="markdown"><img src="https://files.oaiusercontent.com/a.png" width="1024" height="1024"></div></div>');
     decorate();
     [...document.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === 'Другое')!.click();

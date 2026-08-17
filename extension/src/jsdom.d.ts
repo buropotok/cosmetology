@@ -7,6 +7,7 @@ declare module 'jsdom' {
     InputEvent: typeof InputEvent;
     HTMLElement: typeof HTMLElement;
     HTMLTextAreaElement: typeof HTMLTextAreaElement;
+    MutationObserver: typeof MutationObserver;
   }
 
   export class JSDOM {

@@ -13,6 +13,7 @@ import {PublishWorkflow} from './publish-workflow';
 
 const adapter = new ChatGPTAdapter();
 const workflow = new PublishWorkflow();
+const imageInspectionSignatures = new WeakMap<HTMLElement, string>();
 
 function button(label: string, fn: () => void) {
   const element = document.createElement('button');
@@ -58,11 +59,13 @@ function showPhotoChoice(message: HTMLElement, text: string) {
   choice.append(question);
   choice.append(button('Фото без текста', () => {
     if (!workflow.waitForImage('illustration', adapter.findMessages().length)) return;
+    console.debug('[Cosmetology][ImageFlow] waiting for generated image');
     choice.remove();
     void adapter.insert(buildIllustrationPrompt(), true);
   }));
   choice.append(button('Фото с инфографикой и текстом', () => {
     if (!workflow.waitForImage('infographic', adapter.findMessages().length)) return;
+    console.debug('[Cosmetology][ImageFlow] waiting for generated image');
     choice.remove();
     void adapter.insert(buildInfographicPrompt(), true);
   }));
@@ -92,16 +95,30 @@ function renderImageCandidate(message: HTMLElement, image: PublisherImage, ready
     void adapter.insert(prompt, true);
   }));
   message.append(controls);
+  console.debug('[Cosmetology][ImageFlow] candidate controls rendered');
 }
 
 function detectImageCandidate(messages: HTMLElement[]) {
   if (workflow.state.kind !== 'waiting_for_image') return;
   for (let index = workflow.state.messageBoundary; index < messages.length; index++) {
     const message = messages[index];
-    const found = adapter.getBestImage(message);
+    const inspection = adapter.inspectAssistantMessageImages(message, decorate);
+    const signature = JSON.stringify({imageElements: inspection.imageElements, validImages: inspection.validImages, elements: inspection.elements});
+    if (imageInspectionSignatures.get(message) !== signature) {
+      imageInspectionSignatures.set(message, signature);
+      console.debug('[Cosmetology][ImageFlow] message candidate:', {
+        messageId: inspection.messageId,
+        imageElements: inspection.imageElements,
+        validImages: inspection.validImages
+      });
+      inspection.elements.forEach(element => console.debug('[Cosmetology][ImageFlow] image element:', element));
+    }
+    const found = inspection.images.sort((a, b) => (b.width ?? 0) * (b.height ?? 0) - (a.width ?? 0) * (a.height ?? 0))[0];
     if (!found) continue;
     const image: PublisherImage = {...found, filename: imageFilename(workflow.state.originalText, found.url)};
     if (workflow.setCandidate(message, image)) {
+      console.debug('[Cosmetology][ImageFlow] generated image detected');
+      console.debug('[Cosmetology][ImageFlow] state: waiting_for_image -> image_candidate');
       const needsResolution = image.url.startsWith('blob:');
       renderImageCandidate(message, image, !needsResolution);
       if (needsResolution) {
