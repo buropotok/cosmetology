@@ -1,0 +1,488 @@
+diff --git a/.gitignore b/.gitignore
+new file mode 100644
+index 0000000000000000000000000000000000000000..cf056290f8831938bf1438b6a7926d0091e5e912
+--- /dev/null
++++ b/.gitignore
+@@ -0,0 +1,6 @@
++node_modules/
++dist/
++.wrangler/
++.dev.vars
++*.log
++.DS_Store
+diff --git a/README.md b/README.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..4a65b65edfc70190c12a80a1f6dfaf8a41d3b362
+--- /dev/null
++++ b/README.md
+@@ -0,0 +1,119 @@
++# ChatGPT Social Publisher — MVP
++
++Персональное Chrome-расширение добавляет к обычному интерфейсу ChatGPT пресеты, быстрые действия и кнопку **«Опубликовать»**. Выбранный ответ проходит ручную редактуру в Side Panel и отправляется через Cloudflare Worker в сообщество VK и Telegram-канал/группу. Worker сохраняет один логический пост, независимые результаты площадок в D1 и изображение в R2.
++
++## Архитектура и приватность
++
++```text
++ChatGPT web UI → MV3 content script/Side Panel → HTTPS Worker
++                                                ├─ VK API
++                                                ├─ Telegram Bot API
++                                                ├─ D1 (посты/доставки)
++                                                └─ R2 (изображения)
++```
++
++ChatGPT остаётся чатом, средой исследования и контекстом. Расширение не использует LLM API, не собирает аналитику и не отправляет разговор: только явно выбранный ответ и выбранное изображение уходят на Worker после нажатия публикации. `/history.txt` публичен и содержит только дату, тип, тему и краткое описание. JSON-история также read-only публична для MVP. Мутация требует `PUBLISH_API_TOKEN`; он хранится в Chrome storage и защищает от случайных запросов, но **не является настоящим секретом** для человека с доступом к установленному расширению. Токены VK/Telegram существуют только в Worker secrets.
++
++## Структура
++
++- `extension/` — Manifest V3, изолированный адаптер DOM ChatGPT, парсер ответа, пресеты, Side Panel, API-клиент и тесты.
++- `worker/` — маршруты Worker, D1/R2, VK и Telegram адаптеры, миграция и тесты.
++- `shared/contracts.ts` — минимальные общие API-типы.
++
++Хрупкие селекторы ChatGPT собраны только в `extension/src/content/chatgpt-adapter.ts`. При изменении сайта сначала исправляйте этот файл. Неудача распознавания ответа или изображения не блокирует ChatGPT или текстовую публикацию.
++
++## Требования
++
++Node.js 20+, npm, Chrome, Cloudflare account с D1/R2, VK community token с правом публикации, Telegram bot с правом администратора целевого канала/группы.
++
++## Первая настройка Cloudflare
++
++```bash
++cd worker
++npm install
++npx wrangler login
++npx wrangler d1 create cosmetology-publisher
++npx wrangler r2 bucket create cosmetology-publisher-images
++```
++
++1. Скопируйте реальный `database_id` из вывода D1 вместо `REPLACE_WITH_D1_DATABASE_ID` в `worker/wrangler.jsonc`. ID нельзя узнать заранее.
++2. Если выбрали другое имя R2, замените `bucket_name`; binding должен остаться `IMAGES`.
++3. После первой локальной загрузки расширения скопируйте его ID со страницы `chrome://extensions` и замените `chrome-extension://REPLACE_WITH_EXTENSION_ID` в `ALLOWED_EXTENSION_ORIGIN`. Это узкий CORS origin расширения.
++4. Задайте secrets:
++
++```bash
++npx wrangler secret put VK_ACCESS_TOKEN
++npx wrangler secret put VK_GROUP_ID
++npx wrangler secret put TELEGRAM_BOT_TOKEN
++npx wrangler secret put TELEGRAM_CHAT_ID
++npx wrangler secret put PUBLISH_API_TOKEN
++npm run db:migrate
++npm run deploy
++```
++
++Wrangler напечатает адрес вида `https://cosmetology-social-publisher.<subdomain>.workers.dev`. Код разворачивается только из Git/локального репозитория, не копируется в редактор Dashboard.
++
++## Сборка и установка расширения
++
++Из корня:
++
++```bash
++npm install
++npm run build -w extension
++```
++
++Откройте `chrome://extensions`, включите Developer mode, нажмите **Load unpacked** и выберите `extension/dist`. Нажмите иконку расширения, откройте **Настройки**, укажите Worker Base URL без завершающего `/` и то же значение `PUBLISH_API_TOKEN`. После определения extension ID обновите CORS origin Worker и повторно deploy.
++
++Расширение работает на `https://chatgpt.com/*`. Пресет вставляется в нативный composer без отправки. Кнопки выбора/переписывания отправляют короткий follow-up в существующий разговор. У каждой найденной реплики ассистента своя кнопка публикации. Side Panel позволяет редактировать текст, выбрать найденную картинку или локальный файл, убрать картинку, выбрать площадки и повторить только неуспешную площадку.
++
++## API и надёжность
++
++- `POST /api/publish` — авторизованный multipart (`payload` JSON + необязательный `image`). `idempotency_key` создаёт один post; уникальность `(post_id, platform)` и проверка `published` предотвращают повторную отправку.
++- `GET /api/posts?page=1&page_size=20&search=...` и `GET /api/posts/:id` — история для человека.
++- `GET /api/images/:key` — чтение конкретного R2-изображения без открытия bucket listing.
++- `GET /history.txt` — компактная динамическая память для ChatGPT.
++
++Частичный успех сохраняется отдельно. Повтор из Side Panel исключает успешные targets; Worker также не отправит уже успешную пару post/platform. Отключение кнопки защищает от double-click.
++
++Telegram: текст до 4096 символов отправляется `sendMessage`. С изображением текст до 1024 символов служит caption; более длинный текст отправляется отдельным `sendMessage` после `sendPhoto`, сохраняя весь текст. VK использует `photos.getWallUploadServer` → upload → `photos.saveWallPhoto` → `wall.post`. Версия VK API централизована в `worker/src/services/vk.ts`.
++
++## Локальная разработка и проверки
++
++```bash
++npm install
++npm run typecheck
++npm test
++npm run build
++cd worker
++cp .dev.vars.example .dev.vars  # заполнить только локально
++npm run db:migrate:local
++npm run dev
++```
++
++Wrangler создаёт локальное состояние D1/R2 в `.wrangler/`. Реальные публикации локально требуют настоящих provider credentials в игнорируемом `.dev.vars`. Без них проверяются сборка, validation/parser/history tests, но не реальные соцсети. DOM ChatGPT и получение generated image нужно проверить вручную в текущем Chrome; защищённые/blob URL могут не читаться, поэтому всегда доступна ручная загрузка.
++
++## Обычное обновление
++
++```bash
++git pull
++cd worker
++npm install
++npm run db:migrate   # только если появились миграции
++npm run deploy
++```
++
++Без миграций пропустите соответствующую строку. Для изменений расширения выполните `npm install && npm run build -w extension`, затем нажмите Reload у unpacked extension.
++
++## Troubleshooting
++
++- **Worker error:** смотрите `npx wrangler tail`, проверьте bindings `DB`/`IMAGES`, миграции и secrets; клиент показывает безопасное структурированное сообщение.
++- **Контролы ChatGPT не появились:** перезагрузите вкладку/расширение; проверьте console. Если DOM изменился, актуализируйте только `chatgpt-adapter.ts`.
++- **VK отказал:** проверьте community token, scope публикации, положительный `VK_GROUP_ID` и код VK в сообщении/Worker logs.
++- **Telegram отказал:** добавьте бота администратором, проверьте `TELEGRAM_CHAT_ID` (`@channel` даёт внешнюю ссылку) и лимит 4096 для текста без картинки.
++- **Изображение ChatGPT недоступно:** это ограничение URL/CORS текущего DOM; скачайте его и выберите через file input. Текст остаётся доступен.
++- **Extension не достигает Worker:** проверьте URL, `PUBLISH_API_TOKEN`, host permissions, extension ID в `ALLOWED_EXTENSION_ORIGIN`, deploy и DevTools Network.
++- **CORS после перезагрузки extension ID:** unpacked ID обычно стабилен при том же каталоге; если изменился, обновите Worker var и deploy.
++
++## Что требует ручной проверки
++
++Реальные D1/R2 создаются в вашем Cloudflare account. Реальные VK/TG вызовы требуют указанных credentials и тестовых площадок. Перед боевой публикацией проверьте отдельно текст, картинку, длинную Telegram-подпись, частичный отказ/retry, карточку History и публичный Worker URL `/history.txt`.
+diff --git a/extension/build.mjs b/extension/build.mjs
+new file mode 100644
+index 0000000000000000000000000000000000000000..72aa935fd6f48c04cc0260d09b89e1628e04411b
+--- /dev/null
++++ b/extension/build.mjs
+@@ -0,0 +1,10 @@
++import { build } from 'esbuild';
++import { cp, mkdir, rm } from 'node:fs/promises';
++await rm('dist',{recursive:true,force:true}); await mkdir('dist',{recursive:true});
++await Promise.all([
++ build({entryPoints:['src/content/index.ts'],bundle:true,outfile:'dist/content.js',format:'iife',target:'chrome120'}),
++ build({entryPoints:['src/background.ts'],bundle:true,outfile:'dist/background.js',format:'iife',target:'chrome120'}),
++ build({entryPoints:['src/sidepanel/index.ts'],bundle:true,outfile:'dist/sidepanel.js',format:'iife',target:'chrome120'})
++]);
++await Promise.all(['manifest.json','src/content/content.css'].map(x=>cp(x,'dist/'+x.split('/').at(-1))));
++await cp('src/sidepanel/index.html','dist/sidepanel.html'); await cp('src/sidepanel/style.css','dist/sidepanel.css');
+diff --git a/extension/manifest.json b/extension/manifest.json
+new file mode 100644
+index 0000000000000000000000000000000000000000..9a19ee7b6ab9889730f6cc5f11e429313427289f
+--- /dev/null
++++ b/extension/manifest.json
+@@ -0,0 +1 @@
++{"manifest_version":3,"name":"ChatGPT Social Publisher","version":"0.1.0","description":"Подготовка и публикация постов из ChatGPT в VK и Telegram.","permissions":["storage","sidePanel"],"host_permissions":["https://chatgpt.com/*","https://*.workers.dev/*","http://localhost:8787/*"],"background":{"service_worker":"background.js"},"content_scripts":[{"matches":["https://chatgpt.com/*"],"js":["content.js"],"css":["content.css"],"run_at":"document_idle"}],"side_panel":{"default_path":"sidepanel.html"},"action":{"default_title":"Social Publisher"}}
+diff --git a/extension/package.json b/extension/package.json
+new file mode 100644
+index 0000000000000000000000000000000000000000..ba52c3030925162ffba82ea2f531a8ea80649c83
+--- /dev/null
++++ b/extension/package.json
+@@ -0,0 +1 @@
++{"name":"cosmetology-publisher-extension","private":true,"type":"module","scripts":{"build":"node build.mjs","typecheck":"tsc --noEmit","test":"vitest run"},"devDependencies":{"@types/chrome":"^0.0.287","esbuild":"^0.25.0","jsdom":"^26.0.0","typescript":"^5.7.3","vitest":"^3.0.5"}}
+diff --git a/extension/src/api/client.ts b/extension/src/api/client.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..2b6f724dfbfce2cadf19686f7f16ab8faec3dd63
+--- /dev/null
++++ b/extension/src/api/client.ts
+@@ -0,0 +1,7 @@
++import type {PublishResponse,PostsResponse,PostSummary,Platform} from '../../../shared/contracts';
++export interface Settings{workerBaseUrl:string;apiToken:string}
++async function settings():Promise<Settings>{const s=await chrome.storage.local.get(['workerBaseUrl','apiToken']);if(!s.workerBaseUrl)throw new Error('Укажите Worker URL в настройках');return {workerBaseUrl:String(s.workerBaseUrl).replace(/\/$/,''),apiToken:String(s.apiToken??'')}}
++async function request<T>(path:string,init?:RequestInit){const s=await settings();const r=await fetch(s.workerBaseUrl+path,{...init,headers:{...(init?.headers??{}),Authorization:`Bearer ${s.apiToken}`}});const body=await r.json().catch(()=>({error:{message:`HTTP ${r.status}`}})) as any;if(!r.ok)throw new Error(body.error?.message??`HTTP ${r.status}`);return body as T}
++export async function publish(input:{text:string;targets:Platform[];metadata:Record<string,string>;postId?:number;image?:Blob;idempotencyKey:string}){const form=new FormData();form.set('payload',JSON.stringify({text:input.text,targets:input.targets,metadata:input.metadata,post_id:input.postId,idempotency_key:input.idempotencyKey}));if(input.image)form.set('image',input.image,'post-image');return request<PublishResponse>('/api/publish',{method:'POST',body:form})}
++export const posts=(search='')=>request<PostsResponse>(`/api/posts?page=1&page_size=30&search=${encodeURIComponent(search)}`);
++export const post=(id:number)=>request<PostSummary>(`/api/posts/${id}`);
+diff --git a/extension/src/background.ts b/extension/src/background.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..68274594cbc6d33014097971680df4af4abd2ca1
+--- /dev/null
++++ b/extension/src/background.ts
+@@ -0,0 +1,2 @@
++chrome.sidePanel.setPanelBehavior({openPanelOnActionClick:true}).catch(console.warn);
++chrome.runtime.onMessage.addListener((m,_s)=>{if(m.type==='OPEN_PANEL')chrome.windows.getCurrent(w=>{if(w.id)chrome.sidePanel.open({windowId:w.id}).catch(console.warn)})});
+diff --git a/extension/src/content/chatgpt-adapter.ts b/extension/src/content/chatgpt-adapter.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..0fa72de287a32c5c44023b3819912dc8bb59c4f8
+--- /dev/null
++++ b/extension/src/content/chatgpt-adapter.ts
+@@ -0,0 +1,9 @@
++// Centralize all fragile ChatGPT DOM knowledge here.
++const S={messages:'[data-message-author-role="assistant"]',content:'.markdown, [data-message-author-role="assistant"] > div',composer:'#prompt-textarea, textarea[data-id="root"], textarea',send:'button[data-testid="send-button"], button[aria-label*="Send"], button[aria-label*="Отправ"]'};
++export class ChatGPTAdapter{
++ findMessages(){return [...document.querySelectorAll<HTMLElement>(S.messages)]}
++ contentRoot(message:HTMLElement){return message.querySelector<HTMLElement>('.markdown')??message}
++ async insert(text:string,submit=false){const el=document.querySelector<HTMLElement>(S.composer);if(!el)throw new Error('Не найден редактор ChatGPT');el.focus();if(el instanceof HTMLTextAreaElement){el.value=text;el.dispatchEvent(new Event('input',{bubbles:true}))}else{el.textContent=text;el.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText',data:text}))}if(submit){await new Promise(r=>setTimeout(r,50));document.querySelector<HTMLButtonElement>(S.send)?.click()}}
++ images(message:HTMLElement){return [...this.contentRoot(message).querySelectorAll<HTMLImageElement>('img')].filter(i=>i.naturalWidth>200&&i.naturalHeight>200).map(i=>i.currentSrc||i.src).filter(Boolean)}
++ observe(cb:()=>void){let timer=0;const observer=new MutationObserver(()=>{clearTimeout(timer);timer=window.setTimeout(cb,200)});observer.observe(document.querySelector('main')??document.body,{childList:true,subtree:true});return observer}
++}
+diff --git a/extension/src/content/content.css b/extension/src/content/content.css
+new file mode 100644
+index 0000000000000000000000000000000000000000..2ff5dc194d90e58943f3c275c9ef9e6baae0a364
+--- /dev/null
++++ b/extension/src/content/content.css
+@@ -0,0 +1 @@
++.sp-toolbar{position:fixed;z-index:9999;left:12px;bottom:12px;display:flex;gap:5px;flex-wrap:wrap;max-width:520px;padding:7px;border:1px solid #aaa8;border-radius:12px;background:var(--main-surface-primary,#fff);box-shadow:0 3px 14px #0002}.sp-toolbar button,.sp-controls button{border:1px solid #8886;border-radius:8px;padding:5px 8px;background:transparent;color:inherit;cursor:pointer;font-size:12px}.sp-controls{display:flex;gap:5px;flex-wrap:wrap;margin-top:8px}.sp-controls button:last-child{background:#10a37f;color:white}
+diff --git a/extension/src/content/controls.ts b/extension/src/content/controls.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..7cfad7e7d083dea761e55d4e0df215e9cf91295b
+--- /dev/null
++++ b/extension/src/content/controls.ts
+@@ -0,0 +1,6 @@
++import {ChatGPTAdapter} from './chatgpt-adapter';import {hasFiveChoices,parseResponse} from './response-parser';import {choicePrompt,presets,renderPreset,rewrites} from '../presets/presets';
++const adapter=new ChatGPTAdapter();
++function button(label:string,fn:()=>void){const b=document.createElement('button');b.textContent=label;b.onclick=e=>{e.preventDefault();e.stopPropagation();void Promise.resolve(fn()).catch(console.warn)};return b}
++export async function installToolbar(){if(document.querySelector('[data-social-publisher="toolbar"]'))return;const bar=document.createElement('div');bar.dataset.socialPublisher='toolbar';bar.className='sp-toolbar';const {workerBaseUrl=''}=await chrome.storage.local.get('workerBaseUrl');presets.forEach(p=>bar.append(button(`${p.icon} ${p.title}`,()=>adapter.insert(renderPreset(p,workerBaseUrl)))));document.body.append(bar)}
++export function decorate(){for(const message of adapter.findMessages()){if(message.querySelector('[data-social-publisher="controls"]'))continue;try{const root=adapter.contentRoot(message),text=parseResponse(root);if(!text)continue;const controls=document.createElement('div');controls.dataset.socialPublisher='controls';controls.className='sp-controls';if(hasFiveChoices(text))for(let n=1;n<=5;n++)controls.append(button(String(n),()=>adapter.insert(choicePrompt(n),true)));else rewrites.forEach(([l,p])=>controls.append(button(l,()=>adapter.insert(p,true))));controls.append(button('Опубликовать',async()=>{await chrome.storage.session.set({draft:{text,images:adapter.images(message)}});chrome.runtime.sendMessage({type:'OPEN_PANEL'})}));message.append(controls)}catch(e){console.debug('Social Publisher: message skipped',e)}}}
++export function observe(){adapter.observe(()=>{decorate();void installToolbar()})}
+diff --git a/extension/src/content/index.ts b/extension/src/content/index.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..5399a2df8e94f12f5deef6fa382ee982affb9062
+--- /dev/null
++++ b/extension/src/content/index.ts
+@@ -0,0 +1 @@
++import {decorate,installToolbar,observe} from './controls';void installToolbar();decorate();observe();
+diff --git a/extension/src/content/response-parser.test.ts b/extension/src/content/response-parser.test.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..b815207535d6d12dceba2cf37e7c8cdf21a291f8
+--- /dev/null
++++ b/extension/src/content/response-parser.test.ts
+@@ -0,0 +1,2 @@
++import {describe,expect,it} from 'vitest';import {JSDOM} from 'jsdom';import {hasFiveChoices,normalizeText,parseResponse} from './response-parser';
++describe('parser',()=>{it('normalizes blocks and removes controls',()=>{const dom=new JSDOM('<div><h2>Заголовок</h2><p>Текст <strong>важный</strong></p><ol><li>Один</li><li>Два</li></ol><button>Copy</button></div>');const d=dom.window.document;Object.assign(globalThis,{Node:dom.window.Node,Element:dom.window.Element});expect(parseResponse(d.body.firstElementChild!)).toBe('Заголовок\n\nТекст важный\n\n1. Один\n2. Два')});it('detects exactly present five choices',()=>expect(hasFiveChoices('1. a\n2. b\n3. c\n4. d\n5. e')).toBe(true));it('cleans whitespace',()=>expect(normalizeText(' a  \n\n\n b ')).toBe('a\n\nb'))});
+diff --git a/extension/src/content/response-parser.ts b/extension/src/content/response-parser.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..6fd163852ad165350053fb76534d11ac584a4968
+--- /dev/null
++++ b/extension/src/content/response-parser.ts
+@@ -0,0 +1,8 @@
++const BLOCK=new Set(['P','DIV','H1','H2','H3','H4','H5','H6','PRE','BLOCKQUOTE']);
++export function normalizeText(text:string){return text.replace(/\u00a0/g,' ').replace(/[ \t]+\n/g,'\n').replace(/\n{3,}/g,'\n\n').trim()}
++export function parseResponse(root:Element){
++ const clone=root.cloneNode(true) as Element;clone.querySelectorAll('button,svg,script,style,[data-social-publisher],[aria-hidden="true"],sup a').forEach(x=>x.remove());
++ const walk=(node:Node):string=>{if(node.nodeType===Node.TEXT_NODE)return node.textContent??'';if(!(node instanceof Element))return '';const tag=node.tagName;if(tag==='BR')return '\n';let value=[...node.childNodes].map(walk).join('');if(tag==='LI'){const parent=node.parentElement;const n=parent?.tagName==='OL'?[...parent.children].indexOf(node)+1:null;value=`${n?`${n}.`:'•'} ${value.trim()}\n`}else if(BLOCK.has(tag))value=`${value.trim()}\n\n`;else if(tag==='A'&&node.getAttribute('href')&&!value.trim())value=node.getAttribute('href')!;return value};
++ return normalizeText(walk(clone));
++}
++export function hasFiveChoices(text:string){return [1,2,3,4,5].every(n=>new RegExp(`(?:^|\\n)\\s*${n}[.)]\\s+\\S`,'m').test(text))}
+diff --git a/extension/src/presets/presets.ts b/extension/src/presets/presets.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..05db5e218f64b26677f00db8e6b807138ad3acb4
+--- /dev/null
++++ b/extension/src/presets/presets.ts
+@@ -0,0 +1,13 @@
++export interface Preset { id:string; title:string; icon:string; prompt:string; history:boolean }
++const discovery = 'Сначала предложи ровно 5 кратких пронумерованных тем (1–5), а не полные посты. После моего выбора подготовь достоверный пост для VK и Telegram на русском языке.';
++export const presets:Preset[]=[
++ {id:'news',title:'Новости',icon:'📰',history:true,prompt:`Найди актуальные новости доказательной косметологии. ${discovery}`},
++ {id:'myths',title:'Мифы',icon:'💭',history:true,prompt:`Предложи мифы о косметологии, которые полезно корректно разобрать. ${discovery}`},
++ {id:'facts',title:'Интересные факты',icon:'✨',history:true,prompt:`Предложи неожиданные, проверяемые факты о коже и косметологии. ${discovery}`},
++ {id:'science',title:'Научпоп',icon:'🔬',history:true,prompt:`Предложи научно-популярные темы о коже и косметологических процедурах. ${discovery}`},
++ {id:'product',title:'Разбор препарата',icon:'💉',history:true,prompt:'Помоги подготовить доказательный разбор косметологического препарата: состав, механизм, показания, ограничения и нейтральный вывод. Сначала уточни название препарата, если его нет в контексте.'},
++ {id:'care',title:'Уход',icon:'🧴',history:true,prompt:'Подготовь полезный, фактически точный пост об уходе за кожей с понятными практическими советами. Сначала предложи 5 кратких тем, если тема не указана.'}
++];
++export const choicePrompt=(n:number)=>`Раскрой вариант №${n} и подготовь готовый пост для публикации.`;
++export const rewrites=[['Короче','Сделай предыдущий вариант короче, сохранив ключевые факты и смысл.'],['Подробнее','Сделай предыдущий вариант подробнее, добавив полезные факты, но без лишней воды.'],['Другой вариант','Предложи другой вариант этого поста с другой подачей, сохранив фактическую точность.']] as const;
++export function renderPreset(p:Preset,base:string){const history=base?`\n\nПеред предложением тем прочитай историю публикаций: ${base.replace(/\/$/,'')}/history.txt\nНе повторяй уже опубликованные темы или тот же смысловой аспект; близкая тема допустима только с существенно новым аспектом.`:'';return p.prompt+(p.history?history:'')}
+diff --git a/extension/src/sidepanel/index.html b/extension/src/sidepanel/index.html
+new file mode 100644
+index 0000000000000000000000000000000000000000..64a4eb13c05245ea7938ad41adc46623b62be899
+--- /dev/null
++++ b/extension/src/sidepanel/index.html
+@@ -0,0 +1 @@
++<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Publisher</title><link rel="stylesheet" href="sidepanel.css"></head><body><header><h1>Social Publisher</h1><nav><button data-tab="publisher">Публикация</button><button data-tab="history">История</button><button data-tab="settings">Настройки</button></nav></header><main><section id="publisher"><label>Текст<textarea id="text" rows="13"></textarea></label><div id="detected"></div><label>Изображение<input id="upload" type="file" accept="image/*"></label><img id="preview" hidden alt="Предпросмотр"><button id="removeImage" type="button">Убрать изображение</button><fieldset><legend>Площадки</legend><label><input id="vk" type="checkbox" checked> VK</label><label><input id="telegram" type="checkbox" checked> Telegram</label></fieldset><button class="primary" id="publish">Опубликовать</button><div id="results"></div></section><section id="history" hidden><input id="search" type="search" placeholder="Поиск"><button id="searchButton">Найти</button><div id="cards"></div><article id="detail"></article></section><section id="settings" hidden><label>Worker Base URL<input id="workerUrl" placeholder="https://name.workers.dev"></label><label>Personal API token<input id="apiToken" type="password"></label><button class="primary" id="save">Сохранить</button><p>Токен хранится в Chrome storage и защищает только от случайного публичного использования: установленное расширение нельзя считать хранилищем секрета.</p></section></main><script src="sidepanel.js"></script></body></html>
+diff --git a/extension/src/sidepanel/index.ts b/extension/src/sidepanel/index.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..d27a78b1eabaffabdfc90ee60b925be8d080e618
+--- /dev/null
++++ b/extension/src/sidepanel/index.ts
+@@ -0,0 +1,14 @@
++import {post,posts,publish} from '../api/client';import type {Platform,PublicationResult,PostSummary} from '../../../shared/contracts';
++const $=<T extends HTMLElement>(id:string)=>document.getElementById(id) as T;let image:Blob|undefined,postId:number|undefined,key=crypto.randomUUID(),last:Partial<Record<Platform,PublicationResult>>={};
++function show(tab:string){document.querySelectorAll('main>section').forEach(s=>(s as HTMLElement).hidden=s.id!==tab);if(tab==='history')void loadHistory()}
++document.querySelectorAll<HTMLButtonElement>('[data-tab]').forEach(b=>b.onclick=()=>show(b.dataset.tab!));
++async function blobFromUrl(url:string){const r=await fetch(url);if(!r.ok)throw new Error('Изображение ChatGPT недоступно; загрузите его вручную');return r.blob()}
++function preview(blob?:Blob){image=blob;const img=$<HTMLImageElement>('preview');if(blob){img.src=URL.createObjectURL(blob);img.hidden=false}else{img.hidden=true;img.removeAttribute('src')}}
++async function draft(){const {draft}=await chrome.storage.session.get('draft');if(!draft)return;$<HTMLTextAreaElement>('text').value=draft.text??'';const box=$('detected');box.replaceChildren();for(const url of draft.images??[]){const img=document.createElement('img');img.src=url;img.className='candidate';img.title='Выбрать изображение';img.onclick=async()=>{try{preview(await blobFromUrl(url));box.querySelectorAll('img').forEach(x=>x.classList.remove('selected'));img.classList.add('selected')}catch(e){alert(String(e))}};box.append(img)}}
++$<HTMLInputElement>('upload').onchange=e=>preview((e.target as HTMLInputElement).files?.[0]);$('removeImage').onclick=()=>preview();
++function renderResults(results:Partial<Record<Platform,PublicationResult>>){last={...last,...results};$('results').innerHTML=(['vk','telegram'] as Platform[]).filter(p=>last[p]).map(p=>`<div class="result ${last[p]!.status==='published'?'ok':'fail'}">${p.toUpperCase()}: ${last[p]!.status==='published'?'✓ Опубликовано':'✗ '+(last[p]!.error??'Ошибка')}</div>`).join('')}
++$('publish').onclick=async()=>{const targets=(['vk','telegram'] as Platform[]).filter(p=>( $(p) as HTMLInputElement).checked&&last[p]?.status!=='published');if(!targets.length)return alert('Выберите площадку или нет неуспешных площадок');const text=$<HTMLTextAreaElement>('text').value.trim(),firstLine=text.split('\n').find(Boolean)?.replace(/^#+\s*/,'').slice(0,120)??'';const metadata={title:firstLine,topic:firstLine,summary:text.replace(/\s+/g,' ').slice(0,240),content_type:'freeform'};const b=$<HTMLButtonElement>('publish');b.disabled=true;b.textContent='Публикуем…';try{const r=await publish({text,targets,metadata,postId,image,idempotencyKey:key});postId=r.post_id;renderResults(r.publications)}catch(e){$('results').textContent=e instanceof Error?e.message:String(e)}finally{b.disabled=false;b.textContent='Опубликовать'}};
++function statuses(p:PostSummary){return (['vk','telegram'] as Platform[]).map(x=>`${x.toUpperCase()} ${p.publications[x]?.status==='published'?'✓':p.publications[x]?'✗':'—'}`).join(' · ')}
++async function loadHistory(){try{const r=await posts($<HTMLInputElement>('search').value);$('cards').innerHTML=r.items.map(p=>`<div class="card" data-id="${p.id}">${p.image_url?`<img src="${p.image_url}">`:''}<b>${p.title||p.topic||'Публикация'}</b><div>${new Date(p.published_at||p.created_at).toLocaleDateString('ru-RU')}</div><p>${p.summary||p.text.slice(0,130)}</p><small>${statuses(p)}</small><div style="clear:both"></div></div>`).join('')||'<p>Публикаций нет.</p>';document.querySelectorAll<HTMLElement>('.card').forEach(c=>c.onclick=()=>void detail(Number(c.dataset.id)))}catch(e){$('cards').textContent=String(e)}}
++async function detail(id:number){const p=await post(id);$('detail').innerHTML=`<h2>${p.title||p.topic||'Публикация'}</h2>${p.image_url?`<img src="${p.image_url}">`:''}<p>${p.text.replace(/[&<>]/g,x=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[x]!))}</p><p>${statuses(p)}</p>`}
++$('searchButton').onclick=()=>void loadHistory();$('save').onclick=async()=>{await chrome.storage.local.set({workerBaseUrl:$<HTMLInputElement>('workerUrl').value.trim(),apiToken:$<HTMLInputElement>('apiToken').value});alert('Сохранено')};chrome.storage.local.get(['workerBaseUrl','apiToken']).then(s=>{$<HTMLInputElement>('workerUrl').value=s.workerBaseUrl??'';$<HTMLInputElement>('apiToken').value=s.apiToken??''});void draft();
+diff --git a/extension/src/sidepanel/style.css b/extension/src/sidepanel/style.css
+new file mode 100644
+index 0000000000000000000000000000000000000000..f285fc0c501c6c4fec24d03bbf0d283f8b413134
+--- /dev/null
++++ b/extension/src/sidepanel/style.css
+@@ -0,0 +1 @@
++:root{font:14px system-ui;color-scheme:light dark}body{margin:0;background:Canvas;color:CanvasText}header{position:sticky;top:0;background:Canvas;padding:12px;border-bottom:1px solid #8885}h1{font-size:17px;margin:0 0 9px}nav{display:flex;gap:5px}button,input,textarea{font:inherit}button{padding:7px;border:1px solid #8887;border-radius:7px;cursor:pointer}.primary{background:#10a37f;color:#fff;border:0;padding:10px 14px}main{padding:12px}section>label{display:grid;gap:5px;margin-bottom:12px}textarea,input{box-sizing:border-box;width:100%;padding:8px;border:1px solid #8887;border-radius:7px;background:Canvas;color:CanvasText}fieldset{display:flex;gap:15px;margin:12px 0}fieldset input{width:auto}#preview,.candidate{max-width:100%;max-height:240px;border-radius:8px}.candidate{width:70px;height:70px;object-fit:cover;margin:4px;border:3px solid transparent}.candidate.selected{border-color:#10a37f}.result,.card,#detail{border:1px solid #8885;border-radius:8px;padding:10px;margin-top:9px}.ok{color:#159455}.fail{color:#d44}.card{cursor:pointer}.card img{width:70px;height:70px;object-fit:cover;float:left;margin-right:10px}#detail{white-space:pre-wrap}#detail img{max-width:100%}
+diff --git a/extension/tsconfig.json b/extension/tsconfig.json
+new file mode 100644
+index 0000000000000000000000000000000000000000..932927a7fbda992b4372ca179df0a4792fdd06d1
+--- /dev/null
++++ b/extension/tsconfig.json
+@@ -0,0 +1 @@
++{"compilerOptions":{"target":"ES2022","module":"ESNext","moduleResolution":"Bundler","strict":true,"lib":["ES2022","DOM"],"types":["chrome"],"skipLibCheck":true,"noEmit":true},"include":["src","../shared"]}
+diff --git a/package.json b/package.json
+new file mode 100644
+index 0000000000000000000000000000000000000000..6b0f110e6b859ff91264369220239abca3ad4c9a
+--- /dev/null
++++ b/package.json
+@@ -0,0 +1 @@
++{"private":true,"workspaces":["extension","worker"],"scripts":{"build":"npm run build -w extension && npm run build -w worker","typecheck":"npm run typecheck -w extension && npm run typecheck -w worker","test":"npm test -w extension && npm test -w worker"}}
+diff --git a/shared/contracts.ts b/shared/contracts.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..c34f5c028e3d653300f5b316fc9dda0cfbe8c733
+--- /dev/null
++++ b/shared/contracts.ts
+@@ -0,0 +1,8 @@
++export type Platform = "vk" | "telegram";
++export type PublicationStatus = "pending" | "published" | "failed";
++export interface Metadata { title?: string; topic?: string; summary?: string; content_type?: string }
++export interface PublishRequest { text: string; targets: Platform[]; metadata?: Metadata; post_id?: number; idempotency_key: string }
++export interface PublicationResult { status: PublicationStatus; external_id?: string; url?: string; error?: string }
++export interface PublishResponse { post_id: number; publications: Partial<Record<Platform, PublicationResult>> }
++export interface PostSummary { id:number; title:string|null; topic:string|null; summary:string|null; content_type:string|null; text:string; image_url:string|null; created_at:string; published_at:string|null; publications:Partial<Record<Platform,PublicationResult>> }
++export interface PostsResponse { items:PostSummary[]; page:number; page_size:number; total:number }
+diff --git a/worker/.dev.vars.example b/worker/.dev.vars.example
+new file mode 100644
+index 0000000000000000000000000000000000000000..4e474dd681cb63b3cb9041728f344a1042a1efaf
+--- /dev/null
++++ b/worker/.dev.vars.example
+@@ -0,0 +1,5 @@
++VK_ACCESS_TOKEN=""
++VK_GROUP_ID=""
++TELEGRAM_BOT_TOKEN=""
++TELEGRAM_CHAT_ID=""
++PUBLISH_API_TOKEN="change-me-to-a-long-random-value"
+diff --git a/worker/migrations/0001_initial.sql b/worker/migrations/0001_initial.sql
+new file mode 100644
+index 0000000000000000000000000000000000000000..e1dd2b30110109196cad309fdcb9bff8140312ee
+--- /dev/null
++++ b/worker/migrations/0001_initial.sql
+@@ -0,0 +1,19 @@
++PRAGMA foreign_keys = ON;
++CREATE TABLE posts (
++ id INTEGER PRIMARY KEY AUTOINCREMENT,
++ idempotency_key TEXT NOT NULL UNIQUE,
++ title TEXT, topic TEXT, summary TEXT, content_type TEXT,
++ text TEXT NOT NULL CHECK(length(trim(text)) > 0), image_key TEXT,
++ created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, published_at TEXT
++);
++CREATE TABLE publications (
++ id INTEGER PRIMARY KEY AUTOINCREMENT, post_id INTEGER NOT NULL,
++ platform TEXT NOT NULL CHECK(platform IN ('vk','telegram')),
++ status TEXT NOT NULL CHECK(status IN ('pending','published','failed')),
++ external_post_id TEXT, external_url TEXT, error_message TEXT,
++ created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, published_at TEXT,
++ FOREIGN KEY(post_id) REFERENCES posts(id) ON DELETE CASCADE,
++ UNIQUE(post_id, platform)
++);
++CREATE INDEX posts_published_idx ON posts(published_at DESC);
++CREATE INDEX publications_post_idx ON publications(post_id);
+diff --git a/worker/package.json b/worker/package.json
+new file mode 100644
+index 0000000000000000000000000000000000000000..ce9eedbab199f6910fe69d0514ecb7870b5b802b
+--- /dev/null
++++ b/worker/package.json
+@@ -0,0 +1 @@
++{"name":"cosmetology-publisher-worker","private":true,"type":"module","scripts":{"dev":"wrangler dev","deploy":"wrangler deploy","db:migrate":"wrangler d1 migrations apply DB --remote","db:migrate:local":"wrangler d1 migrations apply DB --local","typecheck":"tsc --noEmit","build":"wrangler deploy --dry-run --outdir dist","test":"vitest run"},"devDependencies":{"@cloudflare/workers-types":"^4.20250214.0","typescript":"^5.7.3","vitest":"^3.0.5","wrangler":"^4.1.0"}}
+diff --git a/worker/src/index.ts b/worker/src/index.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..a24d23ddd0d9ebee5c6c54801fa752ccbc003355
+--- /dev/null
++++ b/worker/src/index.ts
+@@ -0,0 +1,14 @@
++import type {Platform,PublicationResult} from '../../shared/contracts';import {AppError,type Env} from './types';import {validatePublish} from './validation';import {detail,findOrCreate,finish,history,list,pending,publication} from './services/posts';import {getImage,storeImage} from './services/images';import {publishVK} from './services/vk';import {publishTelegram} from './services/telegram';
++const json=(body:unknown,status=200,headers:HeadersInit={})=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json; charset=utf-8',...headers}});
++function cors(req:Request,env:Env){const origin=req.headers.get('origin');return origin&&origin===env.ALLOWED_EXTENSION_ORIGIN?{'access-control-allow-origin':origin,'access-control-allow-headers':'authorization, content-type','access-control-allow-methods':'GET, POST, OPTIONS','vary':'Origin'}:{}}
++function authorized(req:Request,env:Env){const supplied=req.headers.get('authorization')?.replace(/^Bearer\s+/,'')??'';return !!env.PUBLISH_API_TOKEN&&supplied===env.PUBLISH_API_TOKEN}
++async function route(req:Request,env:Env){const u=new URL(req.url),headers=cors(req,env);if(req.method==='OPTIONS')return Object.keys(headers).length?new Response(null,{status:204,headers}):new Response(null,{status:403});
++ if(req.method==='GET'&&u.pathname==='/history.txt')return new Response(await history(env),{headers:{'content-type':'text/plain; charset=utf-8','cache-control':'public, max-age=60'}});
++ if(req.method==='GET'&&u.pathname==='/api/posts')return json(await list(env,u,u.origin),200,headers);
++ const postMatch=u.pathname.match(/^\/api\/posts\/(\d+)$/);if(req.method==='GET'&&postMatch){const p=await detail(env,Number(postMatch[1]),u.origin);return p?json(p,200,headers):json({error:{code:'NOT_FOUND',message:'Публикация не найдена'}},404,headers)}
++ const imageMatch=u.pathname.match(/^\/api\/images\/(.+)$/);if(req.method==='GET'&&imageMatch){const object=await getImage(env,decodeURIComponent(imageMatch[1]));if(!object)return new Response('Not found',{status:404});const h=new Headers();object.writeHttpMetadata(h);h.set('etag',object.httpEtag);h.set('cache-control','public, max-age=86400');return new Response(object.body,{headers:h})}
++ if(req.method==='POST'&&u.pathname==='/api/publish'){if(!authorized(req,env))throw new AppError('UNAUTHORIZED','Неверный personal API token',401);const form=await req.formData();const raw=form.get('payload');if(typeof raw!=='string')throw new AppError('INVALID_REQUEST','Поле payload обязательно',400);let parsed:unknown;try{parsed=JSON.parse(raw)}catch{throw new AppError('INVALID_JSON','Некорректный JSON payload',400)}const input=validatePublish(parsed);const file=form.get('image');if(file!==null&&!(file instanceof File))throw new AppError('INVALID_IMAGE','Некорректное изображение',400);
++  const postId=await findOrCreate(env,input.idempotency_key,input.text,input.metadata);if(file)await storeImage(env,postId,file);const results:Partial<Record<Platform,PublicationResult>>={};
++  for(const platform of input.targets){const old=await publication(env,postId,platform);if(old?.status==='published'){results[platform]={status:'published',external_id:old.external_post_id,url:old.external_url};continue}await pending(env,postId,platform);try{const result=platform==='vk'?await publishVK(env,input.text,file??undefined):await publishTelegram(env,input.text,file??undefined);results[platform]={status:'published',...result}}catch(e){console.error(`${platform} publication failed`,e instanceof AppError?e.code:e);results[platform]={status:'failed',error:e instanceof Error?e.message:'Неизвестная ошибка'}}await finish(env,postId,platform,results[platform]!)}return json({post_id:postId,publications:results},200,headers)}
++ throw new AppError('NOT_FOUND','Маршрут не найден',404)}
++export default{async fetch(req:Request,env:Env){try{return await route(req,env)}catch(e){const err=e instanceof AppError?e:new AppError('INTERNAL_ERROR','Внутренняя ошибка сервера');if(!(e instanceof AppError))console.error(e);return json({error:{code:err.code,message:err.message}},err.status,cors(req,env))}}};
+diff --git a/worker/src/services/images.ts b/worker/src/services/images.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..a238987f0dddfde240aaf647b2ae0955c6b4bae4
+--- /dev/null
++++ b/worker/src/services/images.ts
+@@ -0,0 +1,3 @@
++import type {Env} from '../types';
++export async function storeImage(env:Env,postId:number,file:File){if(file.size>15*1024*1024)throw new Error('Изображение больше 15 МБ');if(!file.type.startsWith('image/'))throw new Error('Файл не является изображением');const ext=({"image/jpeg":"jpg","image/png":"png","image/webp":"webp","image/gif":"gif"} as Record<string,string>)[file.type]??'bin';const d=new Date(),key=`posts/${d.getUTCFullYear()}/${String(d.getUTCMonth()+1).padStart(2,'0')}/${postId}.${ext}`;await env.IMAGES.put(key,await file.arrayBuffer(),{httpMetadata:{contentType:file.type}});await env.DB.prepare('UPDATE posts SET image_key=? WHERE id=?').bind(key,postId).run();return key}
++export async function getImage(env:Env,key:string){return env.IMAGES.get(key)}
+diff --git a/worker/src/services/posts.test.ts b/worker/src/services/posts.test.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..e830e034b19bb09e3629654730625fb6e2a07f0c
+--- /dev/null
++++ b/worker/src/services/posts.test.ts
+@@ -0,0 +1,2 @@
++import {describe,expect,it} from 'vitest';import {formatHistory} from './posts';
++describe('history.txt',()=>{it('is compact and omits technical data',()=>{const text=formatHistory([{date:'2026-08-17',content_type:'research',topic:'SPF',summary:'Микробиом',id:7,image_key:'secret'}]);expect(text).toContain('TOPIC: SPF');expect(text).not.toContain('image_key');expect(text).not.toContain('secret')})});
+diff --git a/worker/src/services/posts.ts b/worker/src/services/posts.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..0df1c9f68180ab2cd1645c01497b31a31b62d59c
+--- /dev/null
++++ b/worker/src/services/posts.ts
+@@ -0,0 +1,11 @@
++import type {Metadata,Platform,PublicationResult,PostSummary} from '../../../shared/contracts';import type {Env} from '../types';
++export async function findOrCreate(env:Env,key:string,text:string,m:Metadata={}){const old=await env.DB.prepare('SELECT id,text FROM posts WHERE idempotency_key=?').bind(key).first<{id:number;text:string}>();if(old){if(old.text!==text)throw new Error('Идентификатор запроса уже использован с другим текстом');return old.id}const r=await env.DB.prepare('INSERT INTO posts(idempotency_key,title,topic,summary,content_type,text) VALUES(?,?,?,?,?,?)').bind(key,m.title??null,m.topic??null,m.summary??null,m.content_type??null,text).run();return Number(r.meta.last_row_id)}
++export async function publication(env:Env,postId:number,p:Platform){return env.DB.prepare('SELECT status,external_post_id,external_url,error_message FROM publications WHERE post_id=? AND platform=?').bind(postId,p).first<any>()}
++export async function pending(env:Env,postId:number,p:Platform){await env.DB.prepare(`INSERT INTO publications(post_id,platform,status) VALUES(?,?,'pending') ON CONFLICT(post_id,platform) DO UPDATE SET status='pending',error_message=NULL WHERE status!='published'`).bind(postId,p).run()}
++export async function finish(env:Env,postId:number,p:Platform,result:PublicationResult){await env.DB.prepare('UPDATE publications SET status=?,external_post_id=?,external_url=?,error_message=?,published_at=CASE WHEN ?=\'published\' THEN CURRENT_TIMESTAMP ELSE published_at END WHERE post_id=? AND platform=?').bind(result.status,result.external_id??null,result.url??null,result.error??null,result.status,postId,p).run();if(result.status==='published')await env.DB.prepare('UPDATE posts SET published_at=COALESCE(published_at,CURRENT_TIMESTAMP) WHERE id=?').bind(postId).run()}
++const select=`SELECT p.*, json_group_array(json_object('platform',u.platform,'status',u.status,'external_id',u.external_post_id,'url',u.external_url,'error',u.error_message)) pubs FROM posts p LEFT JOIN publications u ON u.post_id=p.id`;
++function shape(r:any,origin:string):PostSummary{const pubs:Record<string,PublicationResult>={};for(const x of JSON.parse(r.pubs||'[]'))if(x.platform)pubs[x.platform]={status:x.status,external_id:x.external_id??undefined,url:x.url??undefined,error:x.error??undefined};return {...r,image_url:r.image_key?`${origin}/api/images/${encodeURIComponent(r.image_key)}`:null,publications:pubs}}
++export async function list(env:Env,url:URL,origin:string){const page=Math.max(1,Number(url.searchParams.get('page'))||1),size=Math.min(100,Math.max(1,Number(url.searchParams.get('page_size'))||20)),q=url.searchParams.get('search')?.trim();const where=q?' WHERE (p.title LIKE ? OR p.topic LIKE ? OR p.summary LIKE ? OR p.text LIKE ?)':'';const binds=q?Array(4).fill(`%${q}%`):[];const total=await env.DB.prepare(`SELECT count(*) n FROM posts p${where}`).bind(...binds).first<{n:number}>();const rows=await env.DB.prepare(`${select}${where} GROUP BY p.id ORDER BY COALESCE(p.published_at,p.created_at) DESC LIMIT ? OFFSET ?`).bind(...binds,size,(page-1)*size).all<any>();return {items:rows.results.map(r=>shape(r,origin)),page,page_size:size,total:total?.n??0}}
++export async function detail(env:Env,id:number,origin:string){const r=await env.DB.prepare(`${select} WHERE p.id=? GROUP BY p.id`).bind(id).first<any>();return r?shape(r,origin):null}
++export async function history(env:Env){const r=await env.DB.prepare('SELECT date(published_at) date,content_type,COALESCE(topic,title) topic,summary FROM posts WHERE published_at IS NOT NULL ORDER BY published_at DESC LIMIT 300').all<any>();return formatHistory(r.results)}
++export function formatHistory(rows:any[]){return `COSMETOLOGY PUBLISHED CONTENT HISTORY\n\nPurpose:\nThis document lists previously published content.\nAvoid proposing topics that substantially duplicate these topics/aspects.\n\n${rows.map(r=>`---\n\nDATE: ${r.date}\nTYPE: ${r.content_type||'unspecified'}\nTOPIC: ${r.topic||'Без темы'}\nSUMMARY:\n${r.summary||'Краткое описание не указано.'}\n`).join('\n')}---\n`}
+diff --git a/worker/src/services/telegram.ts b/worker/src/services/telegram.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..2d47d6a9b173343b125c06d37f6222740937ae93
+--- /dev/null
++++ b/worker/src/services/telegram.ts
+@@ -0,0 +1,4 @@
++import type {Env} from '../types';import {AppError} from '../types';
++async function call(env:Env,method:string,body:FormData){const r=await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/${method}`,{method:'POST',body});const j=await r.json<any>();if(!r.ok||!j.ok){console.error('Telegram API error',j.error_code);throw new AppError('TELEGRAM_ERROR',`Telegram отклонил запрос${j.error_code?` (код ${j.error_code})`:''}`,502)}return j.result}
++function url(chat:string,id:number){return chat.startsWith('@')?`https://t.me/${chat.slice(1)}/${id}`:undefined}
++export async function publishTelegram(env:Env,text:string,image?:File){let first;if(image){const f=new FormData();f.set('chat_id',env.TELEGRAM_CHAT_ID);f.set('photo',image,'image');if(text.length<=1024)f.set('caption',text);first=await call(env,'sendPhoto',f);if(text.length>1024){const t=new FormData();t.set('chat_id',env.TELEGRAM_CHAT_ID);t.set('text',text);await call(env,'sendMessage',t)}}else{if(text.length>4096)throw new AppError('TELEGRAM_TEXT_TOO_LONG','Telegram: текст без изображения не должен превышать 4096 символов',400);const f=new FormData();f.set('chat_id',env.TELEGRAM_CHAT_ID);f.set('text',text);first=await call(env,'sendMessage',f)}return {external_id:String(first.message_id),url:url(env.TELEGRAM_CHAT_ID,first.message_id)}}
+diff --git a/worker/src/services/vk.ts b/worker/src/services/vk.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..b427b9f6f6828de8a47cb4a15d2bbb178d57876e
+--- /dev/null
++++ b/worker/src/services/vk.ts
+@@ -0,0 +1,4 @@
++import type {Env} from '../types';import {AppError} from '../types';
++const API='https://api.vk.com/method/',VERSION='5.199';
++async function vk<T>(env:Env,method:string,params:Record<string,string>){const body=new URLSearchParams({...params,access_token:env.VK_ACCESS_TOKEN,v:VERSION});const r=await fetch(API+method,{method:'POST',body});const j=await r.json<any>();if(!r.ok||j.error){console.error('VK API error',j.error?.error_code);throw new AppError('VK_ERROR',`VK отклонил запрос${j.error?.error_code?` (код ${j.error.error_code})`:''}`,502)}return j.response as T}
++export async function publishVK(env:Env,text:string,image?:File){let attachments:string|undefined;if(image){const server=await vk<{upload_url:string}>(env,'photos.getWallUploadServer',{group_id:env.VK_GROUP_ID});const f=new FormData();f.set('photo',image,'image');const uploaded=await fetch(server.upload_url,{method:'POST',body:f}).then(r=>r.json<any>());const saved=await vk<Array<{id:number;owner_id:number}>>(env,'photos.saveWallPhoto',{group_id:env.VK_GROUP_ID,photo:uploaded.photo,server:String(uploaded.server),hash:uploaded.hash});attachments=`photo${saved[0].owner_id}_${saved[0].id}`}const owner=`-${env.VK_GROUP_ID}`;const id=await vk<number>(env,'wall.post',{owner_id:owner,from_group:'1',message:text,...(attachments?{attachments}:{})});return {external_id:String(id),url:`https://vk.com/wall${owner}_${id}`}}
+diff --git a/worker/src/types.ts b/worker/src/types.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..18d9521516160eef0bbea809db067f3aeadbb12a
+--- /dev/null
++++ b/worker/src/types.ts
+@@ -0,0 +1,2 @@
++export interface Env{DB:D1Database;IMAGES:R2Bucket;VK_ACCESS_TOKEN:string;VK_GROUP_ID:string;TELEGRAM_BOT_TOKEN:string;TELEGRAM_CHAT_ID:string;PUBLISH_API_TOKEN:string;ALLOWED_EXTENSION_ORIGIN:string}
++export class AppError extends Error{constructor(public code:string,message:string,public status=500){super(message)}}
+diff --git a/worker/src/validation.test.ts b/worker/src/validation.test.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..4008d678d9e111675790c968cbbb22c3f9fdac25
+--- /dev/null
++++ b/worker/src/validation.test.ts
+@@ -0,0 +1,2 @@
++import {describe,expect,it} from 'vitest';import {validatePublish} from './validation';
++describe('publish validation',()=>{it('accepts a request and deduplicates targets',()=>expect(validatePublish({text:' post ',targets:['vk','vk'],idempotency_key:'12345678'})).toMatchObject({text:'post',targets:['vk']}));it('rejects empty text',()=>expect(()=>validatePublish({text:' ',targets:['vk'],idempotency_key:'12345678'})).toThrow('Текст обязателен'))});
+diff --git a/worker/src/validation.ts b/worker/src/validation.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..da3ff9bcf905bda3f515699c977d236e73bdfef6
+--- /dev/null
++++ b/worker/src/validation.ts
+@@ -0,0 +1,2 @@
++import type {PublishRequest,Platform} from '../../shared/contracts';import {AppError} from './types';
++export function validatePublish(value:unknown):PublishRequest{if(!value||typeof value!=='object')throw new AppError('INVALID_REQUEST','Некорректное тело запроса',400);const v=value as any;if(typeof v.text!=='string'||!v.text.trim()||v.text.length>100000)throw new AppError('INVALID_TEXT','Текст обязателен и должен быть короче 100 000 символов',400);if(!Array.isArray(v.targets)||v.targets.length<1||v.targets.some((x:unknown)=>x!=='vk'&&x!=='telegram'))throw new AppError('INVALID_TARGETS','Выберите VK и/или Telegram',400);if(typeof v.idempotency_key!=='string'||v.idempotency_key.length<8||v.idempotency_key.length>100)throw new AppError('INVALID_IDEMPOTENCY_KEY','Некорректный идентификатор запроса',400);return {...v,text:v.text.trim(),targets:[...new Set(v.targets as Platform[])]}}
+diff --git a/worker/tsconfig.json b/worker/tsconfig.json
+new file mode 100644
+index 0000000000000000000000000000000000000000..cf16ee1f7d52c5e24712950b74337b3a8f6ce05c
+--- /dev/null
++++ b/worker/tsconfig.json
+@@ -0,0 +1 @@
++{"compilerOptions":{"target":"ES2022","module":"ESNext","moduleResolution":"Bundler","strict":true,"types":["@cloudflare/workers-types"],"skipLibCheck":true,"noEmit":true,"lib":["ES2022","WebWorker"]},"include":["src","../shared"]}
+diff --git a/worker/wrangler.jsonc b/worker/wrangler.jsonc
+new file mode 100644
+index 0000000000000000000000000000000000000000..e46ea333bf8d7d72c3693b6a19ea552e7c125612
+--- /dev/null
++++ b/worker/wrangler.jsonc
+@@ -0,0 +1 @@
++{"$schema":"node_modules/wrangler/config-schema.json","name":"cosmetology-social-publisher","main":"src/index.ts","compatibility_date":"2026-08-17","d1_databases":[{"binding":"DB","database_name":"cosmetology-publisher","database_id":"REPLACE_WITH_D1_DATABASE_ID","migrations_dir":"migrations"}],"r2_buckets":[{"binding":"IMAGES","bucket_name":"cosmetology-publisher-images"}],"vars":{"ALLOWED_EXTENSION_ORIGIN":"chrome-extension://REPLACE_WITH_EXTENSION_ID"}}
+)

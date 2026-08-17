@@ -1,0 +1,2 @@
+import {describe,expect,it} from 'vitest';import {validatePublish} from './validation';
+describe('publish validation',()=>{it('accepts a request and deduplicates targets',()=>expect(validatePublish({text:' post ',targets:['vk','vk'],idempotency_key:'12345678'})).toMatchObject({text:'post',targets:['vk']}));it('rejects empty text',()=>expect(()=>validatePublish({text:' ',targets:['vk'],idempotency_key:'12345678'})).toThrow('Текст обязателен'))});
