@@ -29,8 +29,44 @@ export async function installToolbar() {
   const bar = document.createElement('div');
   bar.dataset.socialPublisher = 'toolbar';
   bar.className = 'sp-toolbar';
-  const {workerBaseUrl = ''} = await chrome.storage.local.get('workerBaseUrl');
+  const {workerBaseUrl = '', toolbarPosition} = await chrome.storage.local.get(['workerBaseUrl', 'toolbarPosition']);
   presets.forEach(preset => bar.append(button(`${preset.icon} ${preset.title}`, () => adapter.insert(renderPreset(preset, workerBaseUrl)))));
+  const handle = document.createElement('span');
+  handle.className = 'sp-drag-handle';
+  handle.textContent = '⋮⋮';
+  handle.title = 'Переместить панель';
+  handle.setAttribute('aria-label', 'Переместить панель');
+  bar.prepend(handle);
+  if (toolbarPosition && typeof toolbarPosition.x === 'number' && typeof toolbarPosition.y === 'number') {
+    bar.style.left = `${Math.max(0, Math.min(toolbarPosition.x, window.innerWidth - 40))}px`;
+    bar.style.top = `${Math.max(0, Math.min(toolbarPosition.y, window.innerHeight - 40))}px`;
+    bar.style.bottom = 'auto';
+  }
+  handle.addEventListener('pointerdown', event => {
+    event.preventDefault();
+    handle.setPointerCapture(event.pointerId);
+    const rect = bar.getBoundingClientRect();
+    const offsetX = event.clientX - rect.left;
+    const offsetY = event.clientY - rect.top;
+    let position = {x: rect.left, y: rect.top};
+    const move = (moveEvent: PointerEvent) => {
+      const x = Math.max(0, Math.min(moveEvent.clientX - offsetX, window.innerWidth - bar.offsetWidth));
+      const y = Math.max(0, Math.min(moveEvent.clientY - offsetY, window.innerHeight - bar.offsetHeight));
+      position = {x, y};
+      bar.style.left = `${x}px`;
+      bar.style.top = `${y}px`;
+      bar.style.bottom = 'auto';
+    };
+    const end = () => {
+      handle.removeEventListener('pointermove', move);
+      handle.removeEventListener('pointerup', end);
+      handle.removeEventListener('pointercancel', end);
+      void chrome.storage.local.set({toolbarPosition: position});
+    };
+    handle.addEventListener('pointermove', move);
+    handle.addEventListener('pointerup', end);
+    handle.addEventListener('pointercancel', end);
+  });
   document.body.append(bar);
 }
 

@@ -1,4 +1,4 @@
-import {afterEach, describe, expect, it, vi} from 'vitest';
+import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {JSDOM} from 'jsdom';
 
 function useDom(text: string) {
@@ -14,6 +14,8 @@ function useDom(text: string) {
   });
   return dom.window.document;
 }
+
+beforeEach(() => vi.resetModules());
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -52,5 +54,21 @@ describe('assistant message controls', () => {
     publish.click();
 
     expect(sendMessage).toHaveBeenCalledWith({type: 'OPEN_PUBLISHER', draft: {text: 'Готовый ответ', images: []}});
+  });
+
+  it('restores a draggable preset toolbar position', async () => {
+    const document = useDom('Ответ');
+    vi.stubGlobal('chrome', {
+      storage: {local: {get: vi.fn(async () => ({workerBaseUrl: '', toolbarPosition: {x: 120, y: 80}})), set: vi.fn()}},
+      runtime: {sendMessage: vi.fn()}
+    });
+    const {installToolbar} = await import('./controls');
+
+    await installToolbar();
+
+    const toolbar = document.querySelector<HTMLElement>('[data-social-publisher="toolbar"]')!;
+    expect(toolbar.querySelector('.sp-drag-handle')?.getAttribute('aria-label')).toBe('Переместить панель');
+    expect(toolbar.style.left).toBe('120px');
+    expect(toolbar.style.top).toBe('80px');
   });
 });
