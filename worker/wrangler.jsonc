@@ -1,1 +1,34 @@
-{"$schema":"node_modules/wrangler/config-schema.json","name":"cosmetology-social-publisher","main":"src/index.ts","compatibility_date":"2026-08-17","d1_databases":[{"binding":"DB","database_name":"cosmetology-publisher","database_id":"REPLACE_WITH_D1_DATABASE_ID","migrations_dir":"migrations"}],"r2_buckets":[{"binding":"IMAGES","bucket_name":"cosmetology-publisher-images"}],"vars":{"ALLOWED_EXTENSION_ORIGIN":"chrome-extension://REPLACE_WITH_EXTENSION_ID"}}
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "cosmetology-social-publisher",
+	"main": "src/index.ts",
+	"compatibility_date": "2026-08-17",
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "cosmetology-publisher",
+			"database_id": "377cf613-7559-4aa6-8ff8-ad1d4fce7910",
+			"migrations_dir": "migrations"
+		},
+		{
+			"binding": "cosmetology_publisher",
+			"database_name": "cosmetology-publisher",
+			"database_id": "377cf613-7559-4aa6-8ff8-ad1d4fce7910",
+			"remote": true
+		}
+	],
+	"r2_buckets": [
+		{
+			"binding": "IMAGES",
+			"bucket_name": "cosmetology-publisher-images"
+		},
+		{
+			"bucket_name": "cosmetology-publisher-images",
+			"binding": "cosmetology_publisher_images",
+			"remote": true
+		}
+	],
+	"vars": {
+		"ALLOWED_EXTENSION_ORIGIN": "chrome-extension://kgehhndbmelicddegmjhdcepjngfhbdn"
+	}
+}
