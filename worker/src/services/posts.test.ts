@@ -1,0 +1,2 @@
+import {describe,expect,it} from 'vitest';import {formatHistory} from './posts';
+describe('history.txt',()=>{it('is compact and omits technical data',()=>{const text=formatHistory([{date:'2026-08-17',content_type:'research',topic:'SPF',summary:'Микробиом',id:7,image_key:'secret'}]);expect(text).toContain('TOPIC: SPF');expect(text).not.toContain('image_key');expect(text).not.toContain('secret')})});

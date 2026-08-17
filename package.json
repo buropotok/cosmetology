@@ -1,0 +1,1 @@
+{"private":true,"workspaces":["extension","worker"],"scripts":{"build":"npm run build -w extension && npm run build -w worker","typecheck":"npm run typecheck -w extension && npm run typecheck -w worker","test":"npm test -w extension && npm test -w worker"}}
