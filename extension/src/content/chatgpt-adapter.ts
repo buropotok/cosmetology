@@ -12,6 +12,31 @@ const S = {
   send: 'button[data-testid="send-button"], button[aria-label*="Send"], button[aria-label*="Отправ"]'
 };
 
+export interface ChatGPTImage {
+  url: string;
+  alt?: string;
+  width?: number;
+  height?: number;
+}
+
+function blobToDataUrl(blob: Blob) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => typeof reader.result === 'string' ? resolve(reader.result) : reject(new Error('Image conversion returned no data'));
+    reader.onerror = () => reject(reader.error ?? new Error('Image conversion failed'));
+    reader.readAsDataURL(blob);
+  });
+}
+
+function bestSource(image: HTMLImageElement) {
+  const srcset = image.getAttribute('srcset')?.split(',').map(part => {
+    const [url, descriptor = '0w'] = part.trim().split(/\s+/);
+    return {url, size: Number.parseFloat(descriptor)};
+  }).filter(candidate => candidate.url).sort((a, b) => b.size - a.size)[0]?.url;
+  const linked = image.closest<HTMLAnchorElement>('a[href]')?.href;
+  return srcset || linked || image.currentSrc || image.src;
+}
+
 function isUsableComposer(element: HTMLElement) {
   if (!element.isConnected || element.closest('[aria-hidden="true"]')) return false;
   if (element instanceof HTMLTextAreaElement && element.disabled) return false;
@@ -95,6 +120,28 @@ export class ChatGPTAdapter {
     }
   }
 
-  images(message: HTMLElement) { return [...this.contentRoot(message).querySelectorAll<HTMLImageElement>('img')].filter(i => i.naturalWidth > 200 && i.naturalHeight > 200).map(i => i.currentSrc || i.src).filter(Boolean); }
+  getImages(message: HTMLElement): ChatGPTImage[] {
+    return [...this.contentRoot(message).querySelectorAll<HTMLImageElement>('img')]
+      .map(image => ({
+        url: bestSource(image),
+        alt: image.alt || undefined,
+        width: image.naturalWidth || image.width || undefined,
+        height: image.naturalHeight || image.height || undefined
+      }))
+      .filter(image => Boolean(image.url) && (image.width === undefined || image.height === undefined || image.width > 200 && image.height > 200));
+  }
+
+  getBestImage(message: HTMLElement) {
+    return this.getImages(message).sort((a, b) => (b.width ?? 0) * (b.height ?? 0) - (a.width ?? 0) * (a.height ?? 0))[0];
+  }
+
+  async resolveImageForDownload(image: ChatGPTImage): Promise<ChatGPTImage> {
+    if (!image.url.startsWith('blob:')) return image;
+    const response = await fetch(image.url);
+    if (!response.ok) throw new Error(`Image fetch failed (${response.status})`);
+    return {...image, url: await blobToDataUrl(await response.blob())};
+  }
+
+  images(message: HTMLElement) { return this.getImages(message).map(image => image.url); }
   observe(cb: () => void) { let timer = 0; const observer = new MutationObserver(() => { clearTimeout(timer); timer = window.setTimeout(cb, 200); }); observer.observe(document.querySelector('main') ?? document.body, {childList: true, subtree: true}); return observer; }
 }

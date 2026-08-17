@@ -5,6 +5,7 @@ function useDom(text: string) {
   const dom = new JSDOM(`<main><div data-message-author-role="assistant"><div class="markdown"><p>${text}</p></div></div></main>`, {url: 'https://chatgpt.com/'});
   Object.assign(globalThis, {
     document: dom.window.document,
+    window: dom.window,
     Node: dom.window.Node,
     Element: dom.window.Element,
     HTMLElement: dom.window.HTMLElement,
@@ -26,12 +27,16 @@ describe('assistant message controls', () => {
   it('rebuilds rewrite controls as numbered choices after streaming completes without duplicates', async () => {
     const document = useDom('Ответ еще загружается');
     vi.stubGlobal('chrome', {runtime: {sendMessage: vi.fn()}});
+    const {ChatGPTAdapter} = await import('./chatgpt-adapter');
+    const insert = vi.spyOn(ChatGPTAdapter.prototype, 'insert').mockResolvedValue();
     const {decorate} = await import('./controls');
 
     decorate();
     const message = document.querySelector<HTMLElement>('[data-message-author-role="assistant"]')!;
     const firstControls = message.querySelector<HTMLElement>('[data-social-publisher="controls"]')!;
     expect([...firstControls.querySelectorAll('button')].map(button => button.textContent)).not.toContain('1');
+    [...firstControls.querySelectorAll('button')].find(button => button.textContent === 'Короче')!.click();
+    expect(insert).toHaveBeenCalledWith(expect.stringContaining('короче'), true);
 
     document.querySelector('.markdown')!.innerHTML = '<ol><li>Первый</li><li>Второй</li><li>Третий</li><li>Четвертый</li><li>Пятый</li></ol>';
     decorate();
@@ -41,9 +46,11 @@ describe('assistant message controls', () => {
     expect(controls).toHaveLength(1);
     expect(controls[0]).not.toBe(firstControls);
     expect([...controls[0].querySelectorAll('button')].map(button => button.textContent)).toEqual(['1', '2', '3', '4', '5', 'Опубликовать']);
+    controls[0].querySelector<HTMLButtonElement>('button')!.click();
+    expect(insert).toHaveBeenLastCalledWith(expect.stringContaining('вариант №1'), true);
   });
 
-  it('sends the publisher draft to the background service worker', async () => {
+  it('shows photo choices without immediately opening the publisher', async () => {
     const document = useDom('Готовый ответ');
     const sendMessage = vi.fn();
     vi.stubGlobal('chrome', {runtime: {sendMessage}});
@@ -53,7 +60,68 @@ describe('assistant message controls', () => {
     const publish = [...document.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === 'Опубликовать')!;
     publish.click();
 
-    expect(sendMessage).toHaveBeenCalledWith({type: 'OPEN_PUBLISHER', draft: {text: 'Готовый ответ', images: []}});
+    expect(sendMessage).not.toHaveBeenCalled();
+    expect([...document.querySelectorAll<HTMLButtonElement>('[data-social-publisher="photo-choice"] button')].map(button => button.textContent)).toEqual([
+      'Фото без текста', 'Фото с инфографикой и текстом', 'Фото не нужно'
+    ]);
+
+    [...document.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === 'Фото не нужно')!.click();
+    expect(sendMessage).toHaveBeenCalledWith({
+      type: 'OPEN_PUBLISHER',
+      draft: {originalText: 'Готовый ответ', publicationText: 'Готовый ответ', imageMode: 'text_only', image: null}
+    });
+  });
+
+  it('submits an illustration prompt and selects only the subsequent image', async () => {
+    const document = useDom('Полный пост');
+    const sendMessage = vi.fn();
+    vi.stubGlobal('chrome', {runtime: {sendMessage}});
+    const {ChatGPTAdapter} = await import('./chatgpt-adapter');
+    const insert = vi.spyOn(ChatGPTAdapter.prototype, 'insert').mockResolvedValue();
+    const {decorate} = await import('./controls');
+
+    decorate();
+    [...document.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === 'Опубликовать')!.click();
+    [...document.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === 'Фото без текста')!.click();
+    expect(insert).toHaveBeenCalledWith(expect.stringContaining('без текста и надписей'), true);
+
+    document.querySelector('main')!.insertAdjacentHTML('beforeend', '<div data-message-author-role="assistant"><div class="markdown"><img src="https://files.oaiusercontent.com/a.png" width="1024" height="1024"></div></div>');
+    decorate();
+    expect([...document.querySelectorAll<HTMLButtonElement>('button')].map(button => button.textContent)).toContain('Использовать');
+    [...document.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === 'Использовать')!.click();
+
+    expect(sendMessage).toHaveBeenLastCalledWith({type: 'OPEN_PUBLISHER', draft: expect.objectContaining({
+      originalText: 'Полный пост', publicationText: 'Полный пост', imageMode: 'illustration', image: expect.objectContaining({url: 'https://files.oaiusercontent.com/a.png'})
+    })});
+  });
+
+  it('extracts an infographic title and does not select a stale regenerated image', async () => {
+    const document = useDom('## Заголовок поста\n\nПолный длинный текст');
+    const sendMessage = vi.fn();
+    vi.stubGlobal('chrome', {runtime: {sendMessage}});
+    const {ChatGPTAdapter} = await import('./chatgpt-adapter');
+    const insert = vi.spyOn(ChatGPTAdapter.prototype, 'insert').mockResolvedValue();
+    const {decorate} = await import('./controls');
+
+    decorate();
+    [...document.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === 'Опубликовать')!.click();
+    [...document.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === 'Фото с инфографикой и текстом')!.click();
+    expect(insert).toHaveBeenCalledWith(expect.stringContaining('хорошо читаемой инфографики'), true);
+    document.querySelector('main')!.insertAdjacentHTML('beforeend', '<div data-message-author-role="assistant"><div class="markdown"><img src="https://files.oaiusercontent.com/a.png" width="1024" height="1024"></div></div>');
+    decorate();
+    [...document.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === 'Другое')!.click();
+    expect(insert).toHaveBeenLastCalledWith(expect.stringContaining('другую композицию'), true);
+
+    document.querySelector('main')!.insertAdjacentHTML('beforeend', '<div data-message-author-role="assistant"><div class="markdown"><img src="https://files.oaiusercontent.com/b.png" width="1024" height="1024"></div></div>');
+    decorate();
+    [...document.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === 'Использовать')!.click();
+    const draft = sendMessage.mock.calls.at(-1)?.[0].draft;
+    expect(draft).toMatchObject({
+      originalText: '## Заголовок поста\n\nПолный длинный текст',
+      publicationText: 'Заголовок поста',
+      imageMode: 'infographic',
+      image: {url: 'https://files.oaiusercontent.com/b.png'}
+    });
   });
 
   it('restores a draggable preset toolbar position', async () => {
@@ -62,6 +130,8 @@ describe('assistant message controls', () => {
       storage: {local: {get: vi.fn(async () => ({workerBaseUrl: '', toolbarPosition: {x: 120, y: 80}})), set: vi.fn()}},
       runtime: {sendMessage: vi.fn()}
     });
+    const {ChatGPTAdapter} = await import('./chatgpt-adapter');
+    const insert = vi.spyOn(ChatGPTAdapter.prototype, 'insert').mockResolvedValue();
     const {installToolbar} = await import('./controls');
 
     await installToolbar();
@@ -70,5 +140,7 @@ describe('assistant message controls', () => {
     expect(toolbar.querySelector('.sp-drag-handle')?.getAttribute('aria-label')).toBe('Переместить панель');
     expect(toolbar.style.left).toBe('120px');
     expect(toolbar.style.top).toBe('80px');
+    [...toolbar.querySelectorAll('button')].find(button => button.textContent?.includes('Новости'))!.click();
+    expect(insert).toHaveBeenCalledWith(expect.stringContaining('актуальные новости'));
   });
 });

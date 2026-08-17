@@ -1,7 +1,4 @@
-interface PublisherDraft {
-  text: string;
-  images: string[];
-}
+import type {PublisherDraft} from './publisher/draft';
 
 interface OpenPublisherMessage {
   type: 'OPEN_PUBLISHER';
@@ -20,6 +17,15 @@ function openPublisher(message: OpenPublisherMessage, sender: chrome.runtime.Mes
     void chrome.sidePanel.open({windowId}).catch((error: unknown) => {
       console.error('[Cosmetology] Failed to open publisher side panel', error);
     });
+    if (message.draft.image) {
+      void chrome.downloads.download({
+        url: message.draft.image.url,
+        filename: message.draft.image.filename,
+        saveAs: true
+      }).catch((error: unknown) => {
+        console.error('[Cosmetology] Failed to download selected image', error);
+      });
+    }
   }
 
   void chrome.storage.session.set({draft: message.draft}).then(() => {
