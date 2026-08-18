@@ -29,6 +29,6 @@
 		}
 	],
 	"vars": {
-		"ALLOWED_EXTENSION_ORIGIN": "chrome-extension://kgehhndbmelicddegmjhdcepjngfhbdn"
+		"ALLOWED_EXTENSION_ORIGIN": "chrome-extension://glkemlgehjfgolnefbeakdjbbhcgnkka"
 	}
 }
