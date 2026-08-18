@@ -24,16 +24,16 @@ describe('publisher background message', () => {
     await import('./background');
 
     listener(
-      {type: 'OPEN_PUBLISHER', draft: {originalText: 'Post', publicationText: 'Post', imageMode: 'illustration', image: {url: 'https://image.test/a.png', filename: 'post.png'}}},
+      {type: 'OPEN_PUBLISHER', draft: {originalText: 'Почему SPF нужен зимой', publicationText: 'Почему SPF нужен зимой', imageMode: 'illustration', image: {url: 'https://image.test/a.png', filename: 'Почему-SPF-зимой.png'}}},
       {tab: {windowId: 42} as chrome.tabs.Tab}
     );
     expect(open).toHaveBeenCalledWith({windowId: 42});
-    expect(download).toHaveBeenCalledWith({url: 'https://image.test/a.png', filename: 'post.png', saveAs: true});
-    expect(set).toHaveBeenCalledWith({draft: {originalText: 'Post', publicationText: 'Post', imageMode: 'illustration', image: {url: 'https://image.test/a.png', filename: 'post.png'}}});
+    expect(download).toHaveBeenCalledWith({url: 'https://image.test/a.png', filename: 'Почему-SPF-зимой.png', saveAs: true});
+    expect(set).toHaveBeenCalledWith({draft: {originalText: 'Почему SPF нужен зимой', publicationText: 'Почему SPF нужен зимой', imageMode: 'illustration', image: {url: 'https://image.test/a.png', filename: 'Почему-SPF-зимой.png'}}});
     expect(calls[0]).toBe('panel');
     await vi.waitFor(() => expect(sendMessage).toHaveBeenCalled());
 
-    expect(sendMessage).toHaveBeenCalledWith({type: 'DRAFT_UPDATED', draft: {originalText: 'Post', publicationText: 'Post', imageMode: 'illustration', image: {url: 'https://image.test/a.png', filename: 'post.png'}}});
+    expect(sendMessage).toHaveBeenCalledWith({type: 'DRAFT_UPDATED', draft: {originalText: 'Почему SPF нужен зимой', publicationText: 'Почему SPF нужен зимой', imageMode: 'illustration', image: {url: 'https://image.test/a.png', filename: 'Почему-SPF-зимой.png'}}});
     expect(calls).toEqual(['panel', 'storage', 'draft']);
   });
 });

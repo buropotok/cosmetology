@@ -8,7 +8,7 @@ import {
   buildInfographicPrompt
 } from '../presets/image-prompts';
 import type {PublisherDraft, PublisherImage} from '../publisher/draft';
-import {extractTitle} from '../publisher/draft';
+import {buildImageFilename} from '../publisher/draft';
 import {PublishWorkflow} from './publish-workflow';
 
 const adapter = new ChatGPTAdapter();
@@ -34,14 +34,6 @@ function fingerprint(text: string) {
     hash = Math.imul(hash, 16777619);
   }
   return `${text.length}:${hash >>> 0}`;
-}
-
-function imageFilename(text: string, url: string) {
-  const slug = extractTitle(text).toLocaleLowerCase('ru-RU').replace(/[^a-zа-яё0-9]+/gi, '-').replace(/^-|-$/g, '').slice(0, 48) || 'post';
-  const now = new Date();
-  const stamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}-${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
-  const extension = url.match(/\.(png|jpe?g|webp)(?:[?#]|$)/i)?.[1].replace('jpeg', 'jpg') ?? 'png';
-  return `cosmetology-${slug}-${stamp}.${extension}`;
 }
 
 function sendDraft(draft: PublisherDraft) {
@@ -133,7 +125,7 @@ function detectImageCandidate() {
     }
     const found = inspection.images.sort((a, b) => (b.width ?? 0) * (b.height ?? 0) - (a.width ?? 0) * (a.height ?? 0))[0];
     if (!found) continue;
-    const image: PublisherImage = {...found, filename: imageFilename(workflow.state.originalText, found.url)};
+    const image: PublisherImage = {...found, filename: buildImageFilename(workflow.state.originalText, found.url)};
     if (workflow.setCandidate(turn, image)) {
       console.debug('[Cosmetology][ImageFlow] generated image detected');
       console.debug('[Cosmetology][ImageFlow] state: waiting_for_image -> image_candidate');

@@ -26,4 +26,10 @@ describe('publish workflow state', () => {
     expect(extractTitle('\n  ### Заголовок публикации  \nТекст')).toBe('Заголовок публикации');
     expect(extractTitle('Без маркера\nТекст')).toBe('Без маркера');
   });
+
+  it('removes the leading timestamp before storing the source post', () => {
+    const workflow = new PublishWorkflow();
+    workflow.start(document.querySelector<HTMLElement>('#a')!, '\n[2026-01-03 09:05 MSK]\n# Чистый заголовок\nТекст');
+    expect(workflow.state).toMatchObject({originalText: '# Чистый заголовок\nТекст'});
+  });
 });

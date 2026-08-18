@@ -1,6 +1,8 @@
 import {post,posts,publish} from '../api/client';import type {Platform,PublicationResult,PostSummary} from '../../../shared/contracts';
 import type {PublisherDraft} from '../publisher/draft';
+import {extensionVersionLabel} from './version';
 const $=<T extends HTMLElement>(id:string)=>document.getElementById(id) as T;let image:Blob|undefined,postId:number|undefined,key=crypto.randomUUID(),last:Partial<Record<Platform,PublicationResult>>={};
+$('extensionVersion').textContent=extensionVersionLabel();
 function show(tab:string){document.querySelectorAll('main>section').forEach(s=>(s as HTMLElement).hidden=s.id!==tab);if(tab==='history')void loadHistory()}
 document.querySelectorAll<HTMLButtonElement>('[data-tab]').forEach(b=>b.onclick=()=>show(b.dataset.tab!));
 async function blobFromUrl(url:string){const r=await fetch(url,{credentials:'include'});if(!r.ok)throw new Error('Изображение ChatGPT недоступно; загрузите его вручную');return r.blob()}

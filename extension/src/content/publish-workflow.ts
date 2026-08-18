@@ -1,5 +1,5 @@
 import type {ImageMode, PublisherDraft, PublisherImage} from '../publisher/draft';
-import {extractTitle} from '../publisher/draft';
+import {extractTitle, normalizePublicationText} from '../publisher/draft';
 
 type GeneratingMode = Extract<ImageMode, 'illustration' | 'infographic'>;
 export type WorkflowState =
@@ -15,7 +15,7 @@ export class PublishWorkflow {
 
   start(source: HTMLElement, originalText: string) {
     this.clearOwnedUI();
-    this.state = {kind: 'photo_choice', source, originalText};
+    this.state = {kind: 'photo_choice', source, originalText: normalizePublicationText(originalText)};
   }
 
   waitForImage(mode: GeneratingMode, boundaryTurn: HTMLElement | null) {
