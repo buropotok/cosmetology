@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Галина Сергеевна Клятышева — врач-косметолог</title>
+  <meta name="description" content="Врач-косметолог и дерматовенеролог Галина Сергеевна Клятышева. Эстетическая и врачебная косметология в Московском районе Санкт-Петербурга.">
+  <meta property="og:title" content="Галина Сергеевна Клятышева — врач-косметолог">
+  <meta property="og:description" content="Эстетическая и врачебная косметология. Санкт-Петербург, Московский район.">
+  <meta property="og:type" content="website">
+  <meta name="theme-color" content="#f4f1eb">
+  <style>
+    :root {
+      --ink: #25332f;
+      --muted: #68736f;
+      --paper: #fbfaf7;
+      --warm: #f4f1eb;
+      --sage: #dfe9e2;
+      --sage-deep: #47665b;
+      --line: rgba(37, 51, 47, .13);
+      --white: #fff;
+      --radius: 26px;
+      --shadow: 0 24px 70px rgba(47, 66, 59, .11);
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; color: var(--ink); background: var(--paper); font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; line-height: 1.6; }
+    a { color: inherit; }
+    .container { width: min(1160px, calc(100% - 40px)); margin-inline: auto; }
+    .skip { position: fixed; left: 16px; top: -80px; z-index: 20; padding: 10px 16px; background: var(--ink); color: white; border-radius: 8px; }
+    .skip:focus { top: 16px; }
+    header { position: sticky; top: 0; z-index: 10; border-bottom: 1px solid var(--line); background: rgba(251,250,247,.92); backdrop-filter: blur(16px); }
+    .nav { min-height: 76px; display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+    .brand { text-decoration: none; font-family: Georgia, "Times New Roman", serif; font-size: 20px; line-height: 1.1; }
+    .brand small { display: block; margin-top: 5px; color: var(--muted); font: 10px/1.2 Inter, sans-serif; letter-spacing: .16em; text-transform: uppercase; }
+    nav { display: flex; align-items: center; gap: 28px; }
+    nav a { color: var(--muted); text-decoration: none; font-size: 14px; }
+    nav a:hover, nav a:focus-visible { color: var(--ink); }
+    .button { display: inline-flex; align-items: center; justify-content: center; gap: 9px; min-height: 48px; padding: 0 22px; border: 1px solid var(--sage-deep); border-radius: 999px; background: var(--sage-deep); color: white; text-decoration: none; font-weight: 650; transition: transform .2s, background .2s; }
+    .button:hover { transform: translateY(-2px); background: #365348; }
+    .button.secondary { background: transparent; color: var(--sage-deep); }
+    .hero { position: relative; overflow: hidden; padding: 100px 0 84px; background: var(--warm); }
+    .hero::before, .hero::after { content: ""; position: absolute; border-radius: 50%; pointer-events: none; }
+    .hero::before { width: 470px; height: 470px; right: -140px; top: -170px; border: 1px solid rgba(71,102,91,.2); box-shadow: 0 0 0 55px rgba(223,233,226,.45), 0 0 0 120px rgba(223,233,226,.18); }
+    .hero::after { width: 180px; height: 180px; right: 19%; bottom: -110px; background: rgba(218,196,178,.35); filter: blur(1px); }
+    .hero-grid { position: relative; z-index: 1; display: grid; grid-template-columns: 1.3fr .7fr; gap: 72px; align-items: end; }
+    .eyebrow { margin: 0 0 22px; color: var(--sage-deep); font-size: 12px; font-weight: 750; letter-spacing: .18em; text-transform: uppercase; }
+    h1, h2 { font-family: Georgia, "Times New Roman", serif; font-weight: 400; letter-spacing: -.035em; line-height: 1.03; }
+    h1 { max-width: 850px; margin: 0; font-size: clamp(48px, 7.3vw, 94px); }
+    .lead { max-width: 670px; margin: 28px 0 34px; color: var(--muted); font-size: clamp(18px, 2vw, 22px); }
+    .actions { display: flex; flex-wrap: wrap; gap: 12px; }
+    .hero-note { padding: 28px; border: 1px solid rgba(255,255,255,.65); border-radius: var(--radius); background: rgba(255,255,255,.55); box-shadow: var(--shadow); }
+    .hero-note strong { display: block; margin-bottom: 5px; font-family: Georgia, serif; font-size: 34px; font-weight: 400; }
+    .hero-note p { margin: 0; color: var(--muted); }
+    section { padding: 96px 0; }
+    .section-head { display: grid; grid-template-columns: 1fr 1fr; gap: 50px; align-items: end; margin-bottom: 46px; }
+    h2 { margin: 0; font-size: clamp(38px, 5.2vw, 64px); }
+    .section-head p { max-width: 600px; margin: 0; color: var(--muted); font-size: 18px; }
+    .about-grid { display: grid; grid-template-columns: 1.15fr .85fr; gap: 18px; }
+    .panel { padding: clamp(28px, 4vw, 48px); border: 1px solid var(--line); border-radius: var(--radius); background: white; }
+    .panel.accent { background: var(--sage); }
+    .panel h3 { margin: 0 0 17px; font-family: Georgia, serif; font-size: 27px; font-weight: 400; line-height: 1.2; }
+    .panel p { margin: 0; color: var(--muted); }
+    .facts { display: grid; gap: 0; margin: 0; }
+    .facts div { padding: 18px 0; border-bottom: 1px solid rgba(37,51,47,.12); }
+    .facts div:first-child { padding-top: 0; }
+    .facts div:last-child { padding-bottom: 0; border: 0; }
+    .facts dt { margin-bottom: 4px; color: var(--sage-deep); font-size: 12px; font-weight: 750; letter-spacing: .1em; text-transform: uppercase; }
+    .facts dd { margin: 0; font-size: 17px; }
+    .services { background: var(--ink); color: white; }
+    .services .eyebrow { color: #a9c3b9; }
+    .services .section-head p { color: #b8c1be; }
+    .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+    .card { min-height: 210px; padding: 28px; border: 1px solid rgba(255,255,255,.13); border-radius: 22px; background: rgba(255,255,255,.045); }
+    .card .num { color: #9bb8ad; font: 12px/1 Inter, sans-serif; letter-spacing: .12em; }
+    .card h3 { margin: 48px 0 10px; font-family: Georgia, serif; font-size: 25px; font-weight: 400; line-height: 1.15; }
+    .card p { margin: 0; color: #b8c1be; font-size: 14px; }
+    .subsection { margin-top: 54px; padding-top: 48px; border-top: 1px solid rgba(255,255,255,.13); }
+    .subsection h3 { margin: 0 0 24px; font-family: Georgia, serif; font-size: 30px; font-weight: 400; }
+    .chips { display: flex; flex-wrap: wrap; gap: 10px; }
+    .chip { padding: 11px 16px; border: 1px solid rgba(255,255,255,.15); border-radius: 999px; color: #dbe2df; font-size: 14px; }
+    .standards-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    .standard { padding: 30px 26px; border-top: 1px solid var(--ink); background: white; }
+    .standard span { display: block; margin-bottom: 30px; color: var(--sage-deep); font-family: Georgia, serif; font-size: 30px; }
+    .standard h3 { margin: 0 0 8px; font-size: 18px; }
+    .standard p { margin: 0; color: var(--muted); font-size: 15px; }
+    .contact { padding-top: 24px; }
+    .contact-box { position: relative; overflow: hidden; padding: clamp(34px, 7vw, 80px); border-radius: 34px; background: var(--sage); }
+    .contact-box::after { content: ""; position: absolute; width: 260px; height: 260px; right: -100px; bottom: -120px; border: 50px solid rgba(255,255,255,.35); border-radius: 50%; }
+    .contact-grid { position: relative; z-index: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 70px; align-items: end; }
+    .contact h2 { max-width: 560px; }
+    .contact-list { display: grid; gap: 18px; }
+    .contact-item { padding-bottom: 17px; border-bottom: 1px solid rgba(37,51,47,.15); }
+    .contact-item small { display: block; margin-bottom: 3px; color: var(--muted); }
+    .contact-item a, .contact-item address { font-style: normal; font-weight: 650; text-decoration-thickness: 1px; text-underline-offset: 4px; }
+    .privacy { padding: 76px 0; }
+    .privacy details { padding: 28px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+    .privacy summary { cursor: pointer; font-family: Georgia, serif; font-size: 28px; }
+    .privacy p { max-width: 850px; margin: 20px 0 0; color: var(--muted); }
+    footer { padding: 30px 0 40px; }
+    .footer-row { display: flex; align-items: center; justify-content: space-between; gap: 24px; color: var(--muted); font-size: 13px; }
+    .footer-row a { text-underline-offset: 3px; }
+    @media (max-width: 860px) {
+      nav a:not(.button) { display: none; }
+      .hero { padding-top: 74px; }
+      .hero-grid, .section-head, .about-grid, .contact-grid { grid-template-columns: 1fr; gap: 34px; }
+      .hero-note { max-width: 430px; }
+      .cards { grid-template-columns: repeat(2, 1fr); }
+      .standards-grid { grid-template-columns: 1fr; }
+      section { padding: 76px 0; }
+    }
+    @media (max-width: 560px) {
+      .container { width: min(100% - 28px, 1160px); }
+      .nav { min-height: 68px; }
+      .brand { font-size: 17px; }
+      .brand small { display: none; }
+      nav { gap: 0; }
+      nav .button { min-height: 40px; padding: 0 15px; font-size: 13px; }
+      .hero { padding: 58px 0 64px; }
+      h1 { font-size: clamp(43px, 14vw, 62px); }
+      .lead { margin-top: 22px; }
+      .actions { display: grid; }
+      .cards { grid-template-columns: 1fr; }
+      .card { min-height: 180px; }
+      .card h3 { margin-top: 34px; }
+      .contact-box { border-radius: 24px; }
+      .footer-row { align-items: flex-start; flex-direction: column; }
+    }
+    @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } .button { transition: none; } }
+  </style>
+</head>
+<body>
+  <a class="skip" href="#content">К основному содержанию</a>
+  <header>
+    <div class="container nav">
+      <a class="brand" href="#top">Галина Клятышева<small>врач-косметолог</small></a>
+      <nav aria-label="Основная навигация">
+        <a href="#about">О специалисте</a>
+        <a href="#services">Процедуры</a>
+        <a href="#contacts">Контакты</a>
+        <a class="button" href="https://t.me/beautyclin" target="_blank" rel="noopener">Записаться</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="content">
+    <section class="hero" id="top">
+      <div class="container hero-grid">
+        <div>
+          <p class="eyebrow">Эстетическая и врачебная косметология</p>
+          <h1>Галина Сергеевна Клятышева</h1>
+          <p class="lead">Врач-косметолог, дерматовенеролог. Инъекционные, уходовые и аппаратные процедуры в Санкт-Петербурге.</p>
+          <div class="actions">
+            <a class="button" href="https://t.me/beautyclin" target="_blank" rel="noopener">Написать в Telegram <span aria-hidden="true">↗</span></a>
+            <a class="button secondary" href="tel:+79811536766">Позвонить</a>
+          </div>
+        </div>
+        <aside class="hero-note" aria-label="Опыт специалиста">
+          <strong>Более 20 лет</strong>
+          <p>медицинского стажа. Высшее медицинское образование СПбГПМА.</p>
+        </aside>
+      </div>
+    </section>
+
+    <section id="about">
+      <div class="container">
+        <div class="section-head">
+          <div><p class="eyebrow">О специалисте</p><h2>Внимание к индивидуальности</h2></div>
+          <p>В работе Галина Сергеевна придерживается подхода, направленного на сохранение природной индивидуальности без эффекта «маски» и гиперкоррекции.</p>
+        </div>
+        <div class="about-grid">
+          <article class="panel accent">
+            <h3>Врачебная специализация</h3>
+            <p>Дипломированный врач-косметолог и дерматовенеролог. Основная специализация — инъекционная косметология. Также в практике представлены профессиональный уход и аппаратная косметология.</p>
+          </article>
+          <article class="panel">
+            <dl class="facts">
+              <div><dt>Образование</dt><dd>Высшее медицинское, СПбГПМА</dd></div>
+              <div><dt>Опыт</dt><dd>Медицинский стаж более 20 лет</dd></div>
+              <div><dt>Приём</dt><dd>Московский район Санкт-Петербурга</dd></div>
+            </dl>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="services" id="services">
+      <div class="container">
+        <div class="section-head">
+          <div><p class="eyebrow">Процедуры</p><h2>Направления работы</h2></div>
+          <p>Перечень собран по опубликованной информации кабинета. Выбор процедуры и препарата обсуждается на очной консультации.</p>
+        </div>
+        <div class="cards">
+          <article class="card"><span class="num">01</span><h3>Контурная пластика</h3><p>Скулы, углы челюсти, носогубные и носослёзные складки, коррекция формы носа.</p></article>
+          <article class="card"><span class="num">02</span><h3>Коррекция губ</h3><p>Увеличение, коррекция контура и увлажнение; выведение старого филлера.</p></article>
+          <article class="card"><span class="num">03</span><h3>Ботулинотерапия</h3><p>Лоб, межбровье, область вокруг глаз и Full Face.</p></article>
+          <article class="card"><span class="num">04</span><h3>Биоревитализация и мезотерапия</h3><p>Инъекционные процедуры, включая биостимуляцию и коллагенотерапию.</p></article>
+          <article class="card"><span class="num">05</span><h3>Нитевые техники</h3><p>Нити Ког и подтяжка мезонитями.</p></article>
+          <article class="card"><span class="num">06</span><h3>Профессиональный уход</h3><p>Чистки лица и пилинги.</p></article>
+          <article class="card"><span class="num">07</span><h3>Аппаратная косметология</h3><p>SMAS-лифтинг и микроигольчатый RF-лифтинг.</p></article>
+          <article class="card"><span class="num">08</span><h3>Другие процедуры</h3><p>Инъекции липолитиков, полимолочная кислота и биореволюметрия.</p></article>
+        </div>
+        <div class="subsection" aria-labelledby="preparations-title">
+          <h3 id="preparations-title">Упомянутые препараты и линейки</h3>
+          <div class="chips">
+            <span class="chip">Bellarti</span><span class="chip">Profhilo</span><span class="chip">Biogel</span><span class="chip">Pentakl</span><span class="chip">Aquashine</span><span class="chip">Radiesse</span><span class="chip">FIZE PLA+HA</span><span class="chip">PRX-T33</span><span class="chip">Лонгидаза</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="standards">
+      <div class="container">
+        <div class="section-head">
+          <div><p class="eyebrow">Стандарты приёма</p><h2>Факты о работе кабинета</h2></div>
+          <p>В публикациях кабинета отдельно отмечены медицинское образование специалиста, стерильность и работа с оригинальными сертифицированными препаратами.</p>
+        </div>
+        <div class="standards-grid">
+          <article class="standard"><span>01</span><h3>Медицинское образование</h3><p>Высшее медицинское образование и профильные сертификаты на инъекционные и аппаратные процедуры.</p></article>
+          <article class="standard"><span>02</span><h3>Стерильность</h3><p>Соблюдение асептики и антисептики в оборудованном кабинете.</p></article>
+          <article class="standard"><span>03</span><h3>Препараты</h3><p>Оригинальные препараты, сертифицированные в РФ; упаковка вскрывается при пациенте.</p></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="contact" id="contacts">
+      <div class="container contact-box">
+        <div class="contact-grid">
+          <div><p class="eyebrow">Контакты</p><h2>Запись и вопросы</h2><p class="lead">Свяжитесь удобным способом для записи на консультацию.</p></div>
+          <div class="contact-list">
+            <div class="contact-item"><small>Адрес кабинета</small><address>Санкт-Петербург, ул. Благодатная, 12<br>Московский район</address></div>
+            <div class="contact-item"><small>Телефон</small><a href="tel:+79811536766">+7 (981) 153-67-66</a></div>
+            <div class="contact-item"><small>Telegram</small><a href="https://t.me/beautyclin" target="_blank" rel="noopener">@beautyclin</a></div>
+            <a class="button" href="https://yandex.ru/maps/?text=Санкт-Петербург,+Благодатная+улица,+12" target="_blank" rel="noopener">Открыть на Яндекс Картах <span aria-hidden="true">↗</span></a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="privacy" id="privacy">
+      <div class="container">
+        <details>
+          <summary>Политика конфиденциальности</summary>
+          <p>Сайт носит информационный характер и сам по себе не собирает персональные данные через формы. При переходе в Telegram, на карты или в другие внешние сервисы действуют политики соответствующих сервисов. Пользователь обращается по опубликованным контактам добровольно и самостоятельно решает, какие контактные данные сообщить при обращении.</p>
+        </details>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="container footer-row">
+      <span>© 2026 Галина Сергеевна Клятышева</span>
+      <a href="#privacy">Политика конфиденциальности</a>
+      <span>Санкт-Петербург</span>
+    </div>
+  </footer>
+</body>
+</html>
