@@ -2,7 +2,7 @@ import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {JSDOM} from 'jsdom';
 
 function useDom(text: string) {
-  const dom = new JSDOM(`<main><div data-message-author-role="assistant"><div class="markdown"><p>${text}</p></div></div></main>`, {url: 'https://chatgpt.com/'});
+  const dom = new JSDOM(`<main><article data-testid="conversation-turn-1"><div data-message-author-role="assistant"><div class="markdown"><p>${text}</p></div></div></article></main>`, {url: 'https://chatgpt.com/'});
   Object.assign(globalThis, {
     document: dom.window.document,
     window: dom.window,
@@ -87,13 +87,13 @@ describe('assistant message controls', () => {
     expect(insert).toHaveBeenCalledWith(expect.stringContaining('без текста и надписей'), true);
 
     const observer = new ChatGPTAdapter().observe(decorate);
-    document.querySelector('main')!.insertAdjacentHTML('beforeend', '<article data-testid="conversation-turn-2"><div data-message-author-role="assistant"><div class="markdown"></div></div><div data-testid="image-generation"></div></article>');
+    document.querySelector('main')!.insertAdjacentHTML('beforeend', '<article data-testid="conversation-turn-2"><div data-testid="image-generation"></div></article>');
     await new Promise(resolve => setTimeout(resolve, 250));
     expect([...document.querySelectorAll<HTMLButtonElement>('button')].map(button => button.textContent)).not.toContain('Использовать');
     document.querySelector('[data-testid="image-generation"]')!.insertAdjacentHTML('beforeend', '<img src="https://files.oaiusercontent.com/a.png" width="1024" height="1024">');
     await new Promise(resolve => setTimeout(resolve, 250));
     decorate();
-    expect([...document.querySelectorAll<HTMLButtonElement>('button')].map(button => button.textContent)).toContain('Использовать');
+    expect([...document.querySelectorAll<HTMLButtonElement>('[data-social-publisher="image-candidate"] button')].map(button => button.textContent)).toEqual(['Использовать', 'Другое']);
     expect(document.querySelectorAll('[data-social-publisher="image-candidate"]')).toHaveLength(1);
     [...document.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === 'Использовать')!.click();
     observer.disconnect();
@@ -118,12 +118,12 @@ describe('assistant message controls', () => {
     expect(insert).toHaveBeenCalledWith(expect.stringContaining('хорошо читаемой инфографики'), true);
     decorate();
     expect([...document.querySelectorAll<HTMLButtonElement>('button')].map(button => button.textContent)).not.toContain('Использовать');
-    document.querySelector('main')!.insertAdjacentHTML('beforeend', '<div data-message-author-role="assistant"><div class="markdown"><img src="https://files.oaiusercontent.com/a.png" width="1024" height="1024"></div></div>');
+    document.querySelector('main')!.insertAdjacentHTML('beforeend', '<article data-testid="conversation-turn-2"><div data-testid="image-generation"><img alt="Сформированное изображение" src="https://chatgpt.com/backend-api/estuary/content?id=a" width="1254" height="1254"></div></article>');
     decorate();
     [...document.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === 'Другое')!.click();
     expect(insert).toHaveBeenLastCalledWith(expect.stringContaining('другую композицию'), true);
 
-    document.querySelector('main')!.insertAdjacentHTML('beforeend', '<div data-message-author-role="assistant"><div class="markdown"><img src="https://files.oaiusercontent.com/b.png" width="1024" height="1024"></div></div>');
+    document.querySelector('main')!.insertAdjacentHTML('beforeend', '<article data-testid="conversation-turn-3"><div data-testid="image-generation"><img alt="Сформированное изображение" src="https://chatgpt.com/backend-api/estuary/content?id=b" width="1254" height="1254"></div></article>');
     decorate();
     [...document.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === 'Использовать')!.click();
     const draft = sendMessage.mock.calls.at(-1)?.[0].draft;
@@ -131,7 +131,7 @@ describe('assistant message controls', () => {
       originalText: '## Заголовок поста\n\nПолный длинный текст',
       publicationText: 'Заголовок поста',
       imageMode: 'infographic',
-      image: {url: 'https://files.oaiusercontent.com/b.png'}
+      image: {url: 'https://chatgpt.com/backend-api/estuary/content?id=b'}
     });
   });
 

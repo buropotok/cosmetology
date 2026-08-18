@@ -20,8 +20,9 @@ export interface ChatGPTImage {
 }
 
 export interface ImageInspection {
-  messageId: string;
+  turnTestId: string;
   imageElements: number;
+  generatedAltImages: number;
   validImages: number;
   elements: Array<{
     tag: string;
@@ -65,6 +66,10 @@ function assistantTurnRoot(message: HTMLElement) {
   // Current ChatGPT turns can render generated-media blocks as siblings of the
   // .markdown node (and sometimes of the author-role node) inside the turn.
   return message.closest<HTMLElement>('[data-testid^="conversation-turn-"], article') ?? message;
+}
+
+function isGeneratedAlt(alt: string) {
+  return /(?:сформированное|созданное|generated)\s+(?:изображение|image)/i.test(alt.trim());
 }
 
 function isUsableComposer(element: HTMLElement) {
@@ -124,6 +129,20 @@ function replaceContentEditable(editor: HTMLElement, text: string) {
 export class ChatGPTAdapter {
   private pendingImageLoads = new WeakSet<HTMLImageElement>();
   findMessages() { return [...document.querySelectorAll<HTMLElement>(S.messages)]; }
+  findConversationTurns() {
+    const turns = [...document.querySelectorAll<HTMLElement>('[data-testid^="conversation-turn-"]')];
+    if (turns.length) return turns;
+    return [...document.querySelectorAll<HTMLElement>('main article')].filter(turn => turn.matches('article') && (turn.querySelector(S.messages) || turn.querySelector('img')));
+  }
+  findConversationTurnsAfter(boundaryTurn: HTMLElement | null) {
+    const turns = this.findConversationTurns();
+    if (!boundaryTurn) return turns;
+    let boundaryIndex = turns.indexOf(boundaryTurn);
+    if (boundaryIndex < 0 && boundaryTurn.dataset.testid) boundaryIndex = turns.findIndex(turn => turn.dataset.testid === boundaryTurn.dataset.testid);
+    // If ChatGPT removed the boundary and its stable id cannot be recovered,
+    // fail closed rather than attaching an older image to the active draft.
+    return boundaryIndex < 0 ? [] : turns.slice(boundaryIndex + 1);
+  }
   contentRoot(message: HTMLElement) { return message.querySelector<HTMLElement>('.markdown') ?? message; }
 
   private findComposer() {
@@ -151,9 +170,8 @@ export class ChatGPTAdapter {
     }
   }
 
-  inspectAssistantMessageImages(message: HTMLElement, onImageLoad?: () => void): ImageInspection {
-    const root = assistantTurnRoot(message);
-    const elements = [...root.querySelectorAll<HTMLImageElement>('img')].filter(image => !image.closest('[data-social-publisher], [aria-hidden="true"]'));
+  inspectTurnImages(turn: HTMLElement, onImageLoad?: () => void): ImageInspection {
+    const elements = [...turn.querySelectorAll<HTMLImageElement>('img')].filter(image => !image.closest('[data-social-publisher], [aria-hidden="true"]'));
     const details = elements.map(image => {
       const url = bestSource(image);
       const rect = image.getBoundingClientRect();
@@ -191,8 +209,9 @@ export class ChatGPTAdapter {
       return width >= 200 && height >= 200;
     });
     return {
-      messageId: message.dataset.messageId || assistantTurnRoot(message).dataset.testid || message.id || 'unknown',
+      turnTestId: turn.dataset.testid || turn.id || 'unknown',
       imageElements: elements.length,
+      generatedAltImages: elements.filter(image => isGeneratedAlt(image.alt)).length,
       validImages: valid.length,
       elements: details.map(({element: _element, url: _url, ...detail}) => detail),
       images: valid.map(item => ({
@@ -202,6 +221,10 @@ export class ChatGPTAdapter {
         height: Math.max(item.naturalHeight, item.renderedHeight, item.element.height) || undefined
       }))
     };
+  }
+
+  inspectAssistantMessageImages(message: HTMLElement, onImageLoad?: () => void) {
+    return this.inspectTurnImages(assistantTurnRoot(message), onImageLoad);
   }
 
   getAssistantMessageImages(message: HTMLElement, onImageLoad?: () => void) {

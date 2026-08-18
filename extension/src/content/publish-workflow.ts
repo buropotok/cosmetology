@@ -5,8 +5,8 @@ type GeneratingMode = Extract<ImageMode, 'illustration' | 'infographic'>;
 export type WorkflowState =
   | {kind: 'idle'}
   | {kind: 'photo_choice'; source: HTMLElement; originalText: string}
-  | {kind: 'waiting_for_image'; source: HTMLElement; originalText: string; mode: GeneratingMode; messageBoundary: number}
-  | {kind: 'image_candidate'; source: HTMLElement; originalText: string; mode: GeneratingMode; messageBoundary: number; message: HTMLElement; image: PublisherImage}
+  | {kind: 'waiting_for_image'; source: HTMLElement; originalText: string; mode: GeneratingMode; boundaryTurn: HTMLElement | null}
+  | {kind: 'image_candidate'; source: HTMLElement; originalText: string; mode: GeneratingMode; boundaryTurn: HTMLElement | null; turn: HTMLElement; image: PublisherImage}
   | {kind: 'preparing_publisher'; draft: PublisherDraft}
   | {kind: 'publisher_open'; draft: PublisherDraft};
 
@@ -18,22 +18,22 @@ export class PublishWorkflow {
     this.state = {kind: 'photo_choice', source, originalText};
   }
 
-  waitForImage(mode: GeneratingMode, messageBoundary: number) {
+  waitForImage(mode: GeneratingMode, boundaryTurn: HTMLElement | null) {
     if (this.state.kind !== 'photo_choice' && this.state.kind !== 'image_candidate') return false;
     const {source, originalText} = this.state;
     this.clearCandidateUI();
-    this.state = {kind: 'waiting_for_image', source, originalText, mode, messageBoundary};
+    this.state = {kind: 'waiting_for_image', source, originalText, mode, boundaryTurn};
     return true;
   }
 
-  setCandidate(message: HTMLElement, image: PublisherImage) {
+  setCandidate(turn: HTMLElement, image: PublisherImage) {
     if (this.state.kind !== 'waiting_for_image') return false;
-    this.state = {...this.state, kind: 'image_candidate', message, image};
+    this.state = {...this.state, kind: 'image_candidate', turn, image};
     return true;
   }
 
-  updateCandidate(message: HTMLElement, image: PublisherImage) {
-    if (this.state.kind !== 'image_candidate' || this.state.message !== message) return false;
+  updateCandidate(turn: HTMLElement, image: PublisherImage) {
+    if (this.state.kind !== 'image_candidate' || this.state.turn !== turn) return false;
     this.state = {...this.state, image};
     return true;
   }

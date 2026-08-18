@@ -14,7 +14,7 @@ describe('publish workflow state', () => {
     const first = document.querySelector<HTMLElement>('#a')!;
     const second = document.querySelector<HTMLElement>('#b')!;
     workflow.start(first, 'First post');
-    workflow.waitForImage('illustration', 1);
+    workflow.waitForImage('illustration', first);
     workflow.setCandidate(first, {url: 'old-image', filename: 'old.png'});
 
     workflow.start(second, 'Second post');

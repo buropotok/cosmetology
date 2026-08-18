@@ -14,6 +14,7 @@ import {PublishWorkflow} from './publish-workflow';
 const adapter = new ChatGPTAdapter();
 const workflow = new PublishWorkflow();
 const imageInspectionSignatures = new WeakMap<HTMLElement, string>();
+let turnScanSignature = '';
 
 function button(label: string, fn: () => void) {
   const element = document.createElement('button');
@@ -58,13 +59,19 @@ function showPhotoChoice(message: HTMLElement, text: string) {
   question.textContent = 'Для этого поста нужно фото?';
   choice.append(question);
   choice.append(button('Фото без текста', () => {
-    if (!workflow.waitForImage('illustration', adapter.findMessages().length)) return;
+    const turns = adapter.findConversationTurns();
+    const boundaryTurn = turns.at(-1) ?? null;
+    if (!workflow.waitForImage('illustration', boundaryTurn)) return;
+    console.debug('[Cosmetology][ImageFlow] generation boundary set', {turnCount: turns.length, lastTurnTestId: boundaryTurn?.dataset.testid ?? null});
     console.debug('[Cosmetology][ImageFlow] waiting for generated image');
     choice.remove();
     void adapter.insert(buildIllustrationPrompt(), true);
   }));
   choice.append(button('Фото с инфографикой и текстом', () => {
-    if (!workflow.waitForImage('infographic', adapter.findMessages().length)) return;
+    const turns = adapter.findConversationTurns();
+    const boundaryTurn = turns.at(-1) ?? null;
+    if (!workflow.waitForImage('infographic', boundaryTurn)) return;
+    console.debug('[Cosmetology][ImageFlow] generation boundary set', {turnCount: turns.length, lastTurnTestId: boundaryTurn?.dataset.testid ?? null});
     console.debug('[Cosmetology][ImageFlow] waiting for generated image');
     choice.remove();
     void adapter.insert(buildInfographicPrompt(), true);
@@ -76,9 +83,9 @@ function showPhotoChoice(message: HTMLElement, text: string) {
   message.append(choice);
 }
 
-function renderImageCandidate(message: HTMLElement, image: PublisherImage, ready = true) {
+function renderImageCandidate(turn: HTMLElement, image: PublisherImage, ready = true) {
   document.querySelectorAll('[data-social-publisher="image-candidate"]').forEach(element => element.remove());
-  message.querySelector('[data-social-publisher="controls"]')?.remove();
+  turn.querySelector('[data-social-publisher="controls"]')?.remove();
   const controls = document.createElement('div');
   controls.dataset.socialPublisher = 'image-candidate';
   controls.className = 'sp-controls sp-workflow';
@@ -90,25 +97,36 @@ function renderImageCandidate(message: HTMLElement, image: PublisherImage, ready
   controls.append(use);
   controls.append(button('Другое', () => {
     if (workflow.state.kind !== 'image_candidate') return;
-    const prompt = workflow.state.mode === 'illustration' ? buildAlternativeIllustrationPrompt() : buildAlternativeInfographicPrompt();
-    if (!workflow.waitForImage(workflow.state.mode, adapter.findMessages().length)) return;
+    const mode = workflow.state.mode;
+    const prompt = mode === 'illustration' ? buildAlternativeIllustrationPrompt() : buildAlternativeInfographicPrompt();
+    const turns = adapter.findConversationTurns();
+    const boundaryTurn = turns.at(-1) ?? null;
+    if (!workflow.waitForImage(mode, boundaryTurn)) return;
+    console.debug('[Cosmetology][ImageFlow] generation boundary set', {turnCount: turns.length, lastTurnTestId: boundaryTurn?.dataset.testid ?? null});
     void adapter.insert(prompt, true);
   }));
-  message.append(controls);
+  turn.append(controls);
   console.debug('[Cosmetology][ImageFlow] candidate controls rendered');
 }
 
-function detectImageCandidate(messages: HTMLElement[]) {
+function detectImageCandidate() {
   if (workflow.state.kind !== 'waiting_for_image') return;
-  for (let index = workflow.state.messageBoundary; index < messages.length; index++) {
-    const message = messages[index];
-    const inspection = adapter.inspectAssistantMessageImages(message, decorate);
+  const turns = adapter.findConversationTurns();
+  const newTurns = adapter.findConversationTurnsAfter(workflow.state.boundaryTurn);
+  const scanSignature = `${turns.length}:${newTurns.length}:${newTurns.map(turn => turn.dataset.testid ?? '').join('|')}`;
+  if (turnScanSignature !== scanSignature) {
+    turnScanSignature = scanSignature;
+    console.debug('[Cosmetology][ImageFlow] scanning new turns', {totalTurns: turns.length, newTurns: newTurns.length});
+  }
+  for (const turn of newTurns) {
+    const inspection = adapter.inspectTurnImages(turn, decorate);
     const signature = JSON.stringify({imageElements: inspection.imageElements, validImages: inspection.validImages, elements: inspection.elements});
-    if (imageInspectionSignatures.get(message) !== signature) {
-      imageInspectionSignatures.set(message, signature);
-      console.debug('[Cosmetology][ImageFlow] message candidate:', {
-        messageId: inspection.messageId,
-        imageElements: inspection.imageElements,
+    if (imageInspectionSignatures.get(turn) !== signature) {
+      imageInspectionSignatures.set(turn, signature);
+      console.debug('[Cosmetology][ImageFlow] turn inspection', {
+        testId: inspection.turnTestId,
+        images: inspection.imageElements,
+        generatedAltImages: inspection.generatedAltImages,
         validImages: inspection.validImages
       });
       inspection.elements.forEach(element => console.debug('[Cosmetology][ImageFlow] image element:', element));
@@ -116,15 +134,15 @@ function detectImageCandidate(messages: HTMLElement[]) {
     const found = inspection.images.sort((a, b) => (b.width ?? 0) * (b.height ?? 0) - (a.width ?? 0) * (a.height ?? 0))[0];
     if (!found) continue;
     const image: PublisherImage = {...found, filename: imageFilename(workflow.state.originalText, found.url)};
-    if (workflow.setCandidate(message, image)) {
+    if (workflow.setCandidate(turn, image)) {
       console.debug('[Cosmetology][ImageFlow] generated image detected');
       console.debug('[Cosmetology][ImageFlow] state: waiting_for_image -> image_candidate');
       const needsResolution = image.url.startsWith('blob:');
-      renderImageCandidate(message, image, !needsResolution);
+      renderImageCandidate(turn, image, !needsResolution);
       if (needsResolution) {
         void adapter.resolveImageForDownload(found).then(resolved => {
           const resolvedImage = {...image, url: resolved.url};
-          if (workflow.updateCandidate(message, resolvedImage)) renderImageCandidate(message, resolvedImage);
+          if (workflow.updateCandidate(turn, resolvedImage)) renderImageCandidate(turn, resolvedImage);
         }).catch(error => console.warn('[Cosmetology] Failed to prepare selected image', error));
       }
     }
@@ -180,11 +198,11 @@ export async function installToolbar() {
 
 export function decorate() {
   const messages = adapter.findMessages();
-  detectImageCandidate(messages);
+  detectImageCandidate();
   for (const message of messages) {
     try {
-      if (workflow.state.kind === 'image_candidate' && workflow.state.message === message) {
-        if (!message.querySelector('[data-social-publisher="image-candidate"]')) renderImageCandidate(message, workflow.state.image);
+      if (workflow.state.kind === 'image_candidate' && workflow.state.turn.contains(message)) {
+        if (!workflow.state.turn.querySelector('[data-social-publisher="image-candidate"]')) renderImageCandidate(workflow.state.turn, workflow.state.image);
         continue;
       }
       const text = parseResponse(adapter.contentRoot(message));
