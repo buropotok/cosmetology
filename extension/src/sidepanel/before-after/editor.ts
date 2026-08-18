@@ -1,7 +1,7 @@
 import {canvasToPng, renderBeforeAfter} from './compositor';
 import {panTransform} from './geometry';
 import {buildBeforeAfterFilename} from './export';
-import {isAcceptedImage, swapPhotos, type BeforeAfterState, type PhotoSlot} from './types';
+import {isAcceptedImage, swapPhotos, type BeforeAfterLayout, type BeforeAfterState, type PhotoSlot} from './types';
 
 interface EditorOptions {
   onCancel: () => void;
@@ -24,6 +24,7 @@ export class BeforeAfterEditor {
     this.bindSlot('after');
     this.bindZoom('before');
     this.bindZoom('after');
+    document.querySelectorAll<HTMLButtonElement>('[data-ba-layout]').forEach(button => button.addEventListener('click', () => this.setLayout(button.dataset.baLayout as BeforeAfterLayout)));
     document.getElementById('beforeAfterSwap')!.addEventListener('click', () => this.swap());
     document.getElementById('beforeAfterCancel')!.addEventListener('click', () => this.cancel());
     this.saveButton.addEventListener('click', () => void this.save());
@@ -32,6 +33,7 @@ export class BeforeAfterEditor {
 
   open() {
     this.cleanup();
+    this.setLayout('horizontal');
     this.section.hidden = false;
     this.error.textContent = '';
     this.render();
@@ -47,6 +49,12 @@ export class BeforeAfterEditor {
   }
 
   private photo(slot: PhotoSlot) { return this.state[slot]; }
+
+  setLayout(layout: BeforeAfterLayout) {
+    this.state.layout = layout;
+    document.querySelectorAll<HTMLButtonElement>('[data-ba-layout]').forEach(button => button.classList.toggle('selected', button.dataset.baLayout === layout));
+    this.render();
+  }
 
   private bindSlot(slot: PhotoSlot) {
     const viewport = document.querySelector<HTMLElement>(`[data-ba-slot="${slot}"]`)!;
@@ -138,6 +146,7 @@ export class BeforeAfterEditor {
     const ctx = this.canvas.getContext('2d');
     if (!ctx) return;
     renderBeforeAfter(ctx, this.state);
+    document.querySelector<HTMLElement>('.ba-preview')!.dataset.layout = this.state.layout;
     for (const slot of ['before', 'after'] as const) {
       const viewport = document.querySelector<HTMLElement>(`[data-ba-slot="${slot}"]`)!;
       viewport.classList.toggle('has-photo', Boolean(this.photo(slot)));

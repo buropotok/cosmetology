@@ -1,4 +1,4 @@
-export type BeforeAfterLayout = 'horizontal';
+export type BeforeAfterLayout = 'horizontal' | 'vertical';
 export type PhotoSlot = 'before' | 'after';
 
 export interface CropTransform {

@@ -4,6 +4,7 @@ import {drawWatermark} from './watermark';
 
 export const OUTPUT_SIZE = 1080;
 export const HALF_WIDTH = OUTPUT_SIZE / 2;
+export const HALF_HEIGHT = OUTPUT_SIZE / 2;
 
 function drawPhoto(ctx: CanvasRenderingContext2D, photo: EditablePhoto | null, viewport: DrawRect) {
   ctx.save();
@@ -21,29 +22,32 @@ function drawPhoto(ctx: CanvasRenderingContext2D, photo: EditablePhoto | null, v
   ctx.restore();
 }
 
-function drawLabel(ctx: CanvasRenderingContext2D, text: string, x: number) {
+function drawLabel(ctx: CanvasRenderingContext2D, text: string, x: number, y: number) {
   ctx.save();
   ctx.fillStyle = 'rgba(0,0,0,.55)';
-  ctx.fillRect(x + 22, 22, 116, 58);
+  ctx.fillRect(x + 22, y + 22, 116, 58);
   ctx.fillStyle = '#fff';
   ctx.font = '600 32px system-ui, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(text, x + 80, 51);
+  ctx.fillText(text, x + 80, y + 51);
   ctx.restore();
 }
 
 export function renderBeforeAfter(ctx: CanvasRenderingContext2D, state: BeforeAfterState) {
-  if (state.layout !== 'horizontal') throw new Error('Unsupported Before/After layout');
   ctx.clearRect(0, 0, OUTPUT_SIZE, OUTPUT_SIZE);
-  drawPhoto(ctx, state.before, {x: 0, y: 0, width: HALF_WIDTH, height: OUTPUT_SIZE});
-  drawPhoto(ctx, state.after, {x: HALF_WIDTH, y: 0, width: HALF_WIDTH, height: OUTPUT_SIZE});
+  const vertical = state.layout === 'vertical';
+  const beforeViewport = vertical ? {x: 0, y: 0, width: OUTPUT_SIZE, height: HALF_HEIGHT} : {x: 0, y: 0, width: HALF_WIDTH, height: OUTPUT_SIZE};
+  const afterViewport = vertical ? {x: 0, y: HALF_HEIGHT, width: OUTPUT_SIZE, height: HALF_HEIGHT} : {x: HALF_WIDTH, y: 0, width: HALF_WIDTH, height: OUTPUT_SIZE};
+  drawPhoto(ctx, state.before, beforeViewport);
+  drawPhoto(ctx, state.after, afterViewport);
   ctx.save();
   ctx.fillStyle = 'rgba(255,255,255,.8)';
-  ctx.fillRect(HALF_WIDTH - 2, 0, 4, OUTPUT_SIZE);
+  if (vertical) ctx.fillRect(0, HALF_HEIGHT - 2, OUTPUT_SIZE, 4);
+  else ctx.fillRect(HALF_WIDTH - 2, 0, 4, OUTPUT_SIZE);
   ctx.restore();
-  drawLabel(ctx, 'ДО', 0);
-  drawLabel(ctx, 'ПОСЛЕ', HALF_WIDTH);
+  drawLabel(ctx, 'ДО', beforeViewport.x, beforeViewport.y);
+  drawLabel(ctx, 'ПОСЛЕ', afterViewport.x, afterViewport.y);
   drawWatermark(ctx, OUTPUT_SIZE, OUTPUT_SIZE);
 }
 

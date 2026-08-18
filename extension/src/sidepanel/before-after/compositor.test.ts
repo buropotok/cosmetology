@@ -1,5 +1,5 @@
 import {describe, expect, it, vi} from 'vitest';
-import {canvasToPng, HALF_WIDTH, OUTPUT_SIZE, renderBeforeAfter} from './compositor';
+import {canvasToPng, HALF_HEIGHT, HALF_WIDTH, OUTPUT_SIZE, renderBeforeAfter} from './compositor';
 import {WATERMARK_TEXT} from './watermark';
 import type {BeforeAfterState, EditablePhoto} from './types';
 
@@ -40,5 +40,16 @@ describe('Before/After compositor', () => {
     const blob = new Blob(['png'], {type: 'image/png'});
     const canvas = {toBlob: (callback: BlobCallback, type?: string) => { expect(type).toBe('image/png'); callback(blob); }} as HTMLCanvasElement;
     await expect(canvasToPng(canvas)).resolves.toBe(blob);
+  });
+
+  it('renders BEFORE above AFTER in the vertical layout', () => {
+    const ctx = context();
+    renderBeforeAfter(ctx, {layout: 'vertical', before: photo(1200, 800), after: photo(800, 1200)});
+
+    expect(HALF_HEIGHT).toBe(540);
+    expect(ctx.rect).toHaveBeenNthCalledWith(1, 0, 0, 1080, 540);
+    expect(ctx.rect).toHaveBeenNthCalledWith(2, 0, 540, 1080, 540);
+    expect(ctx.fillRect).toHaveBeenCalledWith(0, 538, 1080, 4);
+    expect(vi.mocked(ctx.fillText).mock.calls.map(call => call[0])).toEqual(['ДО', 'ПОСЛЕ', WATERMARK_TEXT]);
   });
 });
