@@ -15,3 +15,8 @@ declare module 'jsdom' {
     window: DOMWindow;
   }
 }
+
+declare module '*.html?raw' {
+  const html: string;
+  export default html;
+}

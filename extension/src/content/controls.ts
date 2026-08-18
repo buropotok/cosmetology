@@ -149,6 +149,7 @@ export async function installToolbar() {
   bar.className = 'sp-toolbar';
   const {workerBaseUrl = '', toolbarPosition} = await chrome.storage.local.get(['workerBaseUrl', 'toolbarPosition']);
   presets.forEach(preset => bar.append(button(`${preset.icon} ${preset.title}`, () => adapter.insert(renderPreset(preset, workerBaseUrl)))));
+  bar.append(button('↔ До / После', () => chrome.runtime.sendMessage({type: 'OPEN_BEFORE_AFTER'})));
   const handle = document.createElement('span');
   handle.className = 'sp-drag-handle';
   handle.textContent = '⋮⋮';

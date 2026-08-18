@@ -137,9 +137,10 @@ describe('assistant message controls', () => {
 
   it('restores a draggable preset toolbar position', async () => {
     const document = useDom('Ответ');
+    const sendMessage = vi.fn();
     vi.stubGlobal('chrome', {
       storage: {local: {get: vi.fn(async () => ({workerBaseUrl: '', toolbarPosition: {x: 120, y: 80}})), set: vi.fn()}},
-      runtime: {sendMessage: vi.fn()}
+      runtime: {sendMessage}
     });
     const {ChatGPTAdapter} = await import('./chatgpt-adapter');
     const insert = vi.spyOn(ChatGPTAdapter.prototype, 'insert').mockResolvedValue();
@@ -153,5 +154,9 @@ describe('assistant message controls', () => {
     expect(toolbar.style.top).toBe('80px');
     [...toolbar.querySelectorAll('button')].find(button => button.textContent?.includes('Новости'))!.click();
     expect(insert).toHaveBeenCalledWith(expect.stringContaining('актуальные новости'));
+    insert.mockClear();
+    [...toolbar.querySelectorAll('button')].find(button => button.textContent?.includes('До / После'))!.click();
+    expect(sendMessage).toHaveBeenCalledWith({type: 'OPEN_BEFORE_AFTER'});
+    expect(insert).not.toHaveBeenCalled();
   });
 });

@@ -35,5 +35,15 @@ describe('publisher background message', () => {
 
     expect(sendMessage).toHaveBeenCalledWith({type: 'DRAFT_UPDATED', draft: {originalText: 'Почему SPF нужен зимой', publicationText: 'Почему SPF нужен зимой', imageMode: 'illustration', image: {url: 'https://image.test/a.png', filename: 'Почему-SPF-зимой.png'}}});
     expect(calls).toEqual(['panel', 'storage', 'draft']);
+
+    calls.length = 0;
+    open.mockClear();
+    set.mockClear();
+    sendMessage.mockClear();
+    listener({type: 'OPEN_BEFORE_AFTER'}, {tab: {windowId: 77} as chrome.tabs.Tab});
+    expect(open).toHaveBeenCalledWith({windowId: 77});
+    expect(set).toHaveBeenCalledWith({sidePanelMode: 'before_after'});
+    expect(calls[0]).toBe('panel');
+    await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledWith({type: 'OPEN_BEFORE_AFTER_EDITOR'}));
   });
 });
