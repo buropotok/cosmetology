@@ -111,8 +111,7 @@
         if ('VKIDSDK' in window) {
           const VKID = window.VKIDSDK;
           const TEST_VK_GROUP_ID = '240907364';
-          const VK_API_VERSION = '5.199';
-          const VK_API_ENDPOINT = 'https://api.vk.com/method/photos.getWallUploadServer';
+          const VK_AUTH_TEST_ENDPOINT = 'https://cosmetology-social-publisher.buropotok.workers.dev/api/debug/vk-auth-test';
           let currentAccessToken = null;
           let apiCheckStarted = false;
 
@@ -197,22 +196,20 @@
 
             const button = document.getElementById('check-wall-upload');
             button.disabled = true;
-            button.textContent = 'Проверка photos.getWallUploadServer...';
-            showApiResult('', 'Проверка photos.getWallUploadServer...', {
+            button.textContent = 'Проверяем через Cloudflare Worker...';
+            showApiResult('', 'Проверяем через Cloudflare Worker...', {
               request_started: true
             });
 
             let httpStatus;
             try {
-              const body = new URLSearchParams({
-                group_id: TEST_VK_GROUP_ID,
-                access_token: currentAccessToken,
-                v: VK_API_VERSION
-              });
-              const response = await fetch(VK_API_ENDPOINT, {
+              const response = await fetch(VK_AUTH_TEST_ENDPOINT, {
                 method: 'POST',
-                headers: {'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'},
-                body
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                  access_token: currentAccessToken,
+                  group_id: Number(TEST_VK_GROUP_ID)
+                })
               });
               httpStatus = response.status;
 
@@ -220,40 +217,44 @@
               try {
                 payload = await response.json();
               } catch (error) {
-                throw new Error(`VK API вернул ответ, который не удалось разобрать как JSON (${redactText(error && error.message)})`);
+                throw new Error(`Worker вернул ответ, который не удалось разобрать как JSON (${redactText(error && error.message)})`);
               }
 
-              if (payload && payload.error) {
+              if (payload && payload.vk_error) {
                 const apiError = {
-                  error_code: payload.error.error_code ?? null,
-                  error_msg: redactText(payload.error.error_msg || 'Unknown VK API error')
+                  error_code: payload.vk_error.error_code ?? null,
+                  error_msg: redactText(payload.vk_error.error_msg || 'Unknown VK API error')
                 };
-                showApiResult('error', '✕ photos.getWallUploadServer отклонён', apiError);
+                showApiResult('error', '✕ VK API отклонил запрос', apiError);
                 console.error('VK API photos.getWallUploadServer rejected:', apiError);
                 return;
               }
 
-              if (response.ok && payload && payload.response) {
+              if (response.ok && payload && payload.ok === true && payload.result) {
                 const safeResponse = {
-                  upload_url_present: typeof payload.response.upload_url === 'string' && payload.response.upload_url.length > 0,
-                  album_id: payload.response.album_id ?? null,
-                  user_id: payload.response.user_id ?? null
+                  upload_url_present: payload.result.upload_url_present === true,
+                  album_id: payload.result.album_id ?? null,
+                  user_id: payload.result.user_id ?? null
                 };
                 showApiResult('success', '✓ photos.getWallUploadServer успешно', safeResponse);
                 console.info('VK API photos.getWallUploadServer result:', safeResponse);
                 return;
               }
 
-              throw new Error('VK API вернул ответ без response или error');
+              const workerMessage = payload && payload.transport_error && payload.transport_error.message
+                ? payload.transport_error.message
+                : payload && payload.error && payload.error.message
+                  ? payload.error.message
+                  : 'Worker вернул неожиданный ответ';
+              throw new Error(redactText(workerMessage));
             } catch (error) {
               const networkError = {
                 type: error && error.name ? error.name : typeof error,
-                message: redactText(error && error.message ? error.message : error),
                 http_status: httpStatus ?? null,
-                possible_cause: 'Возможна browser/CORS или сетевая блокировка запроса.'
+                message: redactText(error && error.message ? error.message : error)
               };
-              showApiResult('error', 'Браузерный запрос к VK API не выполнен', networkError);
-              console.error('VK API browser/network request failed:', networkError);
+              showApiResult('error', '✕ Не удалось выполнить server-to-server проверку', networkError);
+              console.error('VK API Worker diagnostic request failed:', networkError);
             } finally {
               button.textContent = 'Проверить photos.getWallUploadServer';
             }
