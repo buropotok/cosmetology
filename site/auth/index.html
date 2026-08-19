@@ -64,6 +64,26 @@
     .status.success { background: #e4f5e9; color: #176b35; }
     .status.error { background: #fde8e7; color: #a12420; }
 
+    button {
+      width: 100%;
+      margin-top: 18px;
+      padding: 13px 18px;
+      border: 0;
+      border-radius: 12px;
+      background: #2787f5;
+      color: #fff;
+      font: inherit;
+      font-weight: 650;
+      cursor: pointer;
+    }
+
+    button:hover { background: #1576dc; }
+    button:disabled { cursor: not-allowed; opacity: .65; }
+
+    .api-result[hidden] { display: none; }
+    .api-result { margin-top: 20px; }
+    .api-result h3 { margin: 0 0 12px; font-size: 16px; }
+
     pre {
       max-height: 360px;
       margin: 0;
@@ -90,6 +110,11 @@
       <script nonce="csp_nonce" type="text/javascript">
         if ('VKIDSDK' in window) {
           const VKID = window.VKIDSDK;
+          const TEST_VK_GROUP_ID = '240907364';
+          const VK_API_VERSION = '5.199';
+          const VK_API_ENDPOINT = 'https://api.vk.com/method/photos.getWallUploadServer';
+          let currentAccessToken = null;
+          let apiCheckStarted = false;
 
           VKID.Config.init({
             app: 54726533,
@@ -121,7 +146,7 @@
               return `[скрыто; тип: ${Array.isArray(value) ? 'array' : typeof value}]`;
             }
             if (value instanceof Error) {
-              return { name: value.name, message: value.message };
+              return { name: value.name, message: redactText(value.message) };
             }
             if (Array.isArray(value)) {
               return value.map(function (item) { return describeValue(item, ''); });
@@ -131,6 +156,9 @@
                 result[childKey] = describeValue(value[childKey], childKey);
                 return result;
               }, {});
+            }
+            if (typeof value === 'string' && /message|description/i.test(key || '')) {
+              return redactText(value);
             }
             return value;
           }
@@ -143,10 +171,104 @@
             output.textContent = JSON.stringify(value, null, 2);
           }
 
+          function redactText(value) {
+            let safe = String(value || '');
+            if (currentAccessToken) {
+              safe = safe.split(currentAccessToken).join('[скрыто]');
+            }
+            return safe
+              .replace(/([?&]access_token=)[^&\s]+/gi, '$1[скрыто]')
+              .replace(/(authorization\s*[:=]\s*)([^,;\s]+)/gi, '$1[скрыто]');
+          }
+
+          function showApiResult(state, title, value) {
+            const container = document.getElementById('api-result');
+            const status = document.getElementById('api-status');
+            const output = document.getElementById('api-output');
+            container.hidden = false;
+            status.className = `status ${state}`;
+            status.textContent = title;
+            output.textContent = JSON.stringify(value, null, 2);
+          }
+
+          async function checkWallUploadServer() {
+            if (apiCheckStarted || !currentAccessToken) return;
+            apiCheckStarted = true;
+
+            const button = document.getElementById('check-wall-upload');
+            button.disabled = true;
+            button.textContent = 'Проверка photos.getWallUploadServer...';
+            showApiResult('', 'Проверка photos.getWallUploadServer...', {
+              request_started: true
+            });
+
+            let httpStatus;
+            try {
+              const body = new URLSearchParams({
+                group_id: TEST_VK_GROUP_ID,
+                access_token: currentAccessToken,
+                v: VK_API_VERSION
+              });
+              const response = await fetch(VK_API_ENDPOINT, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'},
+                body
+              });
+              httpStatus = response.status;
+
+              let payload;
+              try {
+                payload = await response.json();
+              } catch (error) {
+                throw new Error(`VK API вернул ответ, который не удалось разобрать как JSON (${redactText(error && error.message)})`);
+              }
+
+              if (payload && payload.error) {
+                const apiError = {
+                  error_code: payload.error.error_code ?? null,
+                  error_msg: redactText(payload.error.error_msg || 'Unknown VK API error')
+                };
+                showApiResult('error', '✕ photos.getWallUploadServer отклонён', apiError);
+                console.error('VK API photos.getWallUploadServer rejected:', apiError);
+                return;
+              }
+
+              if (response.ok && payload && payload.response) {
+                const safeResponse = {
+                  upload_url_present: typeof payload.response.upload_url === 'string' && payload.response.upload_url.length > 0,
+                  album_id: payload.response.album_id ?? null,
+                  user_id: payload.response.user_id ?? null
+                };
+                showApiResult('success', '✓ photos.getWallUploadServer успешно', safeResponse);
+                console.info('VK API photos.getWallUploadServer result:', safeResponse);
+                return;
+              }
+
+              throw new Error('VK API вернул ответ без response или error');
+            } catch (error) {
+              const networkError = {
+                type: error && error.name ? error.name : typeof error,
+                message: redactText(error && error.message ? error.message : error),
+                http_status: httpStatus ?? null,
+                possible_cause: 'Возможна browser/CORS или сетевая блокировка запроса.'
+              };
+              showApiResult('error', 'Браузерный запрос к VK API не выполнен', networkError);
+              console.error('VK API browser/network request failed:', networkError);
+            } finally {
+              button.textContent = 'Проверить photos.getWallUploadServer';
+            }
+          }
+
           function vkidOnSuccess(data) {
             const safeResult = describeValue(data, '');
             showResult('success', 'Авторизация выполнена', safeResult);
             console.info('VK ID authorization result structure:', safeResult);
+            if (data && typeof data.access_token === 'string' && data.access_token) {
+              currentAccessToken = data.access_token;
+              const button = document.getElementById('check-wall-upload');
+              button.hidden = false;
+              button.addEventListener('click', checkWallUploadServer, {once: true});
+            }
           }
 
           function vkidOnError(error) {
@@ -171,6 +293,12 @@
       <h2 id="result-title">Результат</h2>
       <div class="status" id="auth-status">Ожидание авторизации</div>
       <pre id="auth-result">Результат или ошибка появятся здесь.</pre>
+      <button id="check-wall-upload" type="button" hidden>Проверить photos.getWallUploadServer</button>
+      <div class="api-result" id="api-result" hidden>
+        <h3>Результат проверки VK API</h3>
+        <div class="status" id="api-status"></div>
+        <pre id="api-output"></pre>
+      </div>
       <p class="note">Значения токенов, кодов и других чувствительных полей скрываются. Страница ничего не сохраняет и не отправляет на собственный backend.</p>
     </section>
   </main>
