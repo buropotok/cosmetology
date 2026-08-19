@@ -106,201 +106,200 @@
     <p>Диагностическая страница для проверки authorization flow приложения 54726533.</p>
 
     <div class="widget" id="vkid-widget">
-      <script nonce="csp_nonce" src="https://unpkg.com/@vkid/sdk@<3.0.0/dist-sdk/umd/index.js"></script>
       <script nonce="csp_nonce" type="text/javascript">
-        if ('VKIDSDK' in window) {
-          const VKID = window.VKIDSDK;
-          const TEST_VK_GROUP_ID = '240907364';
-          const VK_AUTH_TEST_ENDPOINT = 'https://cosmetology-social-publisher.buropotok.workers.dev/api/debug/vk-auth-test';
-          let currentAccessToken = null;
-          let apiCheckStarted = false;
+        const VK_CLIENT_ID = '54726533';
+        const VK_REDIRECT_URI = 'https://buropotok.github.io/cosmetology/auth/';
+        const TEST_VK_GROUP_ID = 240907364;
+        const VK_AUTH_TEST_ENDPOINT = 'https://cosmetology-social-publisher.buropotok.workers.dev/api/debug/vk-auth-test';
+        const PKCE_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-';
+        let authorizationTransaction = null;
+        let authorizationPopup = null;
+        let testStarted = false;
 
-          VKID.Config.init({
-            app: 54726533,
-            redirectUrl: 'https://buropotok.github.io/cosmetology/auth/',
-            responseMode: VKID.ConfigResponseMode.Callback,
-            source: VKID.ConfigSource.LOWCODE,
-            scope: '',
-          });
-
-          const oneTap = new VKID.OneTap();
-
-          oneTap.render({
-            container: document.currentScript.parentElement,
-            showAlternativeLogin: true
-          })
-          .on(VKID.WidgetEvents.ERROR, vkidOnError)
-          .on(VKID.OneTapInternalEvents.LOGIN_SUCCESS, function (payload) {
-            const code = payload.code;
-            const deviceId = payload.device_id;
-
-            VKID.Auth.exchangeCode(code, deviceId)
-              .then(vkidOnSuccess)
-              .catch(vkidOnError);
-          });
-
-          function describeValue(value, key) {
-            const sensitiveKey = /token|code|secret|password|hash/i.test(key || '');
-            if (sensitiveKey && value != null) {
-              return `[скрыто; тип: ${Array.isArray(value) ? 'array' : typeof value}]`;
-            }
-            if (value instanceof Error) {
-              return { name: value.name, message: redactText(value.message) };
-            }
-            if (Array.isArray(value)) {
-              return value.map(function (item) { return describeValue(item, ''); });
-            }
-            if (value && typeof value === 'object') {
-              return Object.keys(value).reduce(function (result, childKey) {
-                result[childKey] = describeValue(value[childKey], childKey);
-                return result;
-              }, {});
-            }
-            if (typeof value === 'string' && /message|description/i.test(key || '')) {
-              return redactText(value);
-            }
-            return value;
-          }
-
-          function showResult(state, title, value) {
-            const status = document.getElementById('auth-status');
-            const output = document.getElementById('auth-result');
-            status.className = `status ${state}`;
-            status.textContent = title;
-            output.textContent = JSON.stringify(value, null, 2);
-          }
-
-          function redactText(value) {
-            let safe = String(value || '');
-            if (currentAccessToken) {
-              safe = safe.split(currentAccessToken).join('[скрыто]');
-            }
-            return safe
-              .replace(/([?&]access_token=)[^&\s]+/gi, '$1[скрыто]')
-              .replace(/(authorization\s*[:=]\s*)([^,;\s]+)/gi, '$1[скрыто]');
-          }
-
-          function showApiResult(state, title, value) {
-            const container = document.getElementById('api-result');
-            const status = document.getElementById('api-status');
-            const output = document.getElementById('api-output');
-            container.hidden = false;
-            status.className = `status ${state}`;
-            status.textContent = title;
-            output.textContent = JSON.stringify(value, null, 2);
-          }
-
-          async function checkWallUploadServer() {
-            if (apiCheckStarted || !currentAccessToken) return;
-            apiCheckStarted = true;
-
-            const button = document.getElementById('check-wall-upload');
-            button.disabled = true;
-            button.textContent = 'Проверяем через Cloudflare Worker...';
-            showApiResult('', 'Проверяем через Cloudflare Worker...', {
-              request_started: true
-            });
-
-            let httpStatus;
-            try {
-              const response = await fetch(VK_AUTH_TEST_ENDPOINT, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                  access_token: currentAccessToken,
-                  group_id: Number(TEST_VK_GROUP_ID)
-                })
-              });
-              httpStatus = response.status;
-
-              let payload;
-              try {
-                payload = await response.json();
-              } catch (error) {
-                throw new Error(`Worker вернул ответ, который не удалось разобрать как JSON (${redactText(error && error.message)})`);
-              }
-
-              if (payload && payload.vk_error) {
-                const apiError = {
-                  error_code: payload.vk_error.error_code ?? null,
-                  error_msg: redactText(payload.vk_error.error_msg || 'Unknown VK API error')
-                };
-                showApiResult('error', '✕ VK API отклонил запрос', apiError);
-                console.error('VK API photos.getWallUploadServer rejected:', apiError);
-                return;
-              }
-
-              if (response.ok && payload && payload.ok === true && payload.result) {
-                const safeResponse = {
-                  upload_url_present: payload.result.upload_url_present === true,
-                  album_id: payload.result.album_id ?? null,
-                  user_id: payload.result.user_id ?? null
-                };
-                showApiResult('success', '✓ photos.getWallUploadServer успешно', safeResponse);
-                console.info('VK API photos.getWallUploadServer result:', safeResponse);
-                return;
-              }
-
-              const workerMessage = payload && payload.transport_error && payload.transport_error.message
-                ? payload.transport_error.message
-                : payload && payload.error && payload.error.message
-                  ? payload.error.message
-                  : 'Worker вернул неожиданный ответ';
-              throw new Error(redactText(workerMessage));
-            } catch (error) {
-              const networkError = {
-                type: error && error.name ? error.name : typeof error,
-                http_status: httpStatus ?? null,
-                message: redactText(error && error.message ? error.message : error)
-              };
-              showApiResult('error', '✕ Не удалось выполнить server-to-server проверку', networkError);
-              console.error('VK API Worker diagnostic request failed:', networkError);
-            } finally {
-              button.textContent = 'Проверить photos.getWallUploadServer';
-            }
-          }
-
-          function vkidOnSuccess(data) {
-            const safeResult = describeValue(data, '');
-            showResult('success', 'Авторизация выполнена', safeResult);
-            console.info('VK ID authorization result structure:', safeResult);
-            if (data && typeof data.access_token === 'string' && data.access_token) {
-              currentAccessToken = data.access_token;
-              const button = document.getElementById('check-wall-upload');
-              button.hidden = false;
-              button.addEventListener('click', checkWallUploadServer, {once: true});
-            }
-          }
-
-          function vkidOnError(error) {
-            const safeError = describeValue(error, '');
-            showResult('error', 'Ошибка авторизации', safeError);
-            console.error('VK ID authorization error:', safeError);
-          }
-        } else {
-          window.addEventListener('DOMContentLoaded', function () {
-            const status = document.getElementById('auth-status');
-            const output = document.getElementById('auth-result');
-            status.className = 'status error';
-            status.textContent = 'SDK не загрузился';
-            output.textContent = 'Объект VKIDSDK недоступен. Проверьте загрузку SDK и соединение с сетью.';
-          });
-          console.error('VK ID SDK is unavailable.');
+        function randomValue(length) {
+          const bytes = crypto.getRandomValues(new Uint8Array(length));
+          return Array.from(bytes, function (byte) { return PKCE_ALPHABET[byte % PKCE_ALPHABET.length]; }).join('');
         }
+
+        function base64Url(bytes) {
+          let binary = '';
+          new Uint8Array(bytes).forEach(function (byte) { binary += String.fromCharCode(byte); });
+          return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+        }
+
+        async function codeChallenge(codeVerifier) {
+          const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(codeVerifier));
+          return base64Url(digest);
+        }
+
+        function showAuthStatus(state, title, message) {
+          const status = document.getElementById('auth-status');
+          const output = document.getElementById('auth-result');
+          status.className = `status ${state}`;
+          status.textContent = title;
+          output.textContent = message;
+        }
+
+        function showApiResult(state, title, value) {
+          const container = document.getElementById('api-result');
+          const status = document.getElementById('api-status');
+          const output = document.getElementById('api-output');
+          container.hidden = false;
+          status.className = `status ${state}`;
+          status.textContent = title;
+          output.textContent = JSON.stringify(value, null, 2);
+        }
+
+        function finishWithError(title, httpStatus, message) {
+          const safeError = {http_status: httpStatus, message: String(message || 'Неизвестная ошибка')};
+          showApiResult('error', title, safeError);
+          console.error('VK backend diagnostic failed:', safeError);
+        }
+
+        async function sendAuthorizationCode(payload) {
+          showAuthStatus('', 'Обмениваем authorization code на Worker...', 'Credentials передаются Worker один раз и не отображаются на странице.');
+          let httpStatus = null;
+          try {
+            const response = await fetch(VK_AUTH_TEST_ENDPOINT, {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({
+                code: payload.code,
+                device_id: payload.deviceId,
+                code_verifier: authorizationTransaction.codeVerifier,
+                state: payload.state,
+                group_id: TEST_VK_GROUP_ID
+              })
+            });
+            httpStatus = response.status;
+            showAuthStatus('', 'Проверяем photos.getWallUploadServer...', 'Token exchange выполняется на Worker; токены не возвращаются браузеру.');
+            let result;
+            try {
+              result = await response.json();
+            } catch {
+              finishWithError('✕ Не удалось выполнить server-to-server проверку', httpStatus, 'Worker вернул не-JSON ответ');
+              return;
+            }
+
+            if (response.ok && result && result.ok === true && result.exchange === 'backend') {
+              const safeResult = {
+                upload_url_present: result.result && result.result.upload_url_present === true,
+                album_id: result.result ? result.result.album_id ?? null : null,
+                user_id: result.result ? result.result.user_id ?? null : null
+              };
+              showAuthStatus('success', '✓ Backend authorization работает', 'Authorization code обменян на Worker; токены не передавались браузеру.');
+              showApiResult('success', '✓ photos.getWallUploadServer успешно', safeResult);
+              console.info('VK backend diagnostic succeeded:', safeResult);
+              return;
+            }
+
+            if (result && result.stage === 'token_exchange' && result.error) {
+              const safeError = {code: result.error.code ?? null, message: result.error.message || 'Unknown token exchange error'};
+              showApiResult('error', '✕ Ошибка backend token exchange', safeError);
+              console.error('VK backend token exchange failed:', safeError);
+              return;
+            }
+
+            if (result && result.stage === 'vk_api' && result.vk_error) {
+              const safeError = {
+                error_code: result.vk_error.error_code ?? null,
+                error_msg: result.vk_error.error_msg || 'Unknown VK API error'
+              };
+              showAuthStatus('success', '✓ Backend authorization работает', 'Authorization code успешно обменян на Worker.');
+              showApiResult('error', '✕ VK API отклонил запрос', safeError);
+              console.error('VK API photos.getWallUploadServer rejected:', safeError);
+              return;
+            }
+
+            const message = result && result.transport_error && result.transport_error.message
+              ? result.transport_error.message
+              : result && result.error && result.error.message
+                ? result.error.message
+                : 'Worker вернул неожиданный ответ';
+            finishWithError('✕ Не удалось выполнить server-to-server проверку', httpStatus, message);
+          } catch {
+            finishWithError('✕ Не удалось выполнить server-to-server проверку', httpStatus, 'Не удалось связаться с Cloudflare Worker');
+          }
+        }
+
+        async function beginAuthorization() {
+          if (testStarted) return;
+          testStarted = true;
+          const button = document.getElementById('check-wall-upload');
+          button.disabled = true;
+          button.textContent = 'Авторизация VK ID...';
+          showAuthStatus('', 'Авторизация VK ID...', 'Открывается официальная форма VK ID.');
+
+          const codeVerifier = randomValue(64);
+          const state = randomValue(43);
+          const challenge = await codeChallenge(codeVerifier);
+          authorizationTransaction = {codeVerifier, state};
+
+          const authorizationUrl = new URL('https://id.vk.ru/authorize');
+          authorizationUrl.search = new URLSearchParams({
+            response_type: 'code',
+            client_id: VK_CLIENT_ID,
+            redirect_uri: VK_REDIRECT_URI,
+            state,
+            code_challenge: challenge,
+            code_challenge_method: 'S256'
+          }).toString();
+
+          authorizationPopup = window.open(authorizationUrl.toString(), 'vk-id-auth', 'popup,width=520,height=720');
+          if (!authorizationPopup) {
+            authorizationTransaction = null;
+            finishWithError('✕ Авторизация VK ID не началась', null, 'Браузер заблокировал всплывающее окно');
+          }
+        }
+
+        function relayPopupCallback() {
+          const params = new URLSearchParams(window.location.search);
+          const code = params.get('code');
+          const deviceId = params.get('device_id');
+          const state = params.get('state');
+          if (!window.opener || !code || !deviceId || !state) return false;
+          window.opener.postMessage({type: 'vk-id-authorization-code', code, deviceId, state}, window.location.origin);
+          showAuthStatus('success', 'Авторизация завершена', 'Authorization code передан исходной диагностической странице.');
+          window.close();
+          return true;
+        }
+
+        window.addEventListener('message', function (event) {
+          if (event.origin !== window.location.origin || event.source !== authorizationPopup) return;
+          const data = event.data;
+          if (!data || data.type !== 'vk-id-authorization-code' || !authorizationTransaction) return;
+          if (typeof data.state !== 'string' || data.state !== authorizationTransaction.state) {
+            authorizationTransaction = null;
+            finishWithError('✕ Ошибка авторизации VK ID', null, 'Проверка state не пройдена');
+            return;
+          }
+          if (typeof data.code !== 'string' || !data.code || typeof data.deviceId !== 'string' || !data.deviceId) {
+            authorizationTransaction = null;
+            finishWithError('✕ Ошибка авторизации VK ID', null, 'VK ID не вернул code или device_id');
+            return;
+          }
+          const payload = {code: data.code, deviceId: data.deviceId, state: data.state};
+          void sendAuthorizationCode(payload).finally(function () { authorizationTransaction = null; });
+        });
+
+        window.addEventListener('DOMContentLoaded', function () {
+          if (relayPopupCallback()) return;
+          document.getElementById('check-wall-upload').addEventListener('click', function () { void beginAuthorization(); }, {once: true});
+        });
       </script>
     </div>
 
     <section class="result" aria-live="polite" aria-labelledby="result-title">
       <h2 id="result-title">Результат</h2>
-      <div class="status" id="auth-status">Ожидание авторизации</div>
-      <pre id="auth-result">Результат или ошибка появятся здесь.</pre>
-      <button id="check-wall-upload" type="button" hidden>Проверить photos.getWallUploadServer</button>
+      <div class="status" id="auth-status">Готово к авторизации</div>
+      <pre id="auth-result">Нажмите кнопку, чтобы начать одноразовый Authorization Code + PKCE тест.</pre>
+      <button id="check-wall-upload" type="button">Проверить photos.getWallUploadServer</button>
       <div class="api-result" id="api-result" hidden>
         <h3>Результат проверки VK API</h3>
         <div class="status" id="api-status"></div>
         <pre id="api-output"></pre>
       </div>
-      <p class="note">Значения токенов, кодов и других чувствительных полей скрываются. Страница ничего не сохраняет и не отправляет на собственный backend.</p>
+      <p class="note">Authorization code и PKCE verifier передаются существующему Worker один раз. Токены не возвращаются странице и не сохраняются.</p>
     </section>
   </main>
 </body>

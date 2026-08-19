@@ -4,12 +4,20 @@ import type {Env} from './types';
 
 const env = {
   VK_ACCESS_TOKEN: 'worker-community-token',
+  PUBLISH_API_TOKEN: 'publisher-token',
   ALLOWED_EXTENSION_ORIGIN: 'chrome-extension://existing-extension'
 } as Env;
 const debugUrl = 'https://worker.example/api/debug/vk-auth-test';
-const githubOrigin = 'https://buropotok.github.io';
+const origin = 'https://buropotok.github.io';
+const authorization = {
+  code: 'authorization-code-secret',
+  device_id: 'device-id-secret',
+  code_verifier: 'A'.repeat(64),
+  state: 'B'.repeat(43),
+  group_id: 240907364
+};
 
-function debugRequest(body: unknown, origin = githubOrigin) {
+function request(body: unknown) {
   return new Request(debugUrl, {
     method: 'POST',
     headers: {'content-type': 'application/json', origin},
@@ -22,122 +30,145 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('VK ID auth diagnostic endpoint', () => {
-  it('requires a user access_token', async () => {
+describe('backend VK ID authorization diagnostic', () => {
+  it.each([
+    ['code', {...authorization, code: ''}],
+    ['device_id', {...authorization, device_id: ''}],
+    ['code_verifier', {...authorization, code_verifier: 'short'}],
+    ['state', {...authorization, state: 'short'}],
+    ['group_id', {...authorization, group_id: 0}]
+  ])('requires valid %s', async (_field, body) => {
     const fetch = vi.fn();
     vi.stubGlobal('fetch', fetch);
-
-    const response = await worker.fetch(debugRequest({group_id: 240907364}), env);
-
-    expect(response.status).toBe(400);
-    expect(await response.json()).toEqual({error: {code: 'INVALID_REQUEST', message: 'Поле access_token обязательно'}});
-    expect(fetch).not.toHaveBeenCalled();
-  });
-
-  it.each([0, -1, 1.5, 'not-a-number'])('rejects invalid group_id %j', async (groupId) => {
-    const fetch = vi.fn();
-    vi.stubGlobal('fetch', fetch);
-
-    const response = await worker.fetch(debugRequest({access_token: 'vk-id-user-token', group_id: groupId}), env);
-
+    const response = await worker.fetch(request(body), env);
     expect(response.status).toBe(400);
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it('uses the supplied user token and positive group_id, and sanitizes a successful response', async () => {
-    const fetch = vi.fn().mockResolvedValue(Response.json({
-      response: {upload_url: 'https://upload.vk.test/private', album_id: 12, user_id: 34}
-    }));
+  it('exchanges the code with PKCE and uses only the returned access token for VK API', async () => {
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(Response.json({
+        access_token: 'backend-user-token',
+        refresh_token: 'refresh-secret',
+        id_token: 'id-secret',
+        state: authorization.state
+      }))
+      .mockResolvedValueOnce(Response.json({
+        response: {upload_url: 'https://upload.vk.test/private', album_id: 12, user_id: 34}
+      }));
     vi.stubGlobal('fetch', fetch);
-    const infoLog = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
 
-    const response = await worker.fetch(debugRequest({access_token: 'vk-id-user-token', group_id: 240907364}), env);
-    const result = await response.json() as Record<string, unknown>;
+    const response = await worker.fetch(request(authorization), env);
+    const result = await response.json();
 
-    expect(response.status).toBe(200);
-    expect(fetch).toHaveBeenCalledTimes(1);
-    expect(fetch.mock.calls[0][0]).toBe('https://api.vk.com/method/photos.getWallUploadServer');
-    const requestBody = fetch.mock.calls[0][1]?.body as URLSearchParams;
-    expect(requestBody.get('access_token')).toBe('vk-id-user-token');
-    expect(requestBody.get('access_token')).not.toBe(env.VK_ACCESS_TOKEN);
-    expect(requestBody.get('group_id')).toBe('240907364');
-    expect(Number(requestBody.get('group_id'))).toBeGreaterThan(0);
-    expect(requestBody.get('v')).toBe('5.199');
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(fetch.mock.calls[0][0]).toBe('https://id.vk.ru/oauth2/auth');
+    const exchange = fetch.mock.calls[0][1];
+    expect(exchange?.headers).toEqual({'content-type': 'application/x-www-form-urlencoded'});
+    const exchangeBody = exchange?.body as URLSearchParams;
+    expect(exchangeBody.get('grant_type')).toBe('authorization_code');
+    expect(exchangeBody.get('code_verifier')).toBe(authorization.code_verifier);
+    expect(exchangeBody.get('redirect_uri')).toBe('https://buropotok.github.io/cosmetology/auth/');
+    expect(exchangeBody.get('code')).toBe(authorization.code);
+    expect(exchangeBody.get('client_id')).toBe('54726533');
+    expect(exchangeBody.get('device_id')).toBe(authorization.device_id);
+    expect(exchangeBody.get('state')).toBe(authorization.state);
+    expect(fetch.mock.calls[1][0]).toBe('https://api.vk.com/method/photos.getWallUploadServer');
+    const vkBody = fetch.mock.calls[1][1]?.body as URLSearchParams;
+    expect(vkBody.get('access_token')).toBe('backend-user-token');
+    expect(vkBody.get('access_token')).not.toBe(env.VK_ACCESS_TOKEN);
+    expect(vkBody.get('group_id')).toBe('240907364');
     expect(result).toEqual({
       ok: true,
+      exchange: 'backend',
       method: 'photos.getWallUploadServer',
       result: {upload_url_present: true, album_id: 12, user_id: 34}
     });
+    const clientAndLogs = JSON.stringify(result) + log.mock.calls.flat().map(String).join(' ');
+    for (const secret of ['backend-user-token', 'refresh-secret', 'id-secret', authorization.code, authorization.code_verifier]) {
+      expect(clientAndLogs).not.toContain(secret);
+    }
     expect(JSON.stringify(result)).not.toContain('upload.vk.test');
-    expect(JSON.stringify(result)).not.toContain('vk-id-user-token');
-    expect(infoLog.mock.calls.flat().map(String).join(' ')).not.toContain('vk-id-user-token');
-    expect(infoLog.mock.calls.flat().map(String).join(' ')).not.toContain(env.VK_ACCESS_TOKEN);
   });
 
-  it('returns only a sanitized VK error and never logs the token', async () => {
-    const userToken = 'vk-id-sensitive-token';
+  it('returns a distinct, sanitized token exchange error and does not call VK API', async () => {
     const fetch = vi.fn().mockResolvedValue(Response.json({
-      error: {
-        error_code: 27,
-        error_msg: `Access denied for ${userToken}`,
-        request_params: [{key: 'access_token', value: userToken}]
-      }
-    }));
+      error: 'invalid_grant',
+      error_description: `Invalid ${authorization.code_verifier}`
+    }, {status: 400}));
     vi.stubGlobal('fetch', fetch);
-    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     vi.spyOn(console, 'log').mockImplementation(() => undefined);
 
-    const response = await worker.fetch(debugRequest({access_token: userToken, group_id: 240907364}), env);
+    const response = await worker.fetch(request(authorization), env);
     const result = await response.json();
-    const serialized = JSON.stringify(result);
-    const logs = errorLog.mock.calls.flat().map(String).join(' ');
 
-    expect(response.status).toBe(200);
+    expect(fetch).toHaveBeenCalledTimes(1);
     expect(result).toEqual({
       ok: false,
-      method: 'photos.getWallUploadServer',
-      vk_error: {error_code: 27, error_msg: 'Access denied for [REDACTED]'}
+      stage: 'token_exchange',
+      error: {code: 'invalid_grant', message: 'Invalid [REDACTED]'}
     });
-    expect(serialized).not.toContain('request_params');
-    expect(serialized).not.toContain(userToken);
-    expect(logs).not.toContain(userToken);
-    expect(logs).not.toContain('access_token');
+    const clientAndLogs = JSON.stringify(result) + error.mock.calls.flat().map(String).join(' ');
+    expect(clientAndLogs).not.toContain(authorization.code);
+    expect(clientAndLogs).not.toContain(authorization.code_verifier);
   });
 
-  it('returns a safe transport error when VK cannot be reached', async () => {
-    const userToken = 'vk-id-sensitive-token';
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError(`Failed for ${userToken}`)));
+  it('stops when the token response state does not match', async () => {
+    const fetch = vi.fn().mockResolvedValue(Response.json({access_token: 'token', state: 'wrong-state'}));
+    vi.stubGlobal('fetch', fetch);
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
     vi.spyOn(console, 'log').mockImplementation(() => undefined);
 
-    const response = await worker.fetch(debugRequest({access_token: userToken, group_id: 240907364}), env);
-    const result = await response.json();
+    const response = await worker.fetch(request(authorization), env);
 
-    expect(response.status).toBe(502);
-    expect(result).toEqual({
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(await response.json()).toEqual({
       ok: false,
-      method: 'photos.getWallUploadServer',
-      transport_error: {http_status: null, message: 'Failed for [REDACTED]'}
+      stage: 'token_exchange',
+      error: {code: 'state_mismatch', message: 'VK ID returned an unexpected state'}
     });
   });
 
-  it('allows the GitHub Pages origin only on the diagnostic route', async () => {
-    const allowed = await worker.fetch(new Request(debugUrl, {method: 'OPTIONS', headers: {origin: githubOrigin}}), env);
-    const denied = await worker.fetch(new Request('https://worker.example/api/publish', {method: 'OPTIONS', headers: {origin: githubOrigin}}), env);
+  it('separates a VK API error from token exchange errors and omits request_params', async () => {
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(Response.json({access_token: 'backend-user-token', state: authorization.state}))
+      .mockResolvedValueOnce(Response.json({error: {
+        error_code: 5,
+        error_msg: 'User authorization failed',
+        request_params: [{key: 'access_token', value: 'backend-user-token'}]
+      }}));
+    vi.stubGlobal('fetch', fetch);
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    vi.spyOn(console, 'log').mockImplementation(() => undefined);
 
-    expect(allowed.status).toBe(204);
-    expect(allowed.headers.get('access-control-allow-origin')).toBe(githubOrigin);
-    expect(allowed.headers.get('access-control-allow-methods')).toContain('POST');
-    expect(denied.status).toBe(403);
+    const response = await worker.fetch(request(authorization), env);
+    const result = await response.json();
+
+    expect(result).toEqual({
+      ok: false,
+      stage: 'vk_api',
+      method: 'photos.getWallUploadServer',
+      vk_error: {error_code: 5, error_msg: 'User authorization failed'}
+    });
+    expect(JSON.stringify(result)).not.toContain('request_params');
+    expect(JSON.stringify(result)).not.toContain('backend-user-token');
   });
 
-  it('preserves CORS for the configured Chrome extension origin', async () => {
-    const response = await worker.fetch(new Request('https://worker.example/api/publish', {
-      method: 'OPTIONS',
-      headers: {origin: env.ALLOWED_EXTENSION_ORIGIN}
-    }), env);
+  it('keeps diagnostic CORS and the production publish authentication behavior', async () => {
+    const preflight = await worker.fetch(new Request(debugUrl, {method: 'OPTIONS', headers: {origin}}), env);
+    expect(preflight.status).toBe(204);
+    expect(preflight.headers.get('access-control-allow-origin')).toBe(origin);
 
-    expect(response.status).toBe(204);
-    expect(response.headers.get('access-control-allow-origin')).toBe(env.ALLOWED_EXTENSION_ORIGIN);
+    const extensionPreflight = await worker.fetch(new Request('https://worker.example/api/publish', {
+      method: 'OPTIONS', headers: {origin: env.ALLOWED_EXTENSION_ORIGIN}
+    }), env);
+    expect(extensionPreflight.status).toBe(204);
+    expect(extensionPreflight.headers.get('access-control-allow-origin')).toBe(env.ALLOWED_EXTENSION_ORIGIN);
+
+    const publish = await worker.fetch(new Request('https://worker.example/api/publish', {method: 'POST'}), env);
+    expect(publish.status).toBe(401);
+    expect((await publish.json() as {error: {code: string}}).error.code).toBe('UNAUTHORIZED');
   });
 });
