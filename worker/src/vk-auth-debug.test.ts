@@ -4,6 +4,7 @@ import type {Env} from './types';
 
 const env = {
   VK_ACCESS_TOKEN: 'worker-community-token',
+  VK_ID_SERVICE_TOKEN: 'confidential-service-token',
   PUBLISH_API_TOKEN: 'publisher-token',
   ALLOWED_EXTENSION_ORIGIN: 'chrome-extension://existing-extension'
 } as Env;
@@ -31,6 +32,19 @@ afterEach(() => {
 });
 
 describe('backend VK ID authorization diagnostic', () => {
+  it('returns a safe configuration error before VK ID when the service token is missing', async () => {
+    const fetch = vi.fn();
+    vi.stubGlobal('fetch', fetch);
+    const response = await worker.fetch(request(authorization), {...env, VK_ID_SERVICE_TOKEN: ''});
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({
+      ok: false,
+      stage: 'configuration',
+      error: {code: 'missing_service_token', message: 'VK ID service token is not configured'}
+    });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it.each([
     ['code', {...authorization, code: ''}],
     ['device_id', {...authorization, device_id: ''}],
@@ -74,6 +88,8 @@ describe('backend VK ID authorization diagnostic', () => {
     expect(exchangeBody.get('client_id')).toBe('54726533');
     expect(exchangeBody.get('device_id')).toBe(authorization.device_id);
     expect(exchangeBody.get('state')).toBe(authorization.state);
+    expect(exchangeBody.get('service_token')).toBe(env.VK_ID_SERVICE_TOKEN);
+    expect(exchangeBody.has('ip')).toBe(false);
     expect(fetch.mock.calls[1][0]).toBe('https://api.vk.com/method/photos.getWallUploadServer');
     const vkBody = fetch.mock.calls[1][1]?.body as URLSearchParams;
     expect(vkBody.get('access_token')).toBe('backend-user-token');
@@ -86,7 +102,7 @@ describe('backend VK ID authorization diagnostic', () => {
       result: {upload_url_present: true, album_id: 12, user_id: 34}
     });
     const clientAndLogs = JSON.stringify(result) + log.mock.calls.flat().map(String).join(' ');
-    for (const secret of ['backend-user-token', 'refresh-secret', 'id-secret', authorization.code, authorization.code_verifier]) {
+    for (const secret of ['backend-user-token', 'refresh-secret', 'id-secret', authorization.code, authorization.code_verifier, env.VK_ID_SERVICE_TOKEN]) {
       expect(clientAndLogs).not.toContain(secret);
     }
     expect(JSON.stringify(result)).not.toContain('upload.vk.test');
@@ -95,7 +111,7 @@ describe('backend VK ID authorization diagnostic', () => {
   it('returns a distinct, sanitized token exchange error and does not call VK API', async () => {
     const fetch = vi.fn().mockResolvedValue(Response.json({
       error: 'invalid_grant',
-      error_description: `Invalid ${authorization.code_verifier}`
+      error_description: `Invalid ${authorization.code_verifier} ${env.VK_ID_SERVICE_TOKEN}`
     }, {status: 400}));
     vi.stubGlobal('fetch', fetch);
     const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
@@ -108,11 +124,12 @@ describe('backend VK ID authorization diagnostic', () => {
     expect(result).toEqual({
       ok: false,
       stage: 'token_exchange',
-      error: {code: 'invalid_grant', message: 'Invalid [REDACTED]'}
+      error: {code: 'invalid_grant', message: 'Invalid [REDACTED] [REDACTED]'}
     });
     const clientAndLogs = JSON.stringify(result) + error.mock.calls.flat().map(String).join(' ');
     expect(clientAndLogs).not.toContain(authorization.code);
     expect(clientAndLogs).not.toContain(authorization.code_verifier);
+    expect(clientAndLogs).not.toContain(env.VK_ID_SERVICE_TOKEN);
   });
 
   it('stops when the token response state does not match', async () => {

@@ -41,8 +41,8 @@ function exchangeError(code: string, message: string, secrets: string[]): VKAuth
   return {ok: false, stage: 'token_exchange', error: safeError};
 }
 
-async function exchangeAuthorizationCode(input: BackendAuthorizationInput) {
-  const secrets = [input.code, input.codeVerifier];
+async function exchangeAuthorizationCode(input: BackendAuthorizationInput, serviceToken: string) {
+  const secrets = [input.code, input.codeVerifier, serviceToken];
   console.log('[VK DEBUG] token exchange started');
   const body = new URLSearchParams({
     grant_type: 'authorization_code',
@@ -51,7 +51,8 @@ async function exchangeAuthorizationCode(input: BackendAuthorizationInput) {
     code: input.code,
     client_id: CLIENT_ID,
     device_id: input.deviceId,
-    state: input.state
+    state: input.state,
+    service_token: serviceToken
   });
 
   let response: Response;
@@ -142,9 +143,9 @@ async function requestWallUploadServer(accessToken: string, groupId: number): Pr
   };
 }
 
-export async function testVKAuthorizationCode(input: BackendAuthorizationInput): Promise<VKAuthDebugResult> {
+export async function testVKAuthorizationCode(input: BackendAuthorizationInput, serviceToken: string): Promise<VKAuthDebugResult> {
   console.log('[VK DEBUG] backend authorization code received');
-  const exchange = await exchangeAuthorizationCode(input);
+  const exchange = await exchangeAuthorizationCode(input, serviceToken);
   if ('ok' in exchange) return exchange;
   return requestWallUploadServer(exchange.accessToken, input.groupId);
 }

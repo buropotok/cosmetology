@@ -200,6 +200,13 @@
               return;
             }
 
+            if (result && result.stage === 'configuration' && result.error) {
+              const safeError = {code: result.error.code ?? null, message: result.error.message || 'Worker configuration error'};
+              showApiResult('error', '✕ Ошибка конфигурации Worker', safeError);
+              console.error('VK backend diagnostic configuration failed:', safeError);
+              return;
+            }
+
             if (result && result.stage === 'vk_api' && result.vk_error) {
               const safeError = {
                 error_code: result.vk_error.error_code ?? null,
