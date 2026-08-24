@@ -1,6 +1,6 @@
 import {describe,expect,it} from 'vitest';
 import {deserializePostDocument, documentText, hasTelegramSpecificFormatting, plainTextToDocument, safeLink, type PostDocument} from '../../../shared/post-document';
-import {renderTelegram} from '../../../shared/telegram-renderer';
+import {planTelegramPublication,renderTelegram} from '../../../shared/telegram-renderer';
 import {renderVK} from '../../../shared/vk-renderer';
 
 const marks=['bold','italic','underline','strikethrough','spoiler'] as const;
@@ -26,4 +26,6 @@ describe('platform renderers',()=>{
   it('renders every block, inline mark, combinations and line breaks as Telegram HTML',()=>{const result=renderTelegram(document);expect(result.html).toContain('Обычный\nтекст\n<b>Заголовок</b>');expect(result.html).toContain('<blockquote>Цитата</blockquote>');expect(result.html).toContain('• один\n• два');expect(result.html).toContain('1. первый\n2. второй');expect(result.html).toContain('<blockquote expandable>');expect(result.html).toContain('<b><i><u><s><tg-spoiler>Скрытый текст</tg-spoiler></s></u></i></b>');expect(result.html).toContain('<a href="https://example.com/path">ссылка</a>')});
   it('uses one representation for preview semantics and API HTML',()=>{const result=renderTelegram(document);expect(result.blocks.map(block=>(block.prefix??'')+block.segments.map(segment=>segment.text).join('')).join('\n')).toBe(result.plainText);expect(result.blocks.find(block=>block.source==='details')?.kind).toBe('expandable_quote')});
   it('preserves details in VK and wraps it in paired emoji markers',()=>{const vk=renderVK(document);expect(vk).toContain('🌿🌿🌿🌿 Подробнее 🌿🌿🌿🌿');expect(vk).toContain('Скрытый текст');expect(vk).toContain('🌿'.repeat(14))});
+  it('uses the same delivery plan for preview and publishing',()=>{const rendered=renderTelegram(document);expect(planTelegramPublication(rendered,false).type).toBe('text');expect(planTelegramPublication(rendered,true).type).toBe('photo_with_caption');const long={...rendered,plainText:'x'.repeat(1025)};expect(planTelegramPublication(long,true)).toMatchObject({type:'photo_then_text',reason:'caption_too_long'})});
+  it('renders a details title inside Telegram expandable blockquote',()=>{const rendered=renderTelegram({schemaVersion:1,blocks:[{type:'details',title:[{text:'Заголовок 1'}],content:[{text:'Скрытый текст'}]}]});expect(rendered.html).toBe('<blockquote expandable><b>Заголовок 1</b>\nСкрытый текст</blockquote>');expect(rendered.blocks[0].title?.[0].text).toBe('Заголовок 1')});
 });

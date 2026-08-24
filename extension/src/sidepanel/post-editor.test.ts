@@ -12,4 +12,10 @@ describe('PostEditor formatting toggles',()=>{
     expect(editor.applyMark(type)).toBe(false);
     expect((editor.document().blocks[0] as any).content[0].marks).toBeUndefined();
   });
+  it('formats a selection spanning multiple paragraphs',()=>{
+    const editor=new PostEditor(document.querySelector('#editor')!,undefined,'Первый\nВторой',()=>{}),blocks=document.querySelectorAll<HTMLElement>('[data-block]');
+    const range=document.createRange();range.setStart(blocks[0].firstChild!,0);range.setEnd(blocks[1].firstChild!,6);const selection=getSelection()!;selection.removeAllRanges();selection.addRange(range);
+    editor.applyMark('bold');
+    expect(editor.document().blocks.map(block=>'content'in block?block.content[0].marks:undefined)).toEqual([[{type:'bold'}],[{type:'bold'}]]);
+  });
 });

@@ -6,7 +6,7 @@ export type InlineMark =
 export interface TextRun { text: string; marks?: InlineMark[] }
 export type PostBlock =
   | {type: 'paragraph' | 'heading' | 'quote'; content: TextRun[]}
-  | {type: 'details'; content: TextRun[]; emoji?: string}
+  | {type: 'details'; title?: TextRun[]; content: TextRun[]; emoji?: string}
   | {type: 'bullet_list' | 'ordered_list'; items: TextRun[][]};
 export interface PostDocument {schemaVersion: typeof POST_DOCUMENT_VERSION; blocks: PostBlock[]}
 
