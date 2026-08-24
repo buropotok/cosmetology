@@ -8,11 +8,13 @@ export interface PublisherImage {
   height?: number;
 }
 
+import type {PostDocument} from '../../../shared/post-document';
 export interface PublisherDraft {
   originalText: string;
   publicationText: string;
   imageMode: ImageMode;
   image: PublisherImage | null;
+  postDocument?: PostDocument;
 }
 
 const LEADING_TIMESTAMP = /^\s*\[\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}\s+MSK\]\s*/;
