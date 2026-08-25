@@ -4,11 +4,12 @@ export type InlineMark =
   | {type: 'bold' | 'italic' | 'underline' | 'strikethrough' | 'spoiler'}
   | {type: 'link'; href: string};
 export interface TextRun { text: string; marks?: InlineMark[] }
+export interface PostButton {text:string;url:string}
 export type PostBlock =
   | {type: 'paragraph' | 'heading' | 'quote'; content: TextRun[]}
   | {type: 'details'; title?: TextRun[]; content: TextRun[]; emoji?: string}
   | {type: 'bullet_list' | 'ordered_list'; items: TextRun[][]};
-export interface PostDocument {schemaVersion: typeof POST_DOCUMENT_VERSION; blocks: PostBlock[]}
+export interface PostDocument {schemaVersion: typeof POST_DOCUMENT_VERSION; blocks: PostBlock[];buttons?:PostButton[]}
 
 export function safeLink(href: string): string | null {
   try { const url = new URL(href); return url.protocol === 'https:' || url.protocol === 'http:' ? url.href : null; }
@@ -24,7 +25,7 @@ export function plainTextToDocument(text: string): PostDocument {
 export function isPostDocument(value: unknown): value is PostDocument {
   if (!value || typeof value !== 'object') return false;
   const document = value as Partial<PostDocument>;
-  if (document.schemaVersion !== POST_DOCUMENT_VERSION || !Array.isArray(document.blocks)) return false;
+  if (document.schemaVersion !== POST_DOCUMENT_VERSION || !Array.isArray(document.blocks) || (document.buttons!==undefined&&(!Array.isArray(document.buttons)||document.buttons.some(button=>!button||typeof button.text!=='string'||typeof button.url!=='string'||!safeLink(button.url))))) return false;
   const runs = (content: unknown) => Array.isArray(content) && content.every(run => run && typeof run === 'object' && typeof (run as TextRun).text === 'string' && (!('marks' in run) || !run.marks || Array.isArray(run.marks)));
   return document.blocks.every(block => {
     if (!block || typeof block !== 'object' || !('type' in block)) return false;
