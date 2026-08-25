@@ -1,0 +1,2 @@
+import {describe,expect,it} from 'vitest';import {parseConnectCommand} from './telegram-account';
+describe('Telegram connect command',()=>{it('accepts plain and bot-qualified commands',()=>{expect(parseConnectCommand('/connect 483729')).toBe('483729');expect(parseConnectCommand('/connect@OurBot 483729')).toBe('483729')});it('rejects arbitrary and malformed messages',()=>{expect(parseConnectCommand('hello 483729')).toBeNull();expect(parseConnectCommand('/connect 1234')).toBeNull()})});
