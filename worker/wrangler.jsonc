@@ -29,6 +29,7 @@
 		}
 	],
 	"vars": {
-		"ALLOWED_EXTENSION_ORIGIN": "chrome-extension://glkemlgehjfgolnefbeakdjbbhcgnkka"
+		"ALLOWED_EXTENSION_ORIGIN": "chrome-extension://kffffpnlinmecknhdohnkfhpdjfogjhk",
+		"GOOGLE_OAUTH_CLIENT_ID": "000000000000-development.apps.googleusercontent.com"
 	}
 }

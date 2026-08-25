@@ -13,6 +13,11 @@ describe('Before/After side-panel layout', () => {
     expect(layouts[1].disabled).toBe(false);
     expect([...document.querySelectorAll<HTMLElement>('[data-ba-slot]')].map(slot => slot.dataset.baSlot)).toEqual(['before', 'after']);
     expect(document.querySelector<HTMLButtonElement>('#beforeAfterSave')?.disabled).toBe(true);
-    expect(document.querySelector<HTMLTextAreaElement>('#text')?.placeholder).toBe('Напишите текст публикации...');
+    expect(document.querySelector<HTMLElement>('#editor')?.getAttribute('role')).toBe('textbox');
+    expect(document.querySelectorAll('.toolbar svg').length).toBeGreaterThanOrEqual(7);
+    expect(document.querySelector('[data-action="image"]')?.getAttribute('aria-label')).toBe('Изображение');
+    expect(document.querySelector('[data-menu="blocks"]')?.textContent).toBe('Aa');
+    expect(document.querySelector('[data-menu-panel="format"] [data-mark="bold"]')).not.toBeNull();
+    expect(document.querySelector('[data-menu-panel="lists"] [data-block="details"]')?.textContent).toContain('Выпадающий список');
   });
 });

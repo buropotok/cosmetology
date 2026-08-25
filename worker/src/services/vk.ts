@@ -26,7 +26,7 @@ class VKAPIError extends AppError {
 
 function redact(value: string, env: Env) {
   let safe = value;
-  for (const secret of [env.VK_ACCESS_TOKEN, env.PUBLISH_API_TOKEN, env.TELEGRAM_BOT_TOKEN]) {
+  for (const secret of [env.VK_ACCESS_TOKEN, env.TELEGRAM_BOT_TOKEN]) {
     if (secret) safe = safe.split(secret).join('[REDACTED]');
   }
   return safe
