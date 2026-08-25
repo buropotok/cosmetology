@@ -28,11 +28,11 @@ describe('platform image policy', () => {
 
   it('continues sending Telegram the selected image and publication text', async () => {
     const image = new File(['image'], 'post.png', {type: 'image/png'});
-    await publishPlatform(env, 'telegram', 'Full illustration post', image);
-    await publishPlatform(env, 'telegram', 'Infographic title', image);
-    await publishPlatform(env, 'telegram', 'Text-only post');
-    expect(publishTelegram).toHaveBeenNthCalledWith(1, env, 'Full illustration post', image);
-    expect(publishTelegram).toHaveBeenCalledWith(env, 'Infographic title', image);
-    expect(publishTelegram).toHaveBeenLastCalledWith(env, 'Text-only post', undefined);
+    await publishPlatform(env, 'telegram', 'Full illustration post', image, undefined, '@group');
+    await publishPlatform(env, 'telegram', 'Infographic title', image, undefined, '@group');
+    await publishPlatform(env, 'telegram', 'Text-only post', undefined, undefined, '@group');
+    expect(publishTelegram).toHaveBeenNthCalledWith(1, env, 'Full illustration post', image, '@group');
+    expect(publishTelegram).toHaveBeenCalledWith(env, 'Infographic title', image, '@group');
+    expect(publishTelegram).toHaveBeenLastCalledWith(env, 'Text-only post', undefined, '@group');
   });
 });

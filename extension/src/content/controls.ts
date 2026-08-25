@@ -1,3 +1,4 @@
+import {WORKER_BASE_URL} from '../config';
 import {ChatGPTAdapter} from './chatgpt-adapter';
 import {hasFiveChoices, parsePostDocumentFromResponse,parseResponseText} from './response-parser';
 import {choicePrompt, presets, renderPreset, rewrites} from '../presets/presets';
@@ -151,8 +152,8 @@ export async function installToolbar() {
   const bar = document.createElement('div');
   bar.dataset.socialPublisher = 'toolbar';
   bar.className = 'sp-toolbar';
-  const {workerBaseUrl = '', toolbarPosition} = await chrome.storage.local.get(['workerBaseUrl', 'toolbarPosition']);
-  presets.forEach(preset => bar.append(button(`${preset.icon} ${preset.title}`, () => adapter.insert(renderPreset(preset, workerBaseUrl)))));
+  const {toolbarPosition} = await chrome.storage.local.get(['toolbarPosition']);
+  presets.forEach(preset => bar.append(button(`${preset.icon} ${preset.title}`, () => adapter.insert(renderPreset(preset, WORKER_BASE_URL)))));
   bar.append(button('↔ До / После', () => chrome.runtime.sendMessage({type: 'OPEN_BEFORE_AFTER'})));
   const handle = document.createElement('span');
   handle.className = 'sp-drag-handle';
