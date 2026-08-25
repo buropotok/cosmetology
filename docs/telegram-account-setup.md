@@ -58,4 +58,4 @@ Changing a group creates a new pending code without disabling the old group. The
 
 ## Current history limitation
 
-New API history reads are scoped to authenticated users, and new posts store `user_id`. The legacy `/history.txt` prompt feed remains public/global for compatibility with ChatGPT's unauthenticated URL retrieval. Moving that feed to a user-authorized retrieval mechanism is a separate migration and should happen before treating it as private account history.
+New API history reads are scoped to authenticated users, new posts store `user_id`, and History images are fetched with Google authorization and checked against the owning post before R2 access. The legacy `/history.txt` prompt feed remains public/global for compatibility with ChatGPT's unauthenticated URL retrieval. Moving that feed to a user-authorized retrieval mechanism is a separate migration and should happen before treating it as private account history.

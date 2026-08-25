@@ -7,3 +7,5 @@ export interface TelegramPairing{pairingId:string;code:string;command:string;exp
 export const telegramConnection=()=>request<TelegramConnection>('/api/telegram/connection');
 export const createTelegramPairing=()=>request<TelegramPairing>('/api/telegram/pairing',{method:'POST'},true);
 export const disconnectTelegram=()=>request<TelegramConnection>('/api/telegram/connection',{method:'DELETE'},true);
+
+export async function protectedImage(imageUrl:string){const url=new URL(imageUrl);const response=await authenticatedFetch(`${url.pathname}${url.search}`);if(!response.ok)throw new ApiError('IMAGE_UNAVAILABLE','Изображение недоступно',response.status);return response.blob()}
