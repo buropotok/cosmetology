@@ -1,5 +1,5 @@
 import {ChatGPTAdapter} from './chatgpt-adapter';
-import {hasFiveChoices, parseResponse} from './response-parser';
+import {hasFiveChoices, parsePostDocumentFromResponse,parseResponseText} from './response-parser';
 import {choicePrompt, presets, renderPreset, rewrites} from '../presets/presets';
 import {
   buildAlternativeIllustrationPrompt,
@@ -10,11 +10,14 @@ import {
 import type {PublisherDraft, PublisherImage} from '../publisher/draft';
 import {buildImageFilename} from '../publisher/draft';
 import {PublishWorkflow} from './publish-workflow';
+import {plainTextToDocument,type PostDocument} from '../../../shared/post-document';
+import {createInlineTelegramPreview} from './telegram-preview';
 
 const adapter = new ChatGPTAdapter();
 const workflow = new PublishWorkflow();
 const imageInspectionSignatures = new WeakMap<HTMLElement, string>();
 let turnScanSignature = '';
+const publications=new WeakMap<HTMLElement,{sourceText:string;postDocument:PostDocument;fingerprint:string}>();
 
 function button(label: string, fn: () => void) {
   const element = document.createElement('button');
@@ -35,14 +38,15 @@ function fingerprint(text: string) {
   }
   return `${text.length}:${hash >>> 0}`;
 }
+function responseFingerprint(root:Element,text:string){const semantic=(node:Node):string=>{if(node.nodeType===Node.TEXT_NODE)return node.textContent??'';if(!(node instanceof Element)||node.matches('[data-social-publisher]'))return '';const tag=node.tagName.toLowerCase(),supported=/^(h[1-6]|p|strong|b|em|i|s|del|blockquote|ul|ol|li|a|br)$/.test(tag),href=tag==='a'?node.getAttribute('href')??'':'';return `${supported?`<${tag}:${href}>`:''}${[...node.childNodes].map(semantic).join('')}${supported?`</${tag}>`:''}`};return fingerprint(`${text}\0${semantic(root)}`)}
 
 function sendDraft(draft: PublisherDraft) {
   chrome.runtime.sendMessage({type: 'OPEN_PUBLISHER', draft});
   workflow.opened();
 }
 
-function showPhotoChoice(message: HTMLElement, text: string) {
-  workflow.start(message, text);
+function showPhotoChoice(message: HTMLElement, text: string,postDocument:PostDocument) {
+  workflow.start(message, text,postDocument);
   const choice = document.createElement('div');
   choice.dataset.socialPublisher = 'photo-choice';
   choice.className = 'sp-controls sp-workflow';
@@ -198,32 +202,40 @@ export function decorate() {
         if (!workflow.state.turn.querySelector('[data-social-publisher="image-candidate"]')) renderImageCandidate(workflow.state.turn, workflow.state.image);
         continue;
       }
-      const text = parseResponse(adapter.contentRoot(message));
+      const sourceRoot=adapter.contentRoot(message),text = parseResponseText(sourceRoot);
       const existing = [...message.querySelectorAll<HTMLElement>('[data-social-publisher="controls"]')];
+      const previews=[...message.querySelectorAll<HTMLElement>('[data-social-publisher="telegram-preview"]')];
       if (!text) {
         existing.forEach(controls => controls.remove());
+        previews.forEach(preview=>preview.remove());publications.delete(message);
         continue;
       }
 
-      const currentFingerprint = fingerprint(text);
-      if (existing[0]?.dataset.textFingerprint === currentFingerprint) {
+      const currentFingerprint = responseFingerprint(sourceRoot,text),discovery=hasFiveChoices(text);
+      if (existing[0]?.dataset.textFingerprint === currentFingerprint&&(discovery||previews[0]&&publications.has(message))) {
         existing.slice(1).forEach(controls => controls.remove());
+        previews.slice(1).forEach(preview=>preview.remove());
         continue;
       }
       existing.forEach(controls => controls.remove());
+      previews.forEach(preview=>preview.remove());
 
       const controls = document.createElement('div');
       controls.dataset.socialPublisher = 'controls';
       controls.dataset.textFingerprint = currentFingerprint;
       controls.className = 'sp-controls';
-      if (hasFiveChoices(text)) {
+      if (discovery) {
+        publications.delete(message);
         for (let number = 1; number <= 5; number++) {
           controls.append(button(String(number), () => adapter.insert(choicePrompt(number), true)));
         }
+        const publish=button('Опубликовать', () => showPhotoChoice(message,text,plainTextToDocument(text)));publish.className='sp-publish';controls.append(publish);
       } else {
+        const postDocument=parsePostDocumentFromResponse(sourceRoot);publications.set(message,{sourceText:text,postDocument,fingerprint:currentFingerprint});
+        message.append(createInlineTelegramPreview(postDocument));
+        const publish=button('Опубликовать', () => {const parsed=publications.get(message);if(parsed)showPhotoChoice(message,parsed.sourceText,parsed.postDocument)});publish.className='sp-publish';controls.append(publish);
         rewrites.forEach(([label, prompt]) => controls.append(button(label, () => adapter.insert(prompt, true))));
       }
-      controls.append(button('Опубликовать', () => showPhotoChoice(message, text)));
       message.append(controls);
     } catch (error) {
       console.debug('Social Publisher: message skipped', error);

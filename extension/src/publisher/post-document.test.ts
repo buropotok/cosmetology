@@ -1,5 +1,5 @@
 import {describe,expect,it} from 'vitest';
-import {deserializePostDocument, documentText, hasTelegramSpecificFormatting, plainTextToDocument, safeLink, type PostDocument} from '../../../shared/post-document';
+import {deserializePostDocument, documentText, hasTelegramSpecificFormatting,isPostDocument, plainTextToDocument, safeLink, type PostDocument} from '../../../shared/post-document';
 import {planTelegramPublication,renderTelegram} from '../../../shared/telegram-renderer';
 import {renderVK} from '../../../shared/vk-renderer';
 
@@ -20,6 +20,7 @@ describe('canonical PostDocument',()=>{
   it('falls back from an old or invalid draft to its plain text',()=>expect(documentText(deserializePostDocument({schemaVersion:0},'старый текст'))).toBe('старый текст'));
   it('rejects unsafe links',()=>{expect(safeLink('javascript:alert(1)')).toBeNull();expect(safeLink('data:text/html,x')).toBeNull();expect(safeLink('https://safe.test')).toBe('https://safe.test/')});
   it('detects Telegram-specific content for the VK warning',()=>expect(hasTelegramSpecificFormatting(document)).toBe(true));
+  it('rejects unknown marks, unsafe link marks and unknown blocks',()=>{expect(isPostDocument({schemaVersion:1,blocks:[{type:'paragraph',content:[{text:'x',marks:[{type:'code'}]}]}]})).toBe(false);expect(isPostDocument({schemaVersion:1,blocks:[{type:'paragraph',content:[{text:'x',marks:[{type:'link',href:'javascript:x'}]}]}]})).toBe(false);expect(isPostDocument({schemaVersion:1,blocks:[{type:'table',content:[]}]})).toBe(false)});
 });
 
 describe('platform renderers',()=>{

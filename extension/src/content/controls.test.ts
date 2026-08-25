@@ -35,6 +35,7 @@ describe('assistant message controls', () => {
     decorate();
     const message = document.querySelector<HTMLElement>('[data-message-author-role="assistant"]')!;
     const firstControls = message.querySelector<HTMLElement>('[data-social-publisher="controls"]')!;
+    expect(message.querySelector('[data-social-publisher="telegram-preview"]')).not.toBeNull();
     expect([...firstControls.querySelectorAll('button')].map(button => button.textContent)).not.toContain('1');
     [...firstControls.querySelectorAll('button')].find(button => button.textContent === 'Короче')!.click();
     expect(insert).toHaveBeenCalledWith(expect.stringContaining('короче'), true);
@@ -47,6 +48,7 @@ describe('assistant message controls', () => {
     expect(controls).toHaveLength(1);
     expect(controls[0]).not.toBe(firstControls);
     expect([...controls[0].querySelectorAll('button')].map(button => button.textContent)).toEqual(['1', '2', '3', '4', '5', 'Опубликовать']);
+    expect(message.querySelector('[data-social-publisher="telegram-preview"]')).toBeNull();
     controls[0].querySelector<HTMLButtonElement>('button')!.click();
     expect(insert).toHaveBeenLastCalledWith(expect.stringContaining('вариант №1'), true);
   });
@@ -69,9 +71,10 @@ describe('assistant message controls', () => {
     [...document.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === 'Фото не нужно')!.click();
     expect(sendMessage).toHaveBeenCalledWith({
       type: 'OPEN_PUBLISHER',
-      draft: {originalText: 'Готовый ответ', publicationText: 'Готовый ответ', imageMode: 'text_only', image: null}
+      draft: {originalText: 'Готовый ответ', publicationText: 'Готовый ответ',postDocument:{schemaVersion:1,blocks:[{type:'paragraph',content:[{text:'Готовый ответ'}]}]}, imageMode: 'text_only', image: null}
     });
   });
+  it('refreshes preview when semantic formatting changes without changing text',async()=>{const document=useDom('Ответ');vi.stubGlobal('chrome',{runtime:{sendMessage:vi.fn()}});const {decorate}=await import('./controls');decorate();const first=document.querySelector('[data-social-publisher="telegram-preview"]')!;document.querySelector('.markdown')!.innerHTML='<p><strong>Ответ</strong></p>';decorate();const second=document.querySelector('[data-social-publisher="telegram-preview"]')!;expect(second).not.toBe(first);expect(second.querySelector('strong')?.textContent).toBe('Ответ')});
 
   it('submits an illustration prompt and selects only the subsequent image', async () => {
     const document = useDom('Полный пост');
@@ -99,7 +102,7 @@ describe('assistant message controls', () => {
     observer.disconnect();
 
     expect(sendMessage).toHaveBeenLastCalledWith({type: 'OPEN_PUBLISHER', draft: expect.objectContaining({
-      originalText: 'Полный пост', publicationText: 'Полный пост', imageMode: 'illustration', image: expect.objectContaining({url: 'https://files.oaiusercontent.com/a.png'})
+      originalText: 'Полный пост', publicationText: 'Полный пост',postDocument:expect.objectContaining({schemaVersion:1}), imageMode: 'illustration', image: expect.objectContaining({url: 'https://files.oaiusercontent.com/a.png'})
     })});
   });
 
@@ -133,7 +136,10 @@ describe('assistant message controls', () => {
       imageMode: 'infographic',
       image: {url: 'https://chatgpt.com/backend-api/estuary/content?id=b'}
     });
+    expect(draft.postDocument.blocks).toEqual([{type:'heading',content:[{text:'Заголовок поста'}]}]);
   });
+
+  it('previews semantic DOM and publishes the exact associated PostDocument',async()=>{const document=useDom('placeholder'),message=document.querySelector<HTMLElement>('[data-message-author-role="assistant"]')!,markdown=document.querySelector<HTMLElement>('.markdown')!;markdown.innerHTML='<h3>Заголовок</h3><p><strong>Важно</strong></p><h4>Подробнее <em>(в Telegram текст будет раскрываемым)</em></h4><blockquote><p>Скрытый текст</p></blockquote><blockquote><strong>Цитата</strong></blockquote><p><a href="https://example.com">Записаться</a> <em>(в Telegram будет отображаться в виде кнопки)</em></p>';const sendMessage=vi.fn();vi.stubGlobal('chrome',{runtime:{sendMessage}});const {decorate}=await import('./controls');decorate();const preview=message.querySelector<HTMLElement>('[data-social-publisher="telegram-preview"]')!;expect(preview).not.toBeNull();expect(preview.querySelector('details')?.open).toBe(false);preview.querySelector<HTMLElement>('summary')!.click();expect(preview.querySelector('details')?.open).toBe(true);expect(preview.querySelector('.sp-tg-button')?.textContent).toBe('Записаться');expect(message.lastElementChild?.getAttribute('data-social-publisher')).toBe('controls');expect([...message.querySelectorAll<HTMLButtonElement>('[data-social-publisher="controls"] button')].map(button=>button.textContent)).toEqual(['Опубликовать','Короче','Подробнее','Другой вариант']);decorate();expect(message.querySelectorAll('[data-social-publisher="telegram-preview"]')).toHaveLength(1);[...message.querySelectorAll<HTMLButtonElement>('button')].find(button=>button.textContent==='Опубликовать')!.click();[...message.querySelectorAll<HTMLButtonElement>('button')].find(button=>button.textContent==='Фото не нужно')!.click();const draft=sendMessage.mock.calls[0][0].draft;expect(draft.postDocument.blocks.map((block:any)=>block.type)).toEqual(['heading','paragraph','details','quote']);expect(draft.postDocument.buttons).toEqual([{text:'Записаться',url:'https://example.com/'}]);expect(draft.publicationText).not.toContain('Telegram');});
 
   it('restores a draggable preset toolbar position', async () => {
     const document = useDom('Ответ');
