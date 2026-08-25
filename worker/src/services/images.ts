@@ -1,3 +1,5 @@
 import type {Env} from '../types';
 export async function storeImage(env:Env,postId:number,file:File){if(file.size>15*1024*1024)throw new Error('Изображение больше 15 МБ');if(!file.type.startsWith('image/'))throw new Error('Файл не является изображением');const ext=({"image/jpeg":"jpg","image/png":"png","image/webp":"webp","image/gif":"gif"} as Record<string,string>)[file.type]??'bin';const d=new Date(),key=`posts/${d.getUTCFullYear()}/${String(d.getUTCMonth()+1).padStart(2,'0')}/${postId}.${ext}`;await env.IMAGES.put(key,await file.arrayBuffer(),{httpMetadata:{contentType:file.type}});await env.DB.prepare('UPDATE posts SET image_key=? WHERE id=?').bind(key,postId).run();return key}
 export async function getImage(env:Env,key:string){return env.IMAGES.get(key)}
+
+export async function getOwnedImage(env:Env,userId:string,key:string){const owned=await env.DB.prepare('SELECT 1 owned FROM posts WHERE user_id=? AND image_key=?').bind(userId,key).first<{owned:number}>();return owned?getImage(env,key):null}

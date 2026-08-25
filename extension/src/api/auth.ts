@@ -1,0 +1,5 @@
+import {WORKER_BASE_URL} from '../config';
+export class ApiError extends Error{constructor(public code:string,message:string,public status:number){super(message)}}
+async function token(interactive:boolean){try{const result=await chrome.identity.getAuthToken({interactive});const value=typeof result==='string'?result:result?.token;if(!value)throw new Error('empty token');return value}catch{throw new ApiError('AUTH_REQUIRED','Не удалось определить аккаунт Google. Проверьте, что вы вошли в Chrome, и повторите.',401)}}
+async function clear(value:string){await chrome.identity.removeCachedAuthToken({token:value})}
+export async function authenticatedFetch(path:string,init:RequestInit={},interactive=false,retry=true):Promise<Response>{const credential=await token(interactive),response=await fetch(WORKER_BASE_URL+path,{...init,headers:{...(init.headers??{}),Authorization:`Bearer ${credential}`}});if(response.status===401&&retry){await clear(credential);return authenticatedFetch(path,init,interactive,false)}return response}

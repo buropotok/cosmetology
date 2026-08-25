@@ -7,7 +7,7 @@ const env = {
   VK_ID_SERVICE_TOKEN: 'confidential-service-token',
   PUBLISH_API_TOKEN: 'publisher-token',
   ALLOWED_EXTENSION_ORIGIN: 'chrome-extension://existing-extension'
-} as Env;
+} as unknown as Env;
 const debugUrl = 'https://worker.example/api/debug/vk-auth-test';
 const origin = 'https://buropotok.github.io';
 const authorization = {
@@ -186,6 +186,6 @@ describe('backend VK ID authorization diagnostic', () => {
 
     const publish = await worker.fetch(new Request('https://worker.example/api/publish', {method: 'POST'}), env);
     expect(publish.status).toBe(401);
-    expect((await publish.json() as {error: {code: string}}).error.code).toBe('UNAUTHORIZED');
+    expect((await publish.json() as {error: {code: string}}).error.code).toBe('AUTH_REQUIRED');
   });
 });

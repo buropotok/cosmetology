@@ -1,28 +1,29 @@
 import type {ImageMode, PublisherDraft, PublisherImage} from '../publisher/draft';
 import {extractTitle, normalizePublicationText} from '../publisher/draft';
+import {documentText,plainTextToDocument,type PostDocument} from '../../../shared/post-document';
 
 type GeneratingMode = Extract<ImageMode, 'illustration' | 'infographic'>;
 export type WorkflowState =
   | {kind: 'idle'}
-  | {kind: 'photo_choice'; source: HTMLElement; originalText: string}
-  | {kind: 'waiting_for_image'; source: HTMLElement; originalText: string; mode: GeneratingMode; boundaryTurn: HTMLElement | null}
-  | {kind: 'image_candidate'; source: HTMLElement; originalText: string; mode: GeneratingMode; boundaryTurn: HTMLElement | null; turn: HTMLElement; image: PublisherImage}
+  | {kind: 'photo_choice'; source: HTMLElement; originalText: string; postDocument:PostDocument}
+  | {kind: 'waiting_for_image'; source: HTMLElement; originalText: string;postDocument:PostDocument; mode: GeneratingMode; boundaryTurn: HTMLElement | null}
+  | {kind: 'image_candidate'; source: HTMLElement; originalText: string;postDocument:PostDocument; mode: GeneratingMode; boundaryTurn: HTMLElement | null; turn: HTMLElement; image: PublisherImage}
   | {kind: 'preparing_publisher'; draft: PublisherDraft}
   | {kind: 'publisher_open'; draft: PublisherDraft};
 
 export class PublishWorkflow {
   state: WorkflowState = {kind: 'idle'};
 
-  start(source: HTMLElement, originalText: string) {
+  start(source: HTMLElement, originalText: string,postDocument:PostDocument=plainTextToDocument(originalText)) {
     this.clearOwnedUI();
-    this.state = {kind: 'photo_choice', source, originalText: normalizePublicationText(originalText)};
+    this.state = {kind: 'photo_choice', source, originalText: normalizePublicationText(originalText),postDocument:structuredClone(postDocument)};
   }
 
   waitForImage(mode: GeneratingMode, boundaryTurn: HTMLElement | null) {
     if (this.state.kind !== 'photo_choice' && this.state.kind !== 'image_candidate') return false;
-    const {source, originalText} = this.state;
+    const {source, originalText,postDocument} = this.state;
     this.clearCandidateUI();
-    this.state = {kind: 'waiting_for_image', source, originalText, mode, boundaryTurn};
+    this.state = {kind: 'waiting_for_image', source, originalText,postDocument, mode, boundaryTurn};
     return true;
   }
 
@@ -40,13 +41,14 @@ export class PublishWorkflow {
 
   textOnlyDraft() {
     if (this.state.kind !== 'photo_choice') return;
-    return this.prepare({originalText: this.state.originalText, publicationText: this.state.originalText, imageMode: 'text_only', image: null});
+    return this.prepare({originalText: this.state.originalText, publicationText: documentText(this.state.postDocument),postDocument:this.state.postDocument, imageMode: 'text_only', image: null});
   }
 
   selectedImageDraft() {
     if (this.state.kind !== 'image_candidate') return;
-    const publicationText = this.state.mode === 'infographic' ? extractTitle(this.state.originalText) : this.state.originalText;
-    return this.prepare({originalText: this.state.originalText, publicationText, imageMode: this.state.mode, image: this.state.image});
+    const publicationText = this.state.mode === 'infographic' ? extractTitle(documentText(this.state.postDocument)) : documentText(this.state.postDocument);
+    const postDocument=this.state.mode==='infographic'?{schemaVersion:1 as const,blocks:[{type:'heading' as const,content:[{text:publicationText}]}]}:this.state.postDocument;
+    return this.prepare({originalText: this.state.originalText, publicationText,postDocument, imageMode: this.state.mode, image: this.state.image});
   }
 
   opened() {
