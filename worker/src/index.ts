@@ -21,6 +21,7 @@ import {
   getConnection,
   telegramWebhook,
 } from './services/telegram-account';
+import { publishFromMiniApp } from './services/miniapp';
 
 const json = (
   body: unknown,
@@ -72,6 +73,10 @@ async function route(req: Request, env: Env) {
     u.pathname === '/api/telegram/webhook'
   ) {
     return json(await telegramWebhook(req, env));
+  }
+
+  if (req.method === 'POST' && u.pathname === '/api/miniapp/publish') {
+    return json(await publishFromMiniApp(req, env));
   }
 
   if (req.method === 'GET' && u.pathname === '/history.txt') {
