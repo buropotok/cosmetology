@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <title>Новый пост</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <main>
+    <header><p id="greeting" class="eyebrow">Telegram Mini App</p><h1>Новый пост</h1></header>
+    <form id="publish-form">
+      <label class="upload" for="image"><span>Выбрать изображение</span><small>JPEG, PNG или другое изображение до 10 МБ</small></label>
+      <input id="image" name="image" type="file" accept="image/*">
+      <div id="preview-wrap" class="preview" hidden><img id="preview" alt="Предпросмотр выбранного изображения"><button id="remove-image" type="button" class="secondary">Убрать изображение</button></div>
+      <label for="text">Текст публикации</label>
+      <textarea id="text" name="text" maxlength="4096" rows="7" placeholder="Введите текст публикации..."></textarea>
+      <button id="publish" type="submit">Опубликовать</button>
+      <p id="status" role="status" aria-live="polite"></p>
+    </form>
+  </main>
+</body>
+</html>

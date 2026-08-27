@@ -3,6 +3,11 @@
 	"name": "cosmetology-social-publisher",
 	"main": "src/index.ts",
 	"compatibility_date": "2026-08-17",
+	"assets": {
+		"directory": "../miniapp",
+		"binding": "ASSETS",
+		"run_worker_first": ["/api/*", "/history.txt"]
+	},
 	"d1_databases": [
 		{
 			"binding": "DB",
