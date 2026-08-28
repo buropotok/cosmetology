@@ -9,4 +9,38 @@ export async function getConnection(env:Env,user:CurrentUser){const row=await en
 export async function disconnect(env:Env,user:CurrentUser){await env.DB.prepare("UPDATE telegram_connections SET status='inactive',updated_at=CURRENT_TIMESTAMP WHERE user_id=?").bind(user.id).run();await env.DB.prepare("UPDATE telegram_pairings SET status='cancelled' WHERE user_id=? AND status='pending'").bind(user.id).run();return{connected:false}}
 export async function activeChatId(env:Env,userId:string){return(await env.DB.prepare("SELECT chat_id FROM telegram_connections WHERE user_id=? AND status='active'").bind(userId).first<{chat_id:string}>())?.chat_id}
 export function parseConnectCommand(text:string){return text.trim().match(/^\/connect(?:@[A-Za-z0-9_]+)?\s+(\d{6})$/i)?.[1]??null}
-export async function telegramWebhook(request:Request,env:Env){if(request.headers.get('x-telegram-bot-api-secret-token')!==env.TELEGRAM_WEBHOOK_SECRET)throw new AppError('WEBHOOK_UNAUTHORIZED','Forbidden',403);const update=await request.json<any>().catch(()=>null),message=update?.message,text=typeof message?.text==='string'?message.text:'',code=parseConnectCommand(text);if(/^\/start(?:@\w+)?(?:\s|$)/i.test(text)){const url=env.MINIAPP_URL?.trim();if(url&&message?.chat?.id!=null)await sendTelegramMiniAppButton(env,String(message.chat.id),url);return{ok:true}}if(!code)return{ok:true};const chatType=message?.chat?.type,chatId=message?.chat?.id,fromId=message?.from?.id;if(!['group','supergroup'].includes(chatType)||chatId==null||fromId==null)return{ok:true};try{await rateLimit(env,`connect:${String(chatId)}:${String(fromId)}`,10,600)}catch{await sendTelegramText(env,String(chatId),'Слишком много попыток. Повторите позже.');return{ok:true}}const hash=await codeHash(code,env),pairing=await env.DB.prepare("SELECT id,user_id,telegram_user_id FROM telegram_pairings WHERE code_hash=? AND status='pending' AND expires_at>CURRENT_TIMESTAMP").bind(hash).first<{id:string;user_id:string;telegram_user_id:string|null}>();if(!pairing){await sendTelegramText(env,String(chatId),'Код подключения недействителен или истёк.\nСоздайте новый код.');return{ok:true}}if(pairing.telegram_user_id!==null&&pairing.telegram_user_id!==String(fromId)){await sendTelegramText(env,String(chatId),'Этот код создан другим Telegram-пользователем.');return{ok:true}}const member=await getTelegramChatMember(env,String(chatId),String(fromId));if(!['administrator','creator'].includes(member.status)){await sendTelegramText(env,String(chatId),'Подключить группу может только администратор.');return{ok:true}}try{await completeTelegramLink(env,{pairingId:pairing.id,userId:pairing.user_id,telegramUserId:String(fromId),chatId:String(chatId),chatTitle:message.chat.title??null,chatType})}catch(error){if(error instanceof AppError&&['TELEGRAM_IDENTITY_CONFLICT','TELEGRAM_LINK_FAILED'].includes(error.code)){await sendTelegramText(env,String(chatId),error.message);return{ok:true}}throw error}await sendTelegramText(env,String(chatId),'✅ Группа подключена к Cosmetology Publisher.');return{ok:true}}
+export async function telegramWebhook(request:Request,env:Env){
+  if(request.headers.get('x-telegram-bot-api-secret-token')!==env.TELEGRAM_WEBHOOK_SECRET)throw new AppError('WEBHOOK_UNAUTHORIZED','Forbidden',403);
+  const update=await request.json<any>().catch(()=>null);
+  const message=update?.message,rawText=typeof message?.text==='string'?message.text:'',code=parseConnectCommand(rawText),diagnosticText=code?rawText.replace(/\d{6}/,'[REDACTED]'):rawText||null;
+  console.log({
+    event:'telegram_webhook_update',
+    updateId:update?.update_id??null,
+    chatId:message?.chat?.id!=null?String(message.chat.id):null,
+    chatType:message?.chat?.type??null,
+    fromId:message?.from?.id!=null?String(message.from.id):null,
+    text:diagnosticText,
+  });
+  if(/^\/start(?:@\w+)?(?:\s|$)/i.test(rawText)){
+    const chatId=message?.chat?.id!=null?String(message.chat.id):null,url=env.MINIAPP_URL?.trim();
+    if(chatId){
+      console.log({event:'telegram_start',chatId,miniAppConfigured:Boolean(url)});
+      if(url){
+        await sendTelegramMiniAppButton(env,chatId,url);
+        console.log({event:'telegram_start_sent',chatId});
+      }
+    }
+    return{ok:true};
+  }
+  if(!code)return{ok:true};
+  const chatType=message?.chat?.type,chatId=message?.chat?.id,fromId=message?.from?.id;
+  if(!['group','supergroup'].includes(chatType)||chatId==null||fromId==null)return{ok:true};
+  try{await rateLimit(env,`connect:${String(chatId)}:${String(fromId)}`,10,600)}catch{await sendTelegramText(env,String(chatId),'Слишком много попыток. Повторите позже.');return{ok:true}}
+  const hash=await codeHash(code,env),pairing=await env.DB.prepare("SELECT id,user_id,telegram_user_id FROM telegram_pairings WHERE code_hash=? AND status='pending' AND expires_at>CURRENT_TIMESTAMP").bind(hash).first<{id:string;user_id:string;telegram_user_id:string|null}>();
+  if(!pairing){await sendTelegramText(env,String(chatId),'Код подключения недействителен или истёк.\nСоздайте новый код.');return{ok:true}}
+  if(pairing.telegram_user_id!==null&&pairing.telegram_user_id!==String(fromId)){await sendTelegramText(env,String(chatId),'Этот код создан другим Telegram-пользователем.');return{ok:true}}
+  const member=await getTelegramChatMember(env,String(chatId),String(fromId));
+  if(!['administrator','creator'].includes(member.status)){await sendTelegramText(env,String(chatId),'Подключить группу может только администратор.');return{ok:true}}
+  try{await completeTelegramLink(env,{pairingId:pairing.id,userId:pairing.user_id,telegramUserId:String(fromId),chatId:String(chatId),chatTitle:message.chat.title??null,chatType})}catch(error){if(error instanceof AppError&&['TELEGRAM_IDENTITY_CONFLICT','TELEGRAM_LINK_FAILED'].includes(error.code)){await sendTelegramText(env,String(chatId),error.message);return{ok:true}}throw error}
+  await sendTelegramText(env,String(chatId),'✅ Группа подключена к Cosmetology Publisher.');return{ok:true}
+}

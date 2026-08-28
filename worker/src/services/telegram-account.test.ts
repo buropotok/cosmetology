@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Env } from '../types';
 import { parseConnectCommand, telegramWebhook } from './telegram-account';
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe('Telegram connect command', () => {
   it('accepts plain and bot-qualified commands', () => { expect(parseConnectCommand('/connect 483729')).toBe('483729'); expect(parseConnectCommand('/connect@OurBot 483729')).toBe('483729'); });
@@ -57,4 +57,32 @@ describe('/connect Telegram-owned pairing', () => {
   it('rejects a non-admin owner', async () => { const { env, batch } = webhookEnv(); const fetch = telegramFetch('member'); await telegramWebhook(connectRequest(), env); expect(batch).not.toHaveBeenCalled(); expect(sentText(fetch)).toContain('только администратор'); });
   it('rejects expired or used codes', async () => { const { env, batch } = webhookEnv({ pairing: null }); const fetch = telegramFetch(); await telegramWebhook(connectRequest(), env); expect(batch).not.toHaveBeenCalled(); expect(sentText(fetch)).toContain('недействителен или истёк'); });
   it('preserves legacy Extension pairing without a Telegram owner', async () => { const { env, batch } = webhookEnv({ pairing: { id: 'tgp_1', user_id: 'usr_google', telegram_user_id: null }, identities: [] }); telegramFetch(); await telegramWebhook(connectRequest(), env); expect(batch).toHaveBeenCalledOnce(); });
+});
+
+describe('/start diagnostics', () => {
+  it('logs the safe update and successful Mini App button delivery', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    const fetch = telegramFetch();
+    const request = new Request('https://worker.example/api/telegram/webhook', {
+      method: 'POST',
+      headers: { 'x-telegram-bot-api-secret-token': 'secret', 'content-type': 'application/json' },
+      body: JSON.stringify({ update_id: 123, message: { text: '/start', from: { id: 77, username: 'not-logged' }, chat: { id: 77, type: 'private' } } }),
+    });
+    const { env } = webhookEnv();
+    env.MINIAPP_URL = 'https://worker.example/';
+    await expect(telegramWebhook(request, env)).resolves.toEqual({ ok: true });
+    expect(log).toHaveBeenNthCalledWith(1, { event: 'telegram_webhook_update', updateId: 123, chatId: '77', chatType: 'private', fromId: '77', text: '/start' });
+    expect(log).toHaveBeenNthCalledWith(2, { event: 'telegram_start', chatId: '77', miniAppConfigured: true });
+    expect(log).toHaveBeenNthCalledWith(3, { event: 'telegram_start_sent', chatId: '77' });
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+
+  it('does not expose a pairing code in the general webhook diagnostic', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    const { env } = webhookEnv({ pairing: null });
+    telegramFetch();
+    await telegramWebhook(connectRequest(), env);
+    expect(log).toHaveBeenCalledWith(expect.objectContaining({ event: 'telegram_webhook_update', text: '/connect [REDACTED]' }));
+    expect(JSON.stringify(log.mock.calls)).not.toContain('483729');
+  });
 });
