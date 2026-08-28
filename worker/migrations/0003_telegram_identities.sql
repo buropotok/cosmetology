@@ -1,0 +1,9 @@
+PRAGMA foreign_keys = ON;
+
+CREATE TABLE telegram_identities (
+  telegram_user_id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL UNIQUE,
+  linked_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+);
