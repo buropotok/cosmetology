@@ -26,9 +26,10 @@ npm run db:migrate -w worker
 wrangler secret put TELEGRAM_BOT_TOKEN
 wrangler secret put TELEGRAM_WEBHOOK_SECRET
 wrangler secret put PAIRING_CODE_SECRET
+openssl rand -base64 32 | wrangler secret put MANAGED_BOT_ENCRYPTION_KEY
 ```
 
-Set `GOOGLE_OAUTH_CLIENT_ID` and `ALLOWED_EXTENSION_ORIGIN` as Worker vars (use separate values/configurations for development and production). `PAIRING_CODE_SECRET` should be a random high-entropy value. `TELEGRAM_BOT_TOKEN` and webhook/pairing secrets exist only in Worker secrets. The old `PUBLISH_API_TOKEN` and `TELEGRAM_CHAT_ID` are no longer product inputs.
+Set `GOOGLE_OAUTH_CLIENT_ID` and `ALLOWED_EXTENSION_ORIGIN` as Worker vars (use separate values/configurations for development and production). `PAIRING_CODE_SECRET` should be a random high-entropy value. `TELEGRAM_BOT_TOKEN`, webhook/pairing secrets, and `MANAGED_BOT_ENCRYPTION_KEY` exist only in Worker secrets. The old `PUBLISH_API_TOKEN` and `TELEGRAM_CHAT_ID` are no longer product inputs.
 
 For local Worker development, apply `npm run db:migrate:local -w worker` and put non-production values in `worker/.dev.vars` (never commit that file). Because Google calls the Worker over HTTPS in normal testing, `wrangler dev --remote` or a deployed development Worker is usually simplest.
 
@@ -40,10 +41,17 @@ Create the bot in BotFather. Privacy Mode may remain enabled: Telegram delivers 
 curl -X POST "https://api.telegram.org/bot$TG_BOT_TOKEN/setWebhook" \
   -d "url=https://your-worker.workers.dev/api/telegram/webhook" \
   -d "secret_token=$TELEGRAM_WEBHOOK_SECRET" \
-  -d 'allowed_updates=["message"]'
+  -d 'allowed_updates=["message","managed_bot"]'
 ```
 
-The Worker checks `X-Telegram-Bot-Api-Secret-Token`. Do not place either secret in the extension, browser storage, logs, or documentation.
+The Worker checks `X-Telegram-Bot-Api-Secret-Token`. The committed
+`allowed_updates` list must retain both `message` and `managed_bot`, otherwise
+Telegram will not deliver Managed Bot updates. Do not place any secret in the
+extension, browser storage, logs, or documentation.
+
+Это конфигурация только manager bot. Индивидуальные managed bots Worker
+регистрирует автоматически после проверки и шифрования credential, отдельно с
+`allowed_updates=["message","my_chat_member"]` и уникальным `secret_token`.
 
 ## 4. End-to-end check
 

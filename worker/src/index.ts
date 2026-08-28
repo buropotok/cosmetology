@@ -21,6 +21,13 @@ import {
   getConnection,
   telegramWebhook,
 } from './services/telegram-account';
+import { createMiniAppPairing, getMiniAppStatus, publishFromMiniApp } from './services/miniapp';
+import {
+  createManagedBotLink,
+  getManagerBotDiagnostic,
+  requestManagedBotCreation,
+} from './services/telegram-managed-bots';
+import { createManagedBotGroupLink, managedBotWebhook } from './services/managed-bot-onboarding';
 
 const json = (
   body: unknown,
@@ -72,6 +79,49 @@ async function route(req: Request, env: Env) {
     u.pathname === '/api/telegram/webhook'
   ) {
     return json(await telegramWebhook(req, env));
+  }
+
+  const managedWebhook = u.pathname.match(/^\/api\/telegram\/managed\/([A-Za-z0-9_-]{32})$/);
+  if (req.method === 'POST' && managedWebhook) {
+    return json(await managedBotWebhook(req, env, managedWebhook[1]));
+  }
+
+  if (req.method === 'POST' && u.pathname === '/api/miniapp/publish') {
+    return json(await publishFromMiniApp(req, env));
+  }
+
+  if (req.method === 'GET' && u.pathname === '/api/miniapp/me') {
+    return json(await getMiniAppStatus(req, env), 200, {
+      'cache-control': 'no-store',
+    });
+  }
+
+  if (
+    req.method === 'POST' &&
+    u.pathname === '/api/miniapp/telegram/pairing'
+  ) {
+    return json(await createMiniAppPairing(req, env), 201);
+  }
+
+  if (
+    req.method === 'POST' &&
+    u.pathname === '/api/miniapp/telegram/managed-bot/group-link'
+  ) {
+    return json(await createManagedBotGroupLink(req, env), 201);
+  }
+
+  if (
+    req.method === 'POST' &&
+    u.pathname === '/api/miniapp/debug/managed-bot/create-link'
+  ) {
+    return json(await createManagedBotLink(req, env), 201);
+  }
+
+  if (
+    req.method === 'POST' &&
+    u.pathname === '/api/miniapp/debug/managed-bot/request'
+  ) {
+    return json(await requestManagedBotCreation(req, env), 201);
   }
 
   if (req.method === 'GET' && u.pathname === '/history.txt') {
@@ -181,6 +231,13 @@ async function route(req: Request, env: Env) {
   }
 
   const user = await requireUser(req, env);
+
+  if (
+    req.method === 'GET' &&
+    u.pathname === '/api/debug/telegram/manager'
+  ) {
+    return json(await getManagerBotDiagnostic(env), 200, headers);
+  }
 
   if (
     req.method === 'POST' &&
