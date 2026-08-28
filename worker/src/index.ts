@@ -21,7 +21,7 @@ import {
   getConnection,
   telegramWebhook,
 } from './services/telegram-account';
-import { getMiniAppStatus, publishFromMiniApp } from './services/miniapp';
+import { createMiniAppPairing, getMiniAppStatus, publishFromMiniApp } from './services/miniapp';
 
 const json = (
   body: unknown,
@@ -83,6 +83,13 @@ async function route(req: Request, env: Env) {
     return json(await getMiniAppStatus(req, env), 200, {
       'cache-control': 'no-store',
     });
+  }
+
+  if (
+    req.method === 'POST' &&
+    u.pathname === '/api/miniapp/telegram/pairing'
+  ) {
+    return json(await createMiniAppPairing(req, env), 201);
   }
 
   if (req.method === 'GET' && u.pathname === '/history.txt') {

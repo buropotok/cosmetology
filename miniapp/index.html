@@ -16,6 +16,21 @@
       <strong id="account-title">Проверяем подключение…</strong>
       <span id="account-detail">Подождите немного</span>
     </section>
+    <section id="onboarding" class="onboarding" hidden>
+      <h2>Подключите Telegram-группу</h2>
+      <ol>
+        <li>Добавьте этого бота в нужную группу.</li>
+        <li>Выдайте боту право отправлять сообщения и фотографии.</li>
+        <li>Создайте код и отправьте показанную команду в группе.</li>
+      </ol>
+      <button id="create-pairing" type="button">Подключить Telegram-группу</button>
+      <div id="pairing" class="pairing" hidden>
+        <span>Отправьте в группе:</span>
+        <code id="pairing-command"></code>
+        <small id="pairing-expiry"></small>
+        <button id="recheck" type="button" class="secondary">Проверить подключение</button>
+      </div>
+    </section>
     <form id="publish-form">
       <label class="upload" for="image"><span>Выбрать изображение</span><small>JPEG, PNG или другое изображение до 10 МБ</small></label>
       <input id="image" name="image" type="file" accept="image/*">

@@ -13,11 +13,21 @@ const status = document.querySelector('#status');
 const account = document.querySelector('#account');
 const accountTitle = document.querySelector('#account-title');
 const accountDetail = document.querySelector('#account-detail');
+const onboarding = document.querySelector('#onboarding');
+const createPairing = document.querySelector('#create-pairing');
+const pairing = document.querySelector('#pairing');
+const pairingCommand = document.querySelector('#pairing-command');
+const pairingExpiry = document.querySelector('#pairing-expiry');
+const recheck = document.querySelector('#recheck');
 let previewUrl;
-let accountReady = false;
+let connectionReady = false;
 
 const user = webApp?.initDataUnsafe?.user;
 if (user?.first_name) document.querySelector('#greeting').textContent = `Здравствуйте, ${user.first_name}`;
+
+function authHeaders() {
+  return { Authorization: `tma ${webApp.initData}` };
+}
 
 function setStatus(message, kind = '') {
   status.textContent = message;
@@ -39,29 +49,51 @@ function clearImage() {
 }
 
 async function loadAccount() {
+  connectionReady = false;
+  publish.disabled = true;
   if (!webApp?.initData) {
     setAccount('Приложение открыто вне Telegram', 'Откройте его кнопкой в Telegram-боте', 'error');
     return;
   }
+  setAccount('Проверяем подключение…', 'Подождите немного');
   try {
-    const response = await fetch('/api/miniapp/me', { headers: { Authorization: `tma ${webApp.initData}` } });
+    const response = await fetch('/api/miniapp/me', { headers: authHeaders() });
     const result = await response.json().catch(() => null);
     if (!response.ok) throw new Error(result?.error?.message || 'Не удалось проверить подключение.');
-    if (!result.linked) {
-      setAccount('Аккаунт ещё не связан', 'Создайте код подключения в расширении и отправьте /connect в группе', 'error');
-      return;
-    }
     if (!result.connection?.connected) {
-      setAccount('Telegram-группа не подключена', 'Подключите группу через расширение', 'error');
+      onboarding.hidden = false;
+      setAccount('Telegram-группа не подключена', 'Подключите группу прямо из Mini App', 'error');
       return;
     }
-    accountReady = true;
+    connectionReady = true;
     publish.disabled = false;
+    onboarding.hidden = true;
+    pairing.hidden = true;
     setAccount(`Публикация в: ${result.connection.chatTitle}`, 'Группа подключена', 'connected');
   } catch (error) {
     setAccount('Не удалось проверить подключение', error instanceof Error ? error.message : 'Откройте приложение заново', 'error');
   }
 }
+
+createPairing.addEventListener('click', async () => {
+  createPairing.disabled = true;
+  createPairing.textContent = 'Создаём код…';
+  try {
+    const response = await fetch('/api/miniapp/telegram/pairing', { method: 'POST', headers: authHeaders() });
+    const result = await response.json().catch(() => null);
+    if (!response.ok) throw new Error(result?.error?.message || 'Не удалось создать код подключения.');
+    pairingCommand.textContent = result.command;
+    pairingExpiry.textContent = `Код действует до ${new Date(result.expiresAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    pairing.hidden = false;
+    createPairing.textContent = 'Создать новый код';
+  } catch (error) {
+    setStatus(error instanceof Error ? error.message : 'Не удалось создать код.', 'error');
+    createPairing.textContent = 'Подключить Telegram-группу';
+  } finally {
+    createPairing.disabled = false;
+  }
+});
+recheck.addEventListener('click', loadAccount);
 
 imageInput.addEventListener('change', () => {
   const file = imageInput.files?.[0];
@@ -76,7 +108,7 @@ removeImage.addEventListener('click', clearImage);
 
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
-  if (!accountReady) return setStatus('Сначала свяжите аккаунт и подключите группу.', 'error');
+  if (!connectionReady) return setStatus('Сначала подключите Telegram-группу.', 'error');
   if (!text.value.trim() && !imageInput.files?.[0]) return setStatus('Добавьте текст или изображение.', 'error');
   publish.disabled = true;
   publish.textContent = 'Публикуем…';
@@ -85,7 +117,7 @@ form.addEventListener('submit', async (event) => {
   body.set('text', text.value);
   if (imageInput.files?.[0]) body.set('image', imageInput.files[0]);
   try {
-    const response = await fetch('/api/miniapp/publish', { method: 'POST', headers: { Authorization: `tma ${webApp.initData}` }, body });
+    const response = await fetch('/api/miniapp/publish', { method: 'POST', headers: authHeaders(), body });
     const result = await response.json().catch(() => null);
     if (!response.ok) throw new Error(result?.error?.message || 'Не удалось опубликовать. Попробуйте ещё раз.');
     text.value = '';
@@ -96,7 +128,7 @@ form.addEventListener('submit', async (event) => {
     setStatus(error instanceof Error ? error.message : 'Не удалось опубликовать.', 'error');
     webApp.HapticFeedback?.notificationOccurred('error');
   } finally {
-    publish.disabled = !accountReady;
+    publish.disabled = !connectionReady;
     publish.textContent = 'Опубликовать';
   }
 });
