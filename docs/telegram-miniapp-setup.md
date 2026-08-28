@@ -106,6 +106,26 @@ MINIAPP_URL='https://cosmetology-social-publisher.buropotok.workers.dev/' \
 node scripts/set-telegram-menu-button.mjs
 ```
 
+## Telegram Managed Bot — PoC
+
+Mini App содержит отдельный экспериментальный блок, который запрашивает
+`POST /api/miniapp/debug/managed-bot/create-link` с проверенным TMA initData.
+Worker генерирует случайный username вида `cosmo_sofa_<6 chars>_bot` и
+возвращает native deep link `https://t.me/newbot/cosmo_sofa_bot/...`. Создание
+происходит полностью в интерфейсе Telegram и не меняет основной publisher flow.
+
+Webhook поддерживает оба сигнала Bot API 9.6: `Update.managed_bot` и
+`Message.managed_bot_created`. Owner определяется только из соответствующего
+Telegram update. Для `Update.managed_bot` Worker получает token методом
+`getManagedBotToken`, проверяет его отдельным `getMe` и не сохраняет и не
+логирует token. В D1 сохраняются только безопасные owner/bot identifiers и
+публичные имя/username в таблице `telegram_managed_bots` из migration `0005`.
+
+Google-authenticated diagnostic `GET /api/debug/telegram/manager` вызывает
+`getMe` Manager Bot и возвращает только username и `canManageBots`. Endpoint
+расположен за существующим `requireUser` и не является публичным unrestricted
+diagnostic endpoint.
+
 ## End-to-end проверка с новым Telegram account
 
 1. Применить migration и развернуть Worker.

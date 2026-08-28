@@ -19,6 +19,8 @@ const pairing = document.querySelector('#pairing');
 const pairingCommand = document.querySelector('#pairing-command');
 const pairingExpiry = document.querySelector('#pairing-expiry');
 const recheck = document.querySelector('#recheck');
+const createManagedBot = document.querySelector('#create-managed-bot');
+const managedBotStatus = document.querySelector('#managed-bot-status');
 let previewUrl;
 let connectionReady = false;
 
@@ -130,6 +132,30 @@ form.addEventListener('submit', async (event) => {
   } finally {
     publish.disabled = !connectionReady;
     publish.textContent = 'Опубликовать';
+  }
+});
+
+createManagedBot.addEventListener('click', async () => {
+  if (!webApp?.initData) {
+    managedBotStatus.textContent = 'Откройте Mini App внутри Telegram.';
+    return;
+  }
+  createManagedBot.disabled = true;
+  managedBotStatus.textContent = 'Открываем Telegram…';
+  try {
+    const response = await fetch('/api/miniapp/debug/managed-bot/create-link', {
+      method: 'POST',
+      headers: authHeaders(),
+    });
+    const result = await response.json().catch(() => null);
+    if (!response.ok) throw new Error(result?.error?.message || 'Не удалось создать ссылку.');
+    managedBotStatus.textContent = `Предложенный username: @${result.suggestedUsername}`;
+    if (webApp.openTelegramLink) webApp.openTelegramLink(result.url);
+    else window.location.href = result.url;
+  } catch (error) {
+    managedBotStatus.textContent = error instanceof Error ? error.message : 'Не удалось открыть Telegram.';
+  } finally {
+    createManagedBot.disabled = false;
   }
 });
 

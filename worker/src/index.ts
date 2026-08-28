@@ -22,6 +22,10 @@ import {
   telegramWebhook,
 } from './services/telegram-account';
 import { createMiniAppPairing, getMiniAppStatus, publishFromMiniApp } from './services/miniapp';
+import {
+  createManagedBotLink,
+  getManagerBotDiagnostic,
+} from './services/telegram-managed-bots';
 
 const json = (
   body: unknown,
@@ -90,6 +94,13 @@ async function route(req: Request, env: Env) {
     u.pathname === '/api/miniapp/telegram/pairing'
   ) {
     return json(await createMiniAppPairing(req, env), 201);
+  }
+
+  if (
+    req.method === 'POST' &&
+    u.pathname === '/api/miniapp/debug/managed-bot/create-link'
+  ) {
+    return json(await createManagedBotLink(req, env), 201);
   }
 
   if (req.method === 'GET' && u.pathname === '/history.txt') {
@@ -199,6 +210,13 @@ async function route(req: Request, env: Env) {
   }
 
   const user = await requireUser(req, env);
+
+  if (
+    req.method === 'GET' &&
+    u.pathname === '/api/debug/telegram/manager'
+  ) {
+    return json(await getManagerBotDiagnostic(env), 200, headers);
+  }
 
   if (
     req.method === 'POST' &&

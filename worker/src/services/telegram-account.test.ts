@@ -86,3 +86,28 @@ describe('/start diagnostics', () => {
     expect(JSON.stringify(log.mock.calls)).not.toContain('483729');
   });
 });
+
+describe('Managed Bot webhook integration', () => {
+  it('handles managed_bot before message commands and never logs its token', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    const { env, prepared } = webhookEnv();
+    const managedToken = 'managed:secret-token';
+    const fetch = vi.fn(async (url: string, _init?: RequestInit) => {
+      if (url.endsWith('/getManagedBotToken')) return new Response(JSON.stringify({ ok: true, result: managedToken }));
+      if (url.includes(`/bot${managedToken}/getMe`)) return new Response(JSON.stringify({ ok: true, result: { id: 9001, username: 'created_bot', first_name: 'Created' } }));
+      throw new Error(`Unexpected Telegram call: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetch);
+    const request = new Request('https://worker.example/api/telegram/webhook', {
+      method: 'POST',
+      headers: { 'x-telegram-bot-api-secret-token': 'secret', 'content-type': 'application/json' },
+      body: JSON.stringify({ update_id: 500, managed_bot: { user: { id: 77 }, bot: { id: 9001, username: 'created_bot', first_name: 'Created' } } }),
+    });
+    await expect(telegramWebhook(request, env)).resolves.toEqual({ ok: true });
+    expect(fetch.mock.calls[0][0]).toContain('/getManagedBotToken');
+    expect((fetch.mock.calls[0][1]?.body as FormData).get('user_id')).toBe('9001');
+    expect(fetch.mock.calls[1][0]).toContain(`/bot${managedToken}/getMe`);
+    expect(prepared.some(({ sql }) => sql.includes('INSERT INTO telegram_managed_bots'))).toBe(true);
+    expect(JSON.stringify(log.mock.calls)).not.toContain(managedToken);
+  });
+});

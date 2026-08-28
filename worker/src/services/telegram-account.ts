@@ -1,4 +1,4 @@
-import {AppError,type Env} from '../types';import type {CurrentUser} from './auth';import {getTelegramChatMember,sendTelegramMiniAppButton,sendTelegramText} from './telegram';import {completeTelegramLink} from './telegram-identity';
+import {AppError,type Env} from '../types';import type {CurrentUser} from './auth';import {getTelegramChatMember,sendTelegramMiniAppButton,sendTelegramText} from './telegram';import {completeTelegramLink} from './telegram-identity';import {handleManagedBotUpdate} from './telegram-managed-bots';
 const TTL_SECONDS=600,encoder=new TextEncoder();
 async function codeHash(code:string,env:Env){const key=await crypto.subtle.importKey('raw',encoder.encode(env.PAIRING_CODE_SECRET),{name:'HMAC',hash:'SHA-256'},false,['sign']),bytes=new Uint8Array(await crypto.subtle.sign('HMAC',key,encoder.encode(code)));return[...bytes].map(x=>x.toString(16).padStart(2,'0')).join('')}
 function pairingCode(){const max=Math.floor(0x100000000/1_000_000)*1_000_000;let value=0;do value=crypto.getRandomValues(new Uint32Array(1))[0];while(value>=max);return String(value%1_000_000).padStart(6,'0')}
@@ -21,6 +21,7 @@ export async function telegramWebhook(request:Request,env:Env){
     fromId:message?.from?.id!=null?String(message.from.id):null,
     text:diagnosticText,
   });
+  if(await handleManagedBotUpdate(update,env))return{ok:true};
   if(/^\/start(?:@\w+)?(?:\s|$)/i.test(rawText)){
     const chatId=message?.chat?.id!=null?String(message.chat.id):null,url=env.MINIAPP_URL?.trim();
     if(chatId){
