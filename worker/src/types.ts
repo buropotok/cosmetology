@@ -1,2 +1,2 @@
-export interface Env{DB:D1Database;IMAGES:R2Bucket;VK_ACCESS_TOKEN:string;VK_GROUP_ID:string;VK_ID_SERVICE_TOKEN:string;TELEGRAM_BOT_TOKEN:string;TELEGRAM_WEBHOOK_SECRET:string;PAIRING_CODE_SECRET:string;GOOGLE_OAUTH_CLIENT_ID:string;ALLOWED_EXTENSION_ORIGIN:string}
+export interface Env{DB:D1Database;IMAGES:R2Bucket;ASSETS:Fetcher;VK_ACCESS_TOKEN:string;VK_GROUP_ID:string;VK_ID_SERVICE_TOKEN:string;TELEGRAM_BOT_TOKEN:string;TELEGRAM_WEBHOOK_SECRET:string;PAIRING_CODE_SECRET:string;GOOGLE_OAUTH_CLIENT_ID:string;ALLOWED_EXTENSION_ORIGIN:string;MINIAPP_URL?:string}
 export class AppError extends Error{constructor(public code:string,message:string,public status=500){super(message)}}
