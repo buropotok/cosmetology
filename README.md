@@ -69,7 +69,7 @@ GOOGLE_OAUTH_CLIENT_ID="123.apps.googleusercontent.com" WORKER_BASE_URL="https:/
 
 ## API и надёжность
 
-- `POST /api/miniapp/publish` — отдельный same-origin multipart Mini App flow с проверенным Telegram `initData`; настройка описана в `docs/telegram-miniapp-setup.md`.
+- `GET /api/miniapp/me` и `POST /api/miniapp/publish` — same-origin Mini App flow: проверенный Telegram `initData` разрешается через D1 в active connection; настройка описана в `docs/telegram-miniapp-setup.md`.
 - `POST /api/publish` — авторизованный multipart (`payload` JSON + необязательный `image`). `idempotency_key` создаёт один post; уникальность `(post_id, platform)` и проверка `published` предотвращают повторную отправку.
 - `GET /api/posts?page=1&page_size=20&search=...` и `GET /api/posts/:id` — история для человека.
 - `GET /api/images/:key` — чтение конкретного R2-изображения без открытия bucket listing.

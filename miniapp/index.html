@@ -12,13 +12,17 @@
 <body>
   <main>
     <header><p id="greeting" class="eyebrow">Telegram Mini App</p><h1>Новый пост</h1></header>
+    <section id="account" class="account" aria-live="polite">
+      <strong id="account-title">Проверяем подключение…</strong>
+      <span id="account-detail">Подождите немного</span>
+    </section>
     <form id="publish-form">
       <label class="upload" for="image"><span>Выбрать изображение</span><small>JPEG, PNG или другое изображение до 10 МБ</small></label>
       <input id="image" name="image" type="file" accept="image/*">
       <div id="preview-wrap" class="preview" hidden><img id="preview" alt="Предпросмотр выбранного изображения"><button id="remove-image" type="button" class="secondary">Убрать изображение</button></div>
       <label for="text">Текст публикации</label>
       <textarea id="text" name="text" maxlength="4096" rows="7" placeholder="Введите текст публикации..."></textarea>
-      <button id="publish" type="submit">Опубликовать</button>
+      <button id="publish" type="submit" disabled>Опубликовать</button>
       <p id="status" role="status" aria-live="polite"></p>
     </form>
   </main>

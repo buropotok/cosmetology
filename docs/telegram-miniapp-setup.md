@@ -1,31 +1,66 @@
-# Telegram Mini App MVP: настройка
+# Telegram Mini App: настройка identity и публикации
 
-Это изолированный экспериментальный flow. Он не использует Google OAuth, D1/R2, Chrome account, `PostDocument`, историю или VK. Страница из `miniapp/` публикуется как Worker Static Assets на том же origin, что и API; поэтому Mini App не требует отдельного CORS origin.
+Mini App использует существующего Google-backed пользователя и его Telegram connection, но не выполняет Google OAuth внутри Telegram. Страница из `miniapp/` публикуется как Worker Static Assets на том же origin, что и API; отдельный CORS origin не требуется.
 
-## Переменные Worker
+Identity flow:
+
+```text
+Google OAuth в расширении → users.id
+  → одноразовый pairing code
+  → /connect в Telegram-группе
+  → verified message.from.id → telegram_identities.user_id
+
+Telegram Mini App initData.user.id
+  → telegram_identities.user_id
+  → active telegram_connections.chat_id
+  → Telegram Bot API
+```
+
+`chat_id`, internal `user_id` и Google identity никогда не передаются в Mini App.
+
+## Cloudflare bindings
 
 | Binding | Тип | Назначение |
 |---|---|---|
 | `TELEGRAM_BOT_TOKEN` | существующий secret | Проверка `initData` и вызов Bot API |
 | `TELEGRAM_WEBHOOK_SECRET` | существующий secret | Проверка webhook |
-| `MINIAPP_TEST_CHAT_ID` | новый secret (string) | Единственная тестовая группа/канал; клиент его не получает |
-| `MINIAPP_URL` | новая variable/secret | Публичный HTTPS URL статического Mini App, используемый `/start` и setup script |
+| `PAIRING_CODE_SECRET` | существующий secret | HMAC одноразовых pairing codes |
+| `MINIAPP_URL` | variable/secret | Публичный HTTPS URL Mini App для `/start` и menu button |
 
-Не добавляйте реальные значения в Git. Для текущего Worker выполните из `worker/`:
+`MINIAPP_TEST_CHAT_ID` больше не используется: destination всегда определяется из D1 по verified Telegram identity.
+
+Если `MINIAPP_URL` ещё не настроен, выполните из `worker/`:
 
 ```bash
-npx wrangler secret put MINIAPP_TEST_CHAT_ID
 npx wrangler secret put MINIAPP_URL
+```
+
+## Deployment и migration
+
+После merge из `worker/`:
+
+```bash
+npm install
+npm run db:migrate
 npm run deploy
 ```
 
-В `MINIAPP_TEST_CHAT_ID` укажите строковый ID тестовой группы, обычно вида `-100…`. В `MINIAPP_URL` укажите итоговый URL с HTTPS, например `https://cosmetology-social-publisher.example.workers.dev/`. Бот должен быть добавлен в destination и иметь право публиковать сообщения и фотографии.
+`db:migrate` применит `0003_telegram_identities.sql`. Миграция только добавляет таблицу и не изменяет `users`, существующие `telegram_connections` или Chrome Extension flow.
 
-Для локальной разработки скопируйте `worker/.dev.vars.example` в игнорируемый `worker/.dev.vars`. Реальный Telegram не запускает HTTP Mini App URL: для ручного теста нужен публичный HTTPS deploy или tunnel.
+Старые connections не содержат Telegram user ID и не могут быть надёжно backfill-нуты. Старая connection остаётся active, пока пользователь выполняет безопасный re-link:
 
-## Webhook и кнопка `/start`
+1. Авторизоваться в Chrome Extension через Google как раньше.
+2. Создать новый pairing code в настройках Telegram.
+3. Отправить `/connect XXXXXX` в уже подключённой группе от Telegram administrator/creator.
+4. Worker свяжет `message.from.id` с существующим `users.id` и подтвердит connection.
 
-Существующий webhook менять не требуется. После deploy команда `/start` отправляет inline-кнопку **«Открыть приложение»** с URL только из `MINIAPP_URL`. Убедитесь, что webhook уже направлен на `POST /api/telegram/webhook`; при необходимости его можно зарегистрировать существующими credentials:
+Связь строгая one-to-one. Telegram identity, уже связанная с другим internal user, и internal user, уже связанный с другим Telegram account, не переназначаются автоматически.
+
+## Webhook и кнопки
+
+Существующий webhook остаётся `POST /api/telegram/webhook`. После deploy `/start` возвращает кнопку **«Открыть приложение»** из `MINIAPP_URL`.
+
+При необходимости зарегистрировать webhook:
 
 ```bash
 curl --fail-with-body --request POST \
@@ -34,29 +69,37 @@ curl --fail-with-body --request POST \
   --data-urlencode "secret_token=${TELEGRAM_WEBHOOK_SECRET}"
 ```
 
-## Menu button (ручная одноразовая настройка)
-
-Публичного административного endpoint нет. Запустите script локально из корня репозитория; token передаётся только через environment и не печатается:
+Default menu button устанавливается вручную из корня репозитория, без публичного admin endpoint:
 
 ```bash
 TELEGRAM_BOT_TOKEN='…' \
-MINIAPP_URL='https://cosmetology-social-publisher.example.workers.dev/' \
+MINIAPP_URL='https://cosmetology-social-publisher.buropotok.workers.dev/' \
 node scripts/set-telegram-menu-button.mjs
 ```
 
-Script вызывает `setChatMenuButton` и задаёт default menu button. Для URL Mini App также настройте домен бота в BotFather, если Telegram/BotFather запрашивает это для вашего способа запуска.
+## Mini App API
 
-## Проверка безопасности и публикации
+Оба endpoint принимают исходный `Telegram.WebApp.initData`:
 
-Frontend отправляет исходную строку `Telegram.WebApp.initData` как `Authorization: tma <initData>`. Это отдельная auth scheme, чтобы не смешивать Mini App credential с существующим Google `Bearer`; header автоматически остаётся same-origin. `initDataUnsafe.user` используется только для приветствия.
+```http
+Authorization: tma <initData>
+```
 
-Worker реализует официальный алгоритм [Validating data received via the Mini App](https://core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app): HMAC-SHA-256 secret key с `WebAppData`, проверку hash с постоянным временем сравнения и срок `auth_date` 10 минут. Затем endpoint принимает plain text до 4096 символов и одно `image/*` до 10 МБ. Существующий Telegram adapter отправляет caption до 1024 символов, а более длинный текст — отдельным `sendMessage` после фотографии.
+- `GET /api/miniapp/me` возвращает verified Telegram profile, `linked` и безопасное состояние connection с названием группы. `chat_id`, `users.id` и `google_sub` не возвращаются.
+- `POST /api/miniapp/publish` принимает `multipart/form-data` с `text` и необязательным `image`. Destination разрешается только server-side.
 
-Ручной acceptance test:
+Если identity не linked, publish возвращает `403 MINIAPP_IDENTITY_NOT_LINKED`. Если identity linked, но active group отсутствует, возвращается `409 TELEGRAM_NOT_CONNECTED`.
 
-1. Откройте чат с ботом и отправьте `/start`.
-2. Нажмите **«Открыть приложение»**.
-3. Выберите фотографию, убедитесь, что появился preview.
-4. Введите `Тестовая публикация из Mini App` и нажмите **«Опубликовать»**.
-5. Проверьте состояния «Публикуем…» и «Опубликовано», затем наличие фотографии и текста в `MINIAPP_TEST_CHAT_ID`.
-6. После успеха форма очищается и готова к следующему посту.
+Worker проверяет Telegram initData по официальному алгоритму [Validating data received via the Mini App](https://core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app), включая HMAC-SHA-256, constant-time hash comparison и TTL `auth_date` 10 минут.
+
+## End-to-end проверка
+
+1. Применить D1 migration и развернуть Worker.
+2. В Extension создать новый pairing code для существующего Google account.
+3. В целевой группе отправить `/connect XXXXXX` от administrator/creator и получить подтверждение.
+4. Открыть бота в личном чате, отправить `/start` и нажать **«Открыть приложение»**.
+5. Убедиться, что Mini App показывает `Публикация в: <название группы>`.
+6. Выбрать фотографию, проверить preview и ввести `Тестовая публикация из Mini App`.
+7. Нажать **«Опубликовать»** и проверить состояния «Публикуем…» и «Опубликовано».
+8. Убедиться, что пост появился именно в группе, повторно подключённой на шаге 3.
+9. Для negative check открыть Mini App из Telegram account без linking: UI должен показать `Аккаунт ещё не связан`, а публикация должна быть недоступна.
