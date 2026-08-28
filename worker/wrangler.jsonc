@@ -3,6 +3,26 @@
 	"name": "cosmetology-social-publisher",
 	"main": "src/index.ts",
 	"compatibility_date": "2026-08-17",
+	"assets": {
+		"directory": "../miniapp",
+		"binding": "ASSETS",
+		"run_worker_first": ["/api/*", "/history.txt"]
+	},
+	"observability": {
+		"enabled": false,
+		"head_sampling_rate": 1,
+		"logs": {
+			"enabled": true,
+			"head_sampling_rate": 1,
+			"persist": true,
+			"invocation_logs": true
+		},
+		"traces": {
+			"enabled": false,
+			"persist": true,
+			"head_sampling_rate": 1
+		}
+	},
 	"d1_databases": [
 		{
 			"binding": "DB",
@@ -30,6 +50,7 @@
 	],
 	"vars": {
 		"ALLOWED_EXTENSION_ORIGIN": "chrome-extension://kffffpnlinmecknhdohnkfhpdjfogjhk",
-		"GOOGLE_OAUTH_CLIENT_ID": "694062327158-dja91uqmc3k4516fr8adl64q1m099ipm.apps.googleusercontent.com"
+		"GOOGLE_OAUTH_CLIENT_ID": "694062327158-dja91uqmc3k4516fr8adl64q1m099ipm.apps.googleusercontent.com",
+		"MINIAPP_URL": "https://cosmetology-social-publisher.buropotok.workers.dev/"
 	}
 }
