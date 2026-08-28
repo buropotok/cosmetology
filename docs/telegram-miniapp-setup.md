@@ -21,14 +21,20 @@ Chrome Extension продолжает независимо использова�
 | `TELEGRAM_BOT_TOKEN` | существующий secret | Проверка initData и вызов Bot API |
 | `TELEGRAM_WEBHOOK_SECRET` | существующий secret | Проверка webhook |
 | `PAIRING_CODE_SECRET` | существующий secret | HMAC одноразовых pairing codes |
-| `MINIAPP_URL` | variable/secret | Публичный HTTPS URL Mini App для `/start` и menu button |
+| `MINIAPP_URL` | non-secret variable | Публичный HTTPS URL Mini App для `/start` и menu button |
 
-Если `MINIAPP_URL` ещё не настроен:
+Production-значение `MINIAPP_URL` хранится в version-controlled
+`worker/wrangler.jsonc` в блоке `vars`:
 
-```bash
-cd worker
-npx wrangler secret put MINIAPP_URL
+```json
+"MINIAPP_URL": "https://cosmetology-social-publisher.buropotok.workers.dev/"
 ```
+
+`worker/wrangler.jsonc` является source of truth для этой non-secret variable,
+поэтому задавать её вручную после каждого deploy не требуется. Секреты,
+включая `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET` и
+`PAIRING_CODE_SECRET`, по-прежнему задаются вне repository и не должны
+попадать в Git.
 
 ## Migration и deployment
 
