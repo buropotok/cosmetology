@@ -3,7 +3,7 @@ import {publishTelegram} from './telegram';
 import type {Env} from '../types';
 
 const env={TELEGRAM_BOT_TOKEN:'token'} as Env;
-afterEach(()=>vi.unstubAllGlobals());
+afterEach(()=>{vi.unstubAllGlobals();vi.restoreAllMocks()});
 describe('Telegram rich-text publishing',()=>{
   it('sends renderer HTML with parse_mode and a real expandable blockquote',async()=>{
     const fetch=vi.fn(async(_url:string,init:RequestInit)=>new Response(JSON.stringify({ok:true,result:{message_id:7}}),{status:200}));vi.stubGlobal('fetch',fetch);
@@ -50,13 +50,37 @@ describe('Managed Bot token transport diagnostics',()=>{
     expect((fetch.mock.calls[1][1].body as FormData).get('user_id')).toBeNull();
   });
 
+  it('logs a redacted transport failure when fetch throws',async()=>{
+    const managedToken='8771271779:transport-secret';
+    const url=`https://api.telegram.org/bot${managedToken}/getMe`;
+    const error=vi.spyOn(console,'error').mockImplementation(()=>undefined);
+    vi.stubGlobal('fetch',vi.fn(async()=>{throw new TypeError(`Failed to fetch ${url} using ${managedToken}`)}));
+    const {getTelegramBotMeWithToken}=await import('./telegram');
+    await expect(getTelegramBotMeWithToken(managedToken)).rejects.toMatchObject({code:'TELEGRAM_ERROR',status:502});
+    expect(error).toHaveBeenCalledWith({event:'telegram_bot_api_transport_error',method:'getMe',errorName:'TypeError',errorMessage:'Failed to fetch [REDACTED] using [REDACTED]'});
+    expect(JSON.stringify(error.mock.calls)).not.toContain(managedToken);
+  });
+
+  it('logs response metadata without logging a non-JSON response body',async()=>{
+    const managedToken='8771271779:parse-secret';
+    const responseBody='upstream body must stay private';
+    const error=vi.spyOn(console,'error').mockImplementation(()=>undefined);
+    vi.stubGlobal('fetch',vi.fn(async()=>new Response(responseBody,{status:502,headers:{'content-type':'text/plain'}})));
+    const {getTelegramBotMeWithToken}=await import('./telegram');
+    await expect(getTelegramBotMeWithToken(managedToken)).rejects.toMatchObject({code:'TELEGRAM_ERROR',status:502});
+    expect(error).toHaveBeenCalledWith({event:'telegram_bot_api_response_parse_error',method:'getMe',httpStatus:502,contentType:'text/plain',responseLength:responseBody.length});
+    const logged=JSON.stringify(error.mock.calls);
+    expect(logged).not.toContain(responseBody);
+    expect(logged).not.toContain(managedToken);
+  });
+
   it('logs only safe Telegram error metadata and keeps the token out of logs',async()=>{
     const managedToken='8771271779:never-log-this';
     const error=vi.spyOn(console,'error').mockImplementation(()=>undefined);
-    vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify({ok:false,error_code:401,description:'Unauthorized'}),{status:401})));
+    vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify({ok:false,error_code:401,description:`Unauthorized ${managedToken}`}),{status:401})));
     const {getTelegramBotMeWithToken}=await import('./telegram');
     await expect(getTelegramBotMeWithToken(managedToken)).rejects.toMatchObject({code:'TELEGRAM_ERROR',status:502});
-    expect(error).toHaveBeenCalledWith({event:'telegram_managed_bot_api_error',method:'getMe',errorCode:401,description:'Unauthorized'});
+    expect(error).toHaveBeenCalledWith({event:'telegram_managed_bot_api_error',method:'getMe',errorCode:401,description:'Unauthorized [REDACTED]'});
     expect(JSON.stringify(error.mock.calls)).not.toContain(managedToken);
   });
 });

@@ -1,5 +1,26 @@
 import type {Env} from '../types';import {AppError} from '../types';import {planTelegramPublication,type TelegramRender} from '../../../shared/telegram-renderer';
-async function callWithToken(token:string,method:string,body=new FormData()){const r=await fetch(`https://api.telegram.org/bot${token}/${method}`,{method:'POST',body});const j=await r.json<any>();if(!r.ok||!j.ok){console.error({event:'telegram_managed_bot_api_error',method,errorCode:j.error_code??null,description:j.description??null});throw new AppError('TELEGRAM_ERROR',`Telegram отклонил запрос${j.error_code?` (код ${j.error_code})`:''}`,502)}return j.result}
+function redactTelegramCredential(value:string,token:string,url:string){return value.split(url).join('[REDACTED]').split(token).join('[REDACTED]')}
+async function callWithToken(token:string,method:string,body=new FormData()){
+  const url=`https://api.telegram.org/bot${token}/${method}`;
+  let response:Response;
+  try{response=await fetch(url,{method:'POST',body})}catch(error){
+    const errorMessage=error instanceof Error?error.message:String(error);
+    console.error({event:'telegram_bot_api_transport_error',method,errorName:error instanceof Error?error.name:null,errorMessage:redactTelegramCredential(errorMessage,token,url)});
+    throw new AppError('TELEGRAM_ERROR','Не удалось выполнить запрос к Telegram',502)
+  }
+  const responseText=await response.text();
+  let json:any;
+  try{json=JSON.parse(responseText)}catch{
+    console.error({event:'telegram_bot_api_response_parse_error',method,httpStatus:response.status,contentType:response.headers.get('content-type'),responseLength:responseText.length});
+    throw new AppError('TELEGRAM_ERROR','Telegram вернул некорректный ответ',502)
+  }
+  if(!response.ok||!json?.ok){
+    const description=typeof json?.description==='string'?redactTelegramCredential(json.description,token,url):null;
+    console.error({event:'telegram_managed_bot_api_error',method,errorCode:json?.error_code??null,description});
+    throw new AppError('TELEGRAM_ERROR',`Telegram отклонил запрос${json?.error_code?` (код ${json.error_code})`:''}`,502)
+  }
+  return json.result
+}
 async function call(env:Env,method:string,body:FormData){return callWithToken(env.TELEGRAM_BOT_TOKEN,method,body)}
 function url(chat:string,id:number){return chat.startsWith('@')?`https://t.me/${chat.slice(1)}/${id}`:undefined}
 export async function sendTelegramText(env:Env,chatId:string,text:string){const body=new FormData();body.set('chat_id',chatId);body.set('text',text);return call(env,'sendMessage',body)}
