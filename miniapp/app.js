@@ -20,6 +20,7 @@ const pairingCommand = document.querySelector('#pairing-command');
 const pairingExpiry = document.querySelector('#pairing-expiry');
 const recheck = document.querySelector('#recheck');
 const createManagedBot = document.querySelector('#create-managed-bot');
+const requestManagedBot = document.querySelector('#request-managed-bot');
 const managedBotStatus = document.querySelector('#managed-bot-status');
 let previewUrl;
 let connectionReady = false;
@@ -156,6 +157,28 @@ createManagedBot.addEventListener('click', async () => {
     managedBotStatus.textContent = error instanceof Error ? error.message : 'Не удалось открыть Telegram.';
   } finally {
     createManagedBot.disabled = false;
+  }
+});
+
+requestManagedBot.addEventListener('click', async () => {
+  if (!webApp?.initData) {
+    managedBotStatus.textContent = 'Откройте Mini App внутри Telegram.';
+    return;
+  }
+  requestManagedBot.disabled = true;
+  managedBotStatus.textContent = 'Отправляем кнопку в чат…';
+  try {
+    const response = await fetch('/api/miniapp/debug/managed-bot/request', {
+      method: 'POST',
+      headers: authHeaders(),
+    });
+    const result = await response.json().catch(() => null);
+    if (!response.ok) throw new Error(result?.error?.message || 'Не удалось отправить Telegram-кнопку.');
+    managedBotStatus.textContent = 'Откройте чат с @cosmo_sofa_bot и нажмите «Создать персонального бота».';
+  } catch (error) {
+    managedBotStatus.textContent = error instanceof Error ? error.message : 'Не удалось отправить Telegram-кнопку.';
+  } finally {
+    requestManagedBot.disabled = false;
   }
 });
 

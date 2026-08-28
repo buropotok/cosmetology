@@ -114,6 +114,13 @@ Worker генерирует случайный username вида `cosmo_sofa_<6 
 возвращает native deep link `https://t.me/newbot/cosmo_sofa_bot/...`. Создание
 происходит полностью в интерфейсе Telegram и не меняет основной publisher flow.
 
+Второй независимый PoC использует
+`POST /api/miniapp/debug/managed-bot/request`. После той же TMA-проверки Worker
+отправляет verified Telegram user личное сообщение от `@cosmo_sofa_bot` с
+reply keyboard `request_managed_bot`. Это именно обычная `keyboard`, не
+`inline_keyboard`; случайный signed 32-bit `request_id` нигде не сохраняется.
+Deep-link кнопка остаётся доступной рядом для сравнения двух native flows.
+
 Webhook поддерживает оба сигнала Bot API 9.6: `Update.managed_bot` и
 `Message.managed_bot_created`. Owner определяется только из соответствующего
 Telegram update. Для `Update.managed_bot` Worker получает token методом

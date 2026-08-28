@@ -4,6 +4,7 @@ import {
   getManagedTelegramBotToken,
   getTelegramBotMe,
   getTelegramBotMeWithToken,
+  sendTelegramManagedBotRequest,
 } from './telegram';
 
 const MANAGER_BOT_USERNAME = 'cosmo_sofa_bot';
@@ -45,6 +46,14 @@ function randomSuffix() {
     .join('');
 }
 
+export function generateSuggestedManagedBotUsername() {
+  return `cosmo_sofa_${randomSuffix()}_bot`;
+}
+
+function randomRequestId() {
+  return crypto.getRandomValues(new Int32Array(1))[0];
+}
+
 export async function getManagerBotDiagnostic(
   env: Env,
   api: ManagedBotTelegramApi = telegramApi,
@@ -62,12 +71,42 @@ export async function createManagedBotLink(request: Request, env: Env) {
   const initData =
     request.headers.get('authorization')?.match(/^tma\s+(.+)$/i)?.[1] ?? '';
   await validateTelegramMiniAppInitData(initData, env.TELEGRAM_BOT_TOKEN);
-  const suggestedUsername = `cosmo_sofa_${randomSuffix()}_bot`;
+  const suggestedUsername = generateSuggestedManagedBotUsername();
   return {
     url: `https://t.me/newbot/${MANAGER_BOT_USERNAME}/${suggestedUsername}?name=${encodeURIComponent(SUGGESTED_NAME)}`,
     suggestedName: SUGGESTED_NAME,
     suggestedUsername,
   };
+}
+
+export async function requestManagedBotCreation(
+  request: Request,
+  env: Env,
+  sendRequest = sendTelegramManagedBotRequest,
+) {
+  const initData =
+    request.headers.get('authorization')?.match(/^tma\s+(.+)$/i)?.[1] ?? '';
+  const validated = await validateTelegramMiniAppInitData(
+    initData,
+    env.TELEGRAM_BOT_TOKEN,
+  );
+  const telegramUserId = String(validated.user.id);
+  const requestId = randomRequestId();
+  const suggestedUsername = generateSuggestedManagedBotUsername();
+  await sendRequest(
+    env,
+    telegramUserId,
+    requestId,
+    SUGGESTED_NAME,
+    suggestedUsername,
+  );
+  console.log({
+    event: 'telegram_managed_bot_request_sent',
+    telegramUserId,
+    requestId,
+    suggestedUsername,
+  });
+  return { ok: true, requestId, suggestedUsername };
 }
 
 async function storeManagedBot(

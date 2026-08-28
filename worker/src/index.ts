@@ -25,6 +25,7 @@ import { createMiniAppPairing, getMiniAppStatus, publishFromMiniApp } from './se
 import {
   createManagedBotLink,
   getManagerBotDiagnostic,
+  requestManagedBotCreation,
 } from './services/telegram-managed-bots';
 
 const json = (
@@ -101,6 +102,13 @@ async function route(req: Request, env: Env) {
     u.pathname === '/api/miniapp/debug/managed-bot/create-link'
   ) {
     return json(await createManagedBotLink(req, env), 201);
+  }
+
+  if (
+    req.method === 'POST' &&
+    u.pathname === '/api/miniapp/debug/managed-bot/request'
+  ) {
+    return json(await requestManagedBotCreation(req, env), 201);
   }
 
   if (req.method === 'GET' && u.pathname === '/history.txt') {
