@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <title>Новый пост</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <main>
+    <header><p id="greeting" class="eyebrow">Telegram Mini App</p><h1>Новый пост</h1></header>
+    <section id="account" class="account" aria-live="polite">
+      <strong id="account-title">Проверяем подключение…</strong>
+      <span id="account-detail">Подождите немного</span>
+    </section>
+    <section id="onboarding" class="onboarding" hidden>
+      <h2>Подключите Telegram-группу</h2>
+      <ol>
+        <li>Добавьте этого бота в нужную группу.</li>
+        <li>Выдайте боту право отправлять сообщения и фотографии.</li>
+        <li>Создайте код и отправьте показанную команду в группе.</li>
+      </ol>
+      <button id="create-pairing" type="button">Подключить Telegram-группу</button>
+      <div id="pairing" class="pairing" hidden>
+        <span>Отправьте в группе:</span>
+        <code id="pairing-command"></code>
+        <small id="pairing-expiry"></small>
+        <button id="recheck" type="button" class="secondary">Проверить подключение</button>
+      </div>
+    </section>
+    <form id="publish-form">
+      <label class="upload" for="image"><span>Выбрать изображение</span><small>JPEG, PNG или другое изображение до 10 МБ</small></label>
+      <input id="image" name="image" type="file" accept="image/*">
+      <div id="preview-wrap" class="preview" hidden><img id="preview" alt="Предпросмотр выбранного изображения"><button id="remove-image" type="button" class="secondary">Убрать изображение</button></div>
+      <label for="text">Текст публикации</label>
+      <textarea id="text" name="text" maxlength="4096" rows="7" placeholder="Введите текст публикации..."></textarea>
+      <button id="publish" type="submit" disabled>Опубликовать</button>
+      <p id="status" role="status" aria-live="polite"></p>
+    </form>
+    <section class="managed-bot-poc">
+      <h2>Telegram Managed Bot — PoC</h2>
+      <p>Экспериментальный native flow Telegram. Он не меняет текущую публикацию.</p>
+      <button id="create-managed-bot" type="button">Создать тестового бота</button>
+      <button id="request-managed-bot" type="button" class="secondary">Создать через Telegram-кнопку</button>
+      <small id="managed-bot-status" role="status" aria-live="polite"></small>
+    </section>
+  </main>
+</body>
+</html>
