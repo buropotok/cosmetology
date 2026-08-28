@@ -11,6 +11,7 @@ import {
   encryptManagedBotToken,
   type EncryptedManagedBotToken,
 } from './managed-bot-crypto';
+import { configureManagedBotWebhook } from './managed-bot-onboarding';
 
 const MANAGER_BOT_USERNAME = 'cosmo_sofa_bot';
 const SUGGESTED_NAME = 'Cosmo Sofa Test';
@@ -26,12 +27,14 @@ export interface ManagedBotTelegramApi {
   getManagerMe(env: Env): ReturnType<typeof getTelegramBotMe>;
   getManagedToken(env: Env, botId: string): Promise<string>;
   getManagedMe(token: string): ReturnType<typeof getTelegramBotMeWithToken>;
+  configureWebhook(env: Env, botId: string, token: string): Promise<string>;
 }
 
 const telegramApi: ManagedBotTelegramApi = {
   getManagerMe: getTelegramBotMe,
   getManagedToken: getManagedTelegramBotToken,
   getManagedMe: getTelegramBotMeWithToken,
+  configureWebhook: configureManagedBotWebhook,
 };
 
 function telegramId(value: unknown) {
@@ -261,6 +264,7 @@ export async function handleManagedBotUpdate(
       managedBotId: botId,
       keyVersion: encrypted.keyVersion,
     });
+    await api.configureWebhook(env, botId, token);
     console.log({
       event: 'telegram_managed_bot_token_verified',
       managedBotId: botId,

@@ -27,6 +27,7 @@ import {
   getManagerBotDiagnostic,
   requestManagedBotCreation,
 } from './services/telegram-managed-bots';
+import { createManagedBotGroupLink, managedBotWebhook } from './services/managed-bot-onboarding';
 
 const json = (
   body: unknown,
@@ -80,6 +81,11 @@ async function route(req: Request, env: Env) {
     return json(await telegramWebhook(req, env));
   }
 
+  const managedWebhook = u.pathname.match(/^\/api\/telegram\/managed\/([A-Za-z0-9_-]{32})$/);
+  if (req.method === 'POST' && managedWebhook) {
+    return json(await managedBotWebhook(req, env, managedWebhook[1]));
+  }
+
   if (req.method === 'POST' && u.pathname === '/api/miniapp/publish') {
     return json(await publishFromMiniApp(req, env));
   }
@@ -95,6 +101,13 @@ async function route(req: Request, env: Env) {
     u.pathname === '/api/miniapp/telegram/pairing'
   ) {
     return json(await createMiniAppPairing(req, env), 201);
+  }
+
+  if (
+    req.method === 'POST' &&
+    u.pathname === '/api/miniapp/telegram/managed-bot/group-link'
+  ) {
+    return json(await createManagedBotGroupLink(req, env), 201);
   }
 
   if (

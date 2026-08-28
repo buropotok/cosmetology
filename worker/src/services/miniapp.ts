@@ -3,6 +3,7 @@ import { publishTelegram } from './telegram';
 import { validateTelegramMiniAppInitData } from './telegram-miniapp-auth';
 import { resolveOrCreateTelegramIdentity } from './telegram-identity';
 import { createPairingCode } from './telegram-account';
+import { getManagedBotStateForUser } from './managed-bot-onboarding';
 
 export const MINIAPP_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
 export const MINIAPP_TEXT_MAX_LENGTH = 4096;
@@ -23,6 +24,7 @@ async function miniAppAccount(request: Request, env: Env) {
 
 export async function getMiniAppStatus(request: Request, env: Env) {
   const { validated, account } = await miniAppAccount(request, env);
+  const managed = await getManagedBotStateForUser(env, account.userId);
   return {
     telegramUser: {
       id: String(validated.user.id),
@@ -31,6 +33,15 @@ export async function getMiniAppStatus(request: Request, env: Env) {
       ...(validated.user.username ? { username: validated.user.username } : {}),
     },
     accountReady: true,
+    managedBot: managed
+      ? {
+          id: managed.botId,
+          username: managed.username,
+          destination: managed.chatId
+            ? { connected: true, chatTitle: managed.chatTitle ?? 'Telegram-группа', chatType: managed.chatType }
+            : { connected: false },
+        }
+      : null,
     connection: account?.chatId
       ? {
           connected: true,

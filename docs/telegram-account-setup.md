@@ -49,6 +49,10 @@ The Worker checks `X-Telegram-Bot-Api-Secret-Token`. The committed
 Telegram will not deliver Managed Bot updates. Do not place any secret in the
 extension, browser storage, logs, or documentation.
 
+Это конфигурация только manager bot. Индивидуальные managed bots Worker
+регистрирует автоматически после проверки и шифрования credential, отдельно с
+`allowed_updates=["message","my_chat_member"]` и уникальным `secret_token`.
+
 ## 4. End-to-end check
 
 1. Deploy/start the Worker and load the built unpacked extension.

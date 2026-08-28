@@ -33,6 +33,19 @@ describe('Managed Bot request reply keyboard',()=>{
   });
 });
 
+describe('Managed Bot webhook transport',()=>{
+  it('configures message and my_chat_member updates with a secret token',async()=>{
+    const fetch=vi.fn(async(_url:string,_init:RequestInit)=>new Response(JSON.stringify({ok:true,result:true})));vi.stubGlobal('fetch',fetch);
+    const {setTelegramWebhookWithToken}=await import('./telegram');
+    await setTelegramWebhookWithToken('managed-token','https://worker.example/api/telegram/managed/opaque','webhook-secret');
+    const body=fetch.mock.calls[0][1].body as FormData;
+    expect(fetch.mock.calls[0][0]).toBe('https://api.telegram.org/botmanaged-token/setWebhook');
+    expect(body.get('url')).toBe('https://worker.example/api/telegram/managed/opaque');
+    expect(body.get('secret_token')).toBe('webhook-secret');
+    expect(JSON.parse(body.get('allowed_updates') as string)).toEqual(['message','my_chat_member']);
+  });
+});
+
 describe('Managed Bot token transport diagnostics',()=>{
   it('passes the getManagedBotToken String unchanged into a valid getMe request',async()=>{
     const managedToken='8771271779:managed-secret';

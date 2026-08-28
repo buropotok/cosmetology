@@ -22,8 +22,11 @@ const recheck = document.querySelector('#recheck');
 const createManagedBot = document.querySelector('#create-managed-bot');
 const requestManagedBot = document.querySelector('#request-managed-bot');
 const managedBotStatus = document.querySelector('#managed-bot-status');
+const connectManagedGroup = document.querySelector('#connect-managed-group');
+const recheckManagedGroup = document.querySelector('#recheck-managed-group');
 let previewUrl;
 let connectionReady = false;
+let managedBotId;
 
 const user = webApp?.initDataUnsafe?.user;
 if (user?.first_name) document.querySelector('#greeting').textContent = `Здравствуйте, ${user.first_name}`;
@@ -51,6 +54,17 @@ function clearImage() {
   preview.removeAttribute('src');
 }
 
+function renderManagedBot(managedBot) {
+  managedBotId = managedBot?.id;
+  connectManagedGroup.hidden = !managedBotId || managedBot?.destination?.connected;
+  recheckManagedGroup.hidden = !managedBotId;
+  if (!managedBot) return;
+  const name = managedBot.username ? `@${managedBot.username}` : 'Персональный бот';
+  managedBotStatus.textContent = managedBot.destination?.connected
+    ? `${name}. Группа: ${managedBot.destination.chatTitle}. Подключена.`
+    : `${name}. Группа не подключена.`;
+}
+
 async function loadAccount() {
   connectionReady = false;
   publish.disabled = true;
@@ -63,6 +77,7 @@ async function loadAccount() {
     const response = await fetch('/api/miniapp/me', { headers: authHeaders() });
     const result = await response.json().catch(() => null);
     if (!response.ok) throw new Error(result?.error?.message || 'Не удалось проверить подключение.');
+    renderManagedBot(result.managedBot);
     if (!result.connection?.connected) {
       onboarding.hidden = false;
       setAccount('Telegram-группа не подключена', 'Подключите группу прямо из Mini App', 'error');
@@ -181,5 +196,29 @@ requestManagedBot.addEventListener('click', async () => {
     requestManagedBot.disabled = false;
   }
 });
+
+connectManagedGroup.addEventListener('click', async () => {
+  if (!managedBotId) return;
+  connectManagedGroup.disabled = true;
+  managedBotStatus.textContent = 'Открываем выбор Telegram-группы…';
+  try {
+    const response = await fetch('/api/miniapp/telegram/managed-bot/group-link', {
+      method: 'POST',
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ managedBotId }),
+    });
+    const result = await response.json().catch(() => null);
+    if (!response.ok) throw new Error(result?.error?.message || 'Не удалось создать ссылку подключения.');
+    managedBotStatus.textContent = `Выберите группу для @${result.managedBot.username}. После добавления вернитесь и проверьте подключение.`;
+    if (webApp.openTelegramLink) webApp.openTelegramLink(result.url);
+    else window.location.href = result.url;
+  } catch (error) {
+    managedBotStatus.textContent = error instanceof Error ? error.message : 'Не удалось открыть выбор группы.';
+  } finally {
+    connectManagedGroup.disabled = false;
+  }
+});
+
+recheckManagedGroup.addEventListener('click', loadAccount);
 
 loadAccount();

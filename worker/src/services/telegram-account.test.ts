@@ -33,7 +33,7 @@ function webhookEnv(options: { pairing?: Pairing; identities?: { telegram_user_i
     batch,
   };
   const encryptionKey = btoa(String.fromCharCode(...new Uint8Array(32).fill(7)));
-  return { env: { DB, TELEGRAM_BOT_TOKEN: 'token', TELEGRAM_WEBHOOK_SECRET: 'secret', PAIRING_CODE_SECRET: 'pair-secret', MANAGED_BOT_ENCRYPTION_KEY: encryptionKey } as unknown as Env, batch, prepared };
+  return { env: { DB, TELEGRAM_BOT_TOKEN: 'token', TELEGRAM_WEBHOOK_SECRET: 'secret', PAIRING_CODE_SECRET: 'pair-secret', MANAGED_BOT_ENCRYPTION_KEY: encryptionKey, MINIAPP_URL: 'https://worker.example/' } as unknown as Env, batch, prepared };
 }
 function connectRequest(fromId = 77) {
   return new Request('https://worker.example/api/telegram/webhook', {
@@ -96,6 +96,7 @@ describe('Managed Bot webhook integration', () => {
     const fetch = vi.fn(async (url: string, _init?: RequestInit) => {
       if (url.endsWith('/getManagedBotToken')) return new Response(JSON.stringify({ ok: true, result: managedToken }));
       if (url.includes(`/bot${managedToken}/getMe`)) return new Response(JSON.stringify({ ok: true, result: { id: 9001, username: 'created_bot', first_name: 'Created' } }));
+      if (url.includes(`/bot${managedToken}/setWebhook`)) return new Response(JSON.stringify({ ok: true, result: true }));
       throw new Error(`Unexpected Telegram call: ${url}`);
     });
     vi.stubGlobal('fetch', fetch);

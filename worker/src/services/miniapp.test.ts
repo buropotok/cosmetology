@@ -14,7 +14,8 @@ async function initData() {
   return params.toString();
 }
 type AccountRow = { user_id: string; chat_id: string | null; chat_title: string | null; chat_type: string | null };
-function env(initial: AccountRow | null) {
+type ManagedRow = { botId: string; username: string | null; chatId: string | null; chatTitle: string | null; chatType: string | null; destinationStatus: string | null };
+function env(initial: AccountRow | null, managed: ManagedRow | null = null) {
   let account = initial;
   const statements: { sql: string; values: unknown[] }[] = [];
   const batch = vi.fn(async (items: unknown[]) => {
@@ -25,7 +26,7 @@ function env(initial: AccountRow | null) {
     prepare: vi.fn((sql: string) => {
       const statement = { sql, values: [] as unknown[] };
       statements.push(statement);
-      return { bind: (...values: unknown[]) => { statement.values = values; return { first: async () => account, run: async () => ({ success: true }) }; } };
+      return { bind: (...values: unknown[]) => { statement.values = values; return { first: async () => sql.includes('FROM telegram_managed_bots') ? managed : account, run: async () => ({ success: true }) }; } };
     }),
     batch,
   };
@@ -47,5 +48,6 @@ describe('Telegram-native Mini App account and publishing', () => {
   it('rejects missing text and image', async () => expect(publishFromMiniApp(await request(new FormData(), await initData()), env(connected).value, publisher)).rejects.toMatchObject({ code: 'EMPTY_PUBLICATION' }));
   it('rejects invalid image type', async () => { const form = new FormData(); form.set('image', new File(['nope'], 'file.txt', { type: 'text/plain' })); await expect(publishFromMiniApp(await request(form, await initData()), env(connected).value, publisher)).rejects.toMatchObject({ code: 'INVALID_IMAGE_TYPE' }); });
   it('publishes only to the database-resolved group', async () => { const form = new FormData(); form.set('text', '  test  '); form.set('chat_id', '-100999'); await expect(publishFromMiniApp(await request(form, await initData()), env(connected).value, publisher)).resolves.toMatchObject({ ok: true }); expect(publisher).toHaveBeenLastCalledWith(expect.anything(), 'test', undefined, '-100123'); });
-  it('returns connected chatTitle without exposing chat_id', async () => { const result = await getMiniAppStatus(await request(new FormData(), await initData(), '/api/miniapp/me', 'GET'), env(connected).value); expect(result).toEqual({ telegramUser: { id: '42', firstName: 'Анна', username: 'anna' }, accountReady: true, connection: { connected: true, chatTitle: 'Cosmetology_test', chatType: 'supergroup' } }); expect(JSON.stringify(result)).not.toContain('-100123'); });
+  it('returns connected chatTitle without exposing chat_id', async () => { const result = await getMiniAppStatus(await request(new FormData(), await initData(), '/api/miniapp/me', 'GET'), env(connected).value); expect(result).toEqual({ telegramUser: { id: '42', firstName: 'Анна', username: 'anna' }, accountReady: true, managedBot: null, connection: { connected: true, chatTitle: 'Cosmetology_test', chatType: 'supergroup' } }); expect(JSON.stringify(result)).not.toContain('-100123'); });
+  it('returns safe managed bot and destination state without chat_id', async () => { const managed = { botId: '9001', username: 'personal_bot', chatId: '-100777', chatTitle: 'Managed group', chatType: 'supergroup', destinationStatus: 'active' }; const result = await getMiniAppStatus(await request(new FormData(), await initData(), '/api/miniapp/me', 'GET'), env(disconnected, managed).value); expect(result.managedBot).toEqual({ id: '9001', username: 'personal_bot', destination: { connected: true, chatTitle: 'Managed group', chatType: 'supergroup' } }); expect(JSON.stringify(result)).not.toContain('-100777'); });
 });

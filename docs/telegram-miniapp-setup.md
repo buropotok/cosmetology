@@ -71,6 +71,15 @@ Migration `0006_managed_bot_credentials.sql` additive: она добавляет
 существующие Managed Bot rows остаются валидными без credential и смогут
 получить его при следующем verified `managed_bot` update.
 
+Migration `0007_managed_bot_group_onboarding.sql` добавляет отдельные таблицы:
+
+- `telegram_managed_bot_webhooks` — opaque route ID и hash Telegram
+  `secret_token`, без plaintext secret;
+- `telegram_managed_bot_group_pairings` — tenant-scoped одноразовый hash nonce
+  с TTL;
+- `telegram_managed_bot_destinations` — active/inactive связь internal user,
+  managed bot и Telegram group/supergroup.
+
 ## Первый вход и подключение группы
 
 1. Пользователь открывает Mini App из Telegram.
@@ -146,6 +155,43 @@ Telegram update. Для `Update.managed_bot` Worker получает token ме�
 AES-256-GCM со свежим IV и AAD, привязанным к `telegram_bot_id`. D1 хранит
 только ciphertext, IV и версию ключа вместе с безопасными owner/bot identifiers
 в `telegram_managed_bots`; plaintext token не логируется и не сохраняется.
+
+После encrypted persistence Worker тем же verified token вызывает `setWebhook`
+для персонального бота. URL имеет вид
+`/api/telegram/managed/<random-opaque-id>`, а Telegram дополнительно подписывает
+запрос случайным `secret_token`. D1 хранит только SHA-256 hash этого secret.
+Managed bot webhook принимает только `message` и `my_chat_member`; manager bot
+webhook остаётся отдельным и принимает `message` и `managed_bot`.
+
+## Native подключение группы персонального бота
+
+```text
+TMA initData → internal user → owned active managed bot
+  → one-time hashed nonce (10 минут)
+  → https://t.me/<managed_bot>?startgroup=<nonce>
+  → Telegram group picker
+  → authenticated managed-bot webhook получает /start <nonce>
+  → nonce + sender + managed bot проверяются server-side
+  → telegram_managed_bot_destinations
+```
+
+Endpoint `POST /api/miniapp/telegram/managed-bot/group-link` принимает
+`managedBotId`, но обязательно проверяет его против authenticated internal
+`user_id`; client ID сам по себе не даёт ownership. Raw nonce возвращается
+только внутри Telegram deep link, а D1 хранит SHA-256 hash. Pairing одноразовый
+и истекает через 10 минут. Повторный или чужой payload destination не создаёт.
+
+Для group/supergroup публикации обычных текстов и фотографий Telegram не
+требует administrator rights, поэтому MVP намеренно **не добавляет** параметр
+`admin` и не запрашивает лишних разрешений. Channels в этом flow не
+поддерживаются. Если группа ограничивает отправку сообщений для обычных
+участников, её настройки нужно изменить вручную; расширенные admin permissions
+не запрашиваются скрыто.
+
+`my_chat_member` со статусом `left` или `kicked` помечает сохранённый
+destination как `inactive`, не удаляя историю. Mini App `/api/miniapp/me`
+возвращает только безопасные username/title/status — credential, webhook secret,
+nonce и `chat_id` клиенту не выдаются.
 
 Google-authenticated diagnostic `GET /api/debug/telegram/manager` вызывает
 `getMe` Manager Bot и возвращает только username и `canManageBots`. Endpoint
