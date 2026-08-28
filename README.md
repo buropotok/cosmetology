@@ -18,6 +18,7 @@ ChatGPT остаётся чатом, средой исследования и к
 
 - `extension/` — Manifest V3, изолированный адаптер DOM ChatGPT, парсер ответа, пресеты, Side Panel, API-клиент и тесты.
 - `worker/` — маршруты Worker, D1/R2, VK и Telegram адаптеры, миграция и тесты.
+- `miniapp/` — статический Telegram Mini App MVP, размещаемый через Worker Static Assets.
 - `shared/contracts.ts` — минимальные общие API-типы.
 
 Хрупкие селекторы ChatGPT собраны только в `extension/src/content/chatgpt-adapter.ts`. При изменении сайта сначала исправляйте этот файл. Неудача распознавания ответа или изображения не блокирует ChatGPT или текстовую публикацию.
@@ -68,6 +69,7 @@ GOOGLE_OAUTH_CLIENT_ID="123.apps.googleusercontent.com" WORKER_BASE_URL="https:/
 
 ## API и надёжность
 
+- `GET /api/miniapp/me` и `POST /api/miniapp/publish` — автономный same-origin Mini App flow: Telegram `initData` создаёт/разрешает internal account и active connection без Google OAuth; настройка описана в `docs/telegram-miniapp-setup.md`.
 - `POST /api/publish` — авторизованный multipart (`payload` JSON + необязательный `image`). `idempotency_key` создаёт один post; уникальность `(post_id, platform)` и проверка `published` предотвращают повторную отправку.
 - `GET /api/posts?page=1&page_size=20&search=...` и `GET /api/posts/:id` — история для человека.
 - `GET /api/images/:key` — чтение конкретного R2-изображения без открытия bucket listing.
