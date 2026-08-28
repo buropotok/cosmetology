@@ -32,7 +32,8 @@ function webhookEnv(options: { pairing?: Pairing; identities?: { telegram_user_i
     }),
     batch,
   };
-  return { env: { DB, TELEGRAM_BOT_TOKEN: 'token', TELEGRAM_WEBHOOK_SECRET: 'secret', PAIRING_CODE_SECRET: 'pair-secret' } as unknown as Env, batch, prepared };
+  const encryptionKey = btoa(String.fromCharCode(...new Uint8Array(32).fill(7)));
+  return { env: { DB, TELEGRAM_BOT_TOKEN: 'token', TELEGRAM_WEBHOOK_SECRET: 'secret', PAIRING_CODE_SECRET: 'pair-secret', MANAGED_BOT_ENCRYPTION_KEY: encryptionKey } as unknown as Env, batch, prepared };
 }
 function connectRequest(fromId = 77) {
   return new Request('https://worker.example/api/telegram/webhook', {

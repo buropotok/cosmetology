@@ -6,6 +6,11 @@ import {
   getTelegramBotMeWithToken,
   sendTelegramManagedBotRequest,
 } from './telegram';
+import {
+  decryptManagedBotToken,
+  encryptManagedBotToken,
+  type EncryptedManagedBotToken,
+} from './managed-bot-crypto';
 
 const MANAGER_BOT_USERNAME = 'cosmo_sofa_bot';
 const SUGGESTED_NAME = 'Cosmo Sofa Test';
@@ -115,18 +120,24 @@ async function storeManagedBot(
   botId: string,
   username: string | null,
   displayName: string | null,
+  encrypted?: EncryptedManagedBotToken,
 ) {
   await env.DB.prepare(
     `INSERT INTO telegram_managed_bots(
-       id,user_id,telegram_owner_user_id,telegram_bot_id,username,display_name
+       id,user_id,telegram_owner_user_id,telegram_bot_id,username,display_name,
+       token_ciphertext,token_iv,token_key_version
      ) VALUES(
-       ?,(SELECT user_id FROM telegram_identities WHERE telegram_user_id=?),?,?,?,?
+       ?,(SELECT user_id FROM telegram_identities WHERE telegram_user_id=?),?,?,?,?,?,?,?
      )
      ON CONFLICT(telegram_bot_id) DO UPDATE SET
        user_id=COALESCE(excluded.user_id,telegram_managed_bots.user_id),
        telegram_owner_user_id=excluded.telegram_owner_user_id,
        username=excluded.username,
        display_name=excluded.display_name,
+       token_ciphertext=COALESCE(excluded.token_ciphertext,telegram_managed_bots.token_ciphertext),
+       token_iv=COALESCE(excluded.token_iv,telegram_managed_bots.token_iv),
+       token_key_version=CASE WHEN excluded.token_ciphertext IS NOT NULL
+         THEN excluded.token_key_version ELSE telegram_managed_bots.token_key_version END,
        status='active',
        updated_at=CURRENT_TIMESTAMP`,
   )
@@ -137,8 +148,57 @@ async function storeManagedBot(
       botId,
       username,
       displayName,
+      encrypted?.ciphertext ?? null,
+      encrypted?.iv ?? null,
+      encrypted?.keyVersion ?? 1,
     )
     .run();
+}
+
+type ManagedBotCredentialRow = {
+  telegram_bot_id: string;
+  username: string | null;
+  token_ciphertext: string | null;
+  token_iv: string | null;
+  token_key_version: number;
+};
+
+export async function getManagedBotCredential(
+  env: Env,
+  userId: string,
+  managedBotId: string,
+) {
+  const row = await env.DB.prepare(
+    `SELECT telegram_bot_id,username,token_ciphertext,token_iv,token_key_version
+     FROM telegram_managed_bots
+     WHERE telegram_bot_id=? AND user_id=? AND status='active'`,
+  )
+    .bind(managedBotId, userId)
+    .first<ManagedBotCredentialRow>();
+  if (!row) {
+    throw new AppError(
+      'MANAGED_BOT_NOT_ACTIVE',
+      'Managed bot не найден или не активен',
+      404,
+    );
+  }
+  if (!row.token_ciphertext || !row.token_iv) {
+    throw new AppError(
+      'MANAGED_BOT_CREDENTIAL_MISSING',
+      'Для managed bot ещё не сохранён credential',
+      409,
+    );
+  }
+  const token = await decryptManagedBotToken(
+    row.telegram_bot_id,
+    {
+      ciphertext: row.token_ciphertext,
+      iv: row.token_iv,
+      keyVersion: row.token_key_version,
+    },
+    env,
+  );
+  return { botId: row.telegram_bot_id, token, username: row.username };
 }
 
 export async function handleManagedBotUpdate(
@@ -187,7 +247,20 @@ export async function handleManagedBotUpdate(
         502,
       );
     }
-    await storeManagedBot(env, ownerId, botId, username, displayName);
+    const encrypted = await encryptManagedBotToken(botId, token, env);
+    await storeManagedBot(
+      env,
+      ownerId,
+      botId,
+      username,
+      displayName,
+      encrypted,
+    );
+    console.log({
+      event: 'telegram_managed_bot_credential_stored',
+      managedBotId: botId,
+      keyVersion: encrypted.keyVersion,
+    });
     console.log({
       event: 'telegram_managed_bot_token_verified',
       managedBotId: botId,

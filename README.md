@@ -70,7 +70,7 @@ GOOGLE_OAUTH_CLIENT_ID="123.apps.googleusercontent.com" WORKER_BASE_URL="https:/
 ## API и надёжность
 
 - `GET /api/miniapp/me` и `POST /api/miniapp/publish` — автономный same-origin Mini App flow: Telegram `initData` создаёт/разрешает internal account и active connection без Google OAuth; настройка описана в `docs/telegram-miniapp-setup.md`.
-- `POST /api/miniapp/debug/managed-bot/create-link`, `POST /api/miniapp/debug/managed-bot/request` и обработка `managed_bot` webhook — два изолированных Managed Bots PoC без хранения bot token и без изменения текущего publisher flow.
+- `POST /api/miniapp/debug/managed-bot/create-link`, `POST /api/miniapp/debug/managed-bot/request` и обработка `managed_bot` webhook — Managed Bots flow с AES-GCM encrypted credential storage, без изменения текущего publisher flow.
 - `POST /api/publish` — авторизованный multipart (`payload` JSON + необязательный `image`). `idempotency_key` создаёт один post; уникальность `(post_id, platform)` и проверка `published` предотвращают повторную отправку.
 - `GET /api/posts?page=1&page_size=20&search=...` и `GET /api/posts/:id` — история для человека.
 - `GET /api/images/:key` — чтение конкретного R2-изображения без открытия bucket listing.

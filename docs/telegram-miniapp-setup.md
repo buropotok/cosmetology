@@ -21,6 +21,7 @@ Chrome Extension продолжает независимо использова�
 | `TELEGRAM_BOT_TOKEN` | существующий secret | Проверка initData и вызов Bot API |
 | `TELEGRAM_WEBHOOK_SECRET` | существующий secret | Проверка webhook |
 | `PAIRING_CODE_SECRET` | существующий secret | HMAC одноразовых pairing codes |
+| `MANAGED_BOT_ENCRYPTION_KEY` | новый secret | 32-byte AES-256 key в base64 для Managed Bot credentials |
 | `MINIAPP_URL` | non-secret variable | Публичный HTTPS URL Mini App для `/start` и menu button |
 
 Production-значение `MINIAPP_URL` хранится в version-controlled
@@ -35,6 +36,18 @@ Production-значение `MINIAPP_URL` хранится в version-controlled
 включая `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET` и
 `PAIRING_CODE_SECRET`, по-прежнему задаются вне repository и не должны
 попадать в Git.
+
+До deployment Worker необходимо один раз создать production secret из корня
+`worker/` (команда генерирует новое случайное значение и не записывает его в
+repository):
+
+```bash
+openssl rand -base64 32 | npx wrangler secret put MANAGED_BOT_ENCRYPTION_KEY
+```
+
+Secret должен быть создан **до** применения новой логики: без него обработка
+`Update.managed_bot` завершается контролируемой ошибкой и credential не
+сохраняется в plaintext.
 
 ## Migration и deployment
 
@@ -52,6 +65,11 @@ npm run deploy
 - делает `users.google_sub` nullable, не создавая synthetic Google subjects;
 - добавляет nullable `telegram_pairings.telegram_user_id` для ownership Mini App codes;
 - оставляет старый Extension pairing совместимым.
+
+Migration `0006_managed_bot_credentials.sql` additive: она добавляет nullable
+`token_ciphertext` и `token_iv`, а также `token_key_version`. Поэтому уже
+существующие Managed Bot rows остаются валидными без credential и смогут
+получить его при следующем verified `managed_bot` update.
 
 ## Первый вход и подключение группы
 
@@ -124,9 +142,10 @@ Deep-link кнопка остаётся доступной рядом для с�
 Webhook поддерживает оба сигнала Bot API 9.6: `Update.managed_bot` и
 `Message.managed_bot_created`. Owner определяется только из соответствующего
 Telegram update. Для `Update.managed_bot` Worker получает token методом
-`getManagedBotToken`, проверяет его отдельным `getMe` и не сохраняет и не
-логирует token. В D1 сохраняются только безопасные owner/bot identifiers и
-публичные имя/username в таблице `telegram_managed_bots` из migration `0005`.
+`getManagedBotToken`, проверяет его отдельным `getMe`, затем шифрует token через
+AES-256-GCM со свежим IV и AAD, привязанным к `telegram_bot_id`. D1 хранит
+только ciphertext, IV и версию ключа вместе с безопасными owner/bot identifiers
+в `telegram_managed_bots`; plaintext token не логируется и не сохраняется.
 
 Google-authenticated diagnostic `GET /api/debug/telegram/manager` вызывает
 `getMe` Manager Bot и возвращает только username и `canManageBots`. Endpoint
