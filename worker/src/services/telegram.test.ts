@@ -47,7 +47,19 @@ describe('Managed Bot token transport diagnostics',()=>{
     expect(fetch.mock.calls[0][0]).toBe('https://api.telegram.org/bottoken/getManagedBotToken');
     expect(((fetch.mock.calls[0][1].body as FormData).get('user_id'))).toBe('8771271779');
     expect(fetch.mock.calls[1][0]).toBe(`https://api.telegram.org/bot${managedToken}/getMe`);
-    expect((fetch.mock.calls[1][1].body as FormData).get('user_id')).toBeNull();
+    expect(fetch.mock.calls[1][1]).toEqual({method:'POST'});
+    expect(fetch.mock.calls[1][1].body).toBeUndefined();
+    expect(fetch.mock.calls[1][1].headers).toBeUndefined();
+  });
+
+  it('sends Manager Bot getMe as POST without a body or multipart headers',async()=>{
+    const fetch=vi.fn(async(_url:string,_init:RequestInit)=>new Response(JSON.stringify({ok:true,result:{id:1,username:'manager_bot',first_name:'Manager',can_manage_bots:true}})));
+    vi.stubGlobal('fetch',fetch);
+    const {getTelegramBotMe}=await import('./telegram');
+    await getTelegramBotMe(env);
+    expect(fetch).toHaveBeenCalledWith('https://api.telegram.org/bottoken/getMe',{method:'POST'});
+    expect(fetch.mock.calls[0][1].body).toBeUndefined();
+    expect(fetch.mock.calls[0][1].headers).toBeUndefined();
   });
 
   it('logs a redacted transport failure when fetch throws',async()=>{

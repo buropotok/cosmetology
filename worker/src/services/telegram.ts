@@ -1,9 +1,11 @@
 import type {Env} from '../types';import {AppError} from '../types';import {planTelegramPublication,type TelegramRender} from '../../../shared/telegram-renderer';
 function redactTelegramCredential(value:string,token:string,url:string){return value.split(url).join('[REDACTED]').split(token).join('[REDACTED]')}
-async function callWithToken(token:string,method:string,body=new FormData()){
+async function callWithToken(token:string,method:string,body?:FormData){
   const url=`https://api.telegram.org/bot${token}/${method}`;
+  const init:RequestInit={method:'POST'};
+  if(body!==undefined)init.body=body;
   let response:Response;
-  try{response=await fetch(url,{method:'POST',body})}catch(error){
+  try{response=await fetch(url,init)}catch(error){
     const errorMessage=error instanceof Error?error.message:String(error);
     console.error({event:'telegram_bot_api_transport_error',method,errorName:error instanceof Error?error.name:null,errorMessage:redactTelegramCredential(errorMessage,token,url)});
     throw new AppError('TELEGRAM_ERROR','Не удалось выполнить запрос к Telegram',502)
@@ -21,13 +23,13 @@ async function callWithToken(token:string,method:string,body=new FormData()){
   }
   return json.result
 }
-async function call(env:Env,method:string,body:FormData){return callWithToken(env.TELEGRAM_BOT_TOKEN,method,body)}
+async function call(env:Env,method:string,body?:FormData){return callWithToken(env.TELEGRAM_BOT_TOKEN,method,body)}
 function url(chat:string,id:number){return chat.startsWith('@')?`https://t.me/${chat.slice(1)}/${id}`:undefined}
 export async function sendTelegramText(env:Env,chatId:string,text:string){const body=new FormData();body.set('chat_id',chatId);body.set('text',text);return call(env,'sendMessage',body)}
 
 export async function sendTelegramMiniAppButton(env:Env,chatId:string,url:string){const body=new FormData();body.set('chat_id',chatId);body.set('text','Откройте приложение, чтобы создать публикацию.');body.set('reply_markup',JSON.stringify({inline_keyboard:[[{text:'Открыть приложение',web_app:{url}}]]}));return call(env,'sendMessage',body)}
 export async function getTelegramChatMember(env:Env,chatId:string,userId:string){const body=new FormData();body.set('chat_id',chatId);body.set('user_id',userId);return call(env,'getChatMember',body) as Promise<{status:string}>}
-export async function getTelegramBotMe(env:Env){return call(env,'getMe',new FormData()) as Promise<{id:number;username?:string;first_name:string;can_manage_bots?:boolean}>}
+export async function getTelegramBotMe(env:Env){return call(env,'getMe') as Promise<{id:number;username?:string;first_name:string;can_manage_bots?:boolean}>}
 export async function getManagedTelegramBotToken(env:Env,managedBotId:string){const body=new FormData();body.set('user_id',managedBotId);return call(env,'getManagedBotToken',body) as Promise<string>}
 export async function getTelegramBotMeWithToken(token:string){return callWithToken(token,'getMe') as Promise<{id:number;username?:string;first_name:string}>}
 export async function sendTelegramManagedBotRequest(env:Env,chatId:string,requestId:number,suggestedName:string,suggestedUsername:string){const body=new FormData();body.set('chat_id',chatId);body.set('text','Создайте персонального Telegram-бота для Cosmo Sofa.');body.set('reply_markup',JSON.stringify({keyboard:[[{text:'Создать персонального бота',request_managed_bot:{request_id:requestId,suggested_name:suggestedName,suggested_username:suggestedUsername}}]],resize_keyboard:true,one_time_keyboard:true}));return call(env,'sendMessage',body)}
