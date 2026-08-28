@@ -103,7 +103,9 @@ describe('Managed Bot webhook integration', () => {
       headers: { 'x-telegram-bot-api-secret-token': 'secret', 'content-type': 'application/json' },
       body: JSON.stringify({ update_id: 500, managed_bot: { user: { id: 77 }, bot: { id: 9001, username: 'created_bot', first_name: 'Created' } } }),
     });
-    await expect(telegramWebhook(request, env)).resolves.toEqual({ ok: true });
+    const response = await telegramWebhook(request, env);
+    expect(response).toEqual({ ok: true });
+    expect(JSON.stringify(response)).not.toContain(managedToken);
     expect(fetch.mock.calls[0][0]).toContain('/getManagedBotToken');
     expect((fetch.mock.calls[0][1]?.body as FormData).get('user_id')).toBe('9001');
     expect(fetch.mock.calls[1][0]).toContain(`/bot${managedToken}/getMe`);

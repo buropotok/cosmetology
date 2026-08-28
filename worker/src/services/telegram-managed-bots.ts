@@ -164,6 +164,13 @@ export async function handleManagedBotUpdate(
       managedBotName: displayName,
     });
     const token = await api.getManagedToken(env, botId);
+    console.log({
+      event: 'telegram_managed_bot_token_received',
+      managedBotId: botId,
+      tokenType: typeof token,
+      tokenLength: typeof token === 'string' ? token.length : null,
+      tokenHasColon: typeof token === 'string' ? token.includes(':') : false,
+    });
     if (typeof token !== 'string' || !token) {
       throw new AppError(
         'MANAGED_BOT_TOKEN_INVALID',

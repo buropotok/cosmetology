@@ -32,3 +32,31 @@ describe('Managed Bot request reply keyboard',()=>{
     expect(markup.inline_keyboard).toBeUndefined();
   });
 });
+
+describe('Managed Bot token transport diagnostics',()=>{
+  it('passes the getManagedBotToken String unchanged into a valid getMe request',async()=>{
+    const managedToken='8771271779:managed-secret';
+    const fetch=vi.fn(async(url:string,init:RequestInit)=>url.endsWith('/getManagedBotToken')
+      ?new Response(JSON.stringify({ok:true,result:managedToken}))
+      :new Response(JSON.stringify({ok:true,result:{id:8771271779,username:'managed_bot',first_name:'Managed'}})));
+    vi.stubGlobal('fetch',fetch);
+    const {getManagedTelegramBotToken,getTelegramBotMeWithToken}=await import('./telegram');
+    const received=await getManagedTelegramBotToken(env,'8771271779');
+    await getTelegramBotMeWithToken(received);
+    expect(received).toBe(managedToken);
+    expect(fetch.mock.calls[0][0]).toBe('https://api.telegram.org/bottoken/getManagedBotToken');
+    expect(((fetch.mock.calls[0][1].body as FormData).get('user_id'))).toBe('8771271779');
+    expect(fetch.mock.calls[1][0]).toBe(`https://api.telegram.org/bot${managedToken}/getMe`);
+    expect((fetch.mock.calls[1][1].body as FormData).get('user_id')).toBeNull();
+  });
+
+  it('logs only safe Telegram error metadata and keeps the token out of logs',async()=>{
+    const managedToken='8771271779:never-log-this';
+    const error=vi.spyOn(console,'error').mockImplementation(()=>undefined);
+    vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify({ok:false,error_code:401,description:'Unauthorized'}),{status:401})));
+    const {getTelegramBotMeWithToken}=await import('./telegram');
+    await expect(getTelegramBotMeWithToken(managedToken)).rejects.toMatchObject({code:'TELEGRAM_ERROR',status:502});
+    expect(error).toHaveBeenCalledWith({event:'telegram_managed_bot_api_error',method:'getMe',errorCode:401,description:'Unauthorized'});
+    expect(JSON.stringify(error.mock.calls)).not.toContain(managedToken);
+  });
+});
