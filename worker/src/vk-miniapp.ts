@@ -131,7 +131,19 @@ export const vkMiniAppHtml = `<!doctype html>
         } catch (error) {
           throw new Error(vkError('VKWebAppShowWallPostBox', error));
         }
-        status.textContent = result?.post_id ? 'Публикация размещена. ID: ' + result.post_id : 'VK завершил публикацию.';
+        if (result?.post_id) {
+          status.textContent = 'Публикация размещена. Открываем пост в группе…';
+          try {
+            await vkBridge.send('VKWebAppOpenWallPost', {
+              owner_id: -handoff.groupId,
+              post_id: Number(result.post_id),
+            });
+          } catch {
+            location.href = 'https://vk.com/wall-' + handoff.groupId + '_' + result.post_id;
+          }
+        } else {
+          status.textContent = 'VK завершил публикацию.';
+        }
       } catch (error) {
         status.textContent = 'Ошибка VK:\\n' + (error instanceof Error ? error.message : String(error));
       } finally {
