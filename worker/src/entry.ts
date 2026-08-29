@@ -1,6 +1,6 @@
 import worker from './index';
 import { vkMiniAppHtml } from './vk-miniapp';
-import { createVkHandoff, getVkHandoff, getVkHandoffImage } from './services/vk-handoff';
+import { createVkHandoff, getVkHandoff, getVkHandoffImage, uploadVkHandoffImage } from './services/vk-handoff';
 import { AppError, type Env } from './types';
 
 const VK_TEST_IMAGE_KEY = 'posts/2026/08/10.png';
@@ -24,6 +24,11 @@ export default {
       const handoffMatch = url.pathname.match(/^\/api\/vk-handoff\/([A-Za-z0-9_-]+)$/);
       if (req.method === 'GET' && handoffMatch) {
         return json(await getVkHandoff(env, handoffMatch[1], url.origin));
+      }
+
+      const handoffUploadMatch = url.pathname.match(/^\/api\/vk-handoff-upload\/([A-Za-z0-9_-]+)$/);
+      if (req.method === 'POST' && handoffUploadMatch) {
+        return json(await uploadVkHandoffImage(env, handoffUploadMatch[1], req));
       }
 
       const handoffImageMatch = url.pathname.match(/^\/api\/vk-handoff-image\/([A-Za-z0-9_-]+)$/);
