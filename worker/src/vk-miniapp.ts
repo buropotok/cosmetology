@@ -132,15 +132,11 @@ export const vkMiniAppHtml = `<!doctype html>
           throw new Error(vkError('VKWebAppShowWallPostBox', error));
         }
         if (result?.post_id) {
-          status.textContent = 'Публикация размещена.';
-          try {
-            await vkBridge.send('VKWebAppClose', { status: 'success' });
-          } catch {
-            status.textContent = 'Публикация размещена. Можно закрыть это окно.';
-          }
-        } else {
-          status.textContent = 'VK завершил публикацию.';
+          status.textContent = 'Публикация размещена. Открываем группу…';
+          location.replace('https://vk.com/club' + handoff.groupId);
+          return;
         }
+        status.textContent = 'VK завершил публикацию.';
       } catch (error) {
         status.textContent = 'Ошибка VK:\\n' + (error instanceof Error ? error.message : String(error));
       } finally {
