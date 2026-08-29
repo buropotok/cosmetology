@@ -30,15 +30,15 @@ export const vkMiniAppHtml = `<!doctype html>
     }
 
     button.addEventListener('click', async () => {
-      status.textContent = 'Opening composer with photo...';
+      status.textContent = 'Opening composer with static photo...';
       try {
         const result = await vkBridge.send('VKWebAppShowWallPostBox', {
           owner_id: -240907364,
-          message: 'TEST PHOTO — текст и изображение автоматически переданы из VK Mini App',
+          message: 'TEST PHOTO STATIC — текст и изображение автоматически переданы из VK Mini App',
           upload_attachments: [
             {
               type: 'photo',
-              link: 'https://picsum.photos/1200/1200.jpg'
+              link: 'https://upload.wikimedia.org/wikipedia/commons/a/a9/Example.jpg'
             }
           ]
         });
