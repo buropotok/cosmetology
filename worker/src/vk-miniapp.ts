@@ -4,19 +4,22 @@ export const vkMiniAppHtml = `<!doctype html>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Публикация VK</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700;900&display=swap" rel="stylesheet">
   <script src="https://unpkg.com/@vkontakte/vk-bridge/dist/browser.min.js"></script>
   <style>
     *{box-sizing:border-box}
     html,body{margin:0;min-height:100%;background:#0b1739;color:#fff}
-    body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display","Helvetica Neue",Arial,sans-serif;min-height:100vh;padding:28px 22px;display:flex;align-items:center;justify-content:center;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+    body{font-family:"Lato",Arial,sans-serif;min-height:100vh;padding:28px 22px;display:flex;align-items:center;justify-content:center;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
     button,input,textarea,select{font-family:inherit}
     .card{width:100%;max-width:440px;padding:34px 26px 30px;border:1px solid rgba(255,255,255,.11);border-radius:26px;background:rgba(255,255,255,.065);box-shadow:0 22px 65px rgba(0,0,0,.24);text-align:center}
     .logo{width:72px;height:72px;margin:0 auto 18px;display:block;filter:drop-shadow(0 10px 28px rgba(0,0,0,.20))}
-    h1{margin:0 0 10px;font-size:28px;line-height:1.18;font-weight:800;letter-spacing:-.5px}
+    h1{margin:0 0 10px;font-size:28px;line-height:1.18;font-weight:900;letter-spacing:-.5px}
     .return-title{margin:0 auto 14px;max-width:360px;font-size:31px;line-height:1.18;font-weight:700;letter-spacing:-.35px;text-transform:none}
     .subtitle{margin:0 auto 24px;max-width:340px;color:rgba(255,255,255,.72);font-size:16px;line-height:1.5}
     .published-message{margin:0 auto;max-width:350px;color:rgba(255,255,255,.78);font-size:30px;line-height:1.22;font-weight:400;letter-spacing:-.25px}
-    button{width:100%;min-height:56px;padding:15px 20px;border:0;border-radius:18px;background:#fff;color:#0b1739;font:inherit;font-size:17px;font-weight:750;cursor:pointer;box-shadow:0 9px 26px rgba(0,0,0,.20);transition:transform .12s ease,opacity .12s ease}
+    button{width:100%;min-height:56px;padding:15px 20px;border:0;border-radius:18px;background:#fff;color:#0b1739;font:inherit;font-size:17px;font-weight:700;cursor:pointer;box-shadow:0 9px 26px rgba(0,0,0,.20);transition:transform .12s ease,opacity .12s ease}
     button:active:not(:disabled){transform:scale(.985)}
     button:disabled{opacity:.55;cursor:default}
     #status{margin:18px 0 0;color:rgba(255,255,255,.62);font-size:14px;line-height:1.45;white-space:pre-wrap}
