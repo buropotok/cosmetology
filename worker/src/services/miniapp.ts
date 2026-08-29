@@ -1,9 +1,9 @@
 import { AppError, type Env } from '../types';
-import { publishTelegram } from './telegram';
+import { publishTelegramWithToken } from './telegram';
 import { validateTelegramMiniAppInitData } from './telegram-miniapp-auth';
 import { resolveOrCreateTelegramIdentity } from './telegram-identity';
-import { createPairingCode } from './telegram-account';
 import { getManagedBotStateForUser } from './managed-bot-onboarding';
+import { decryptManagedBotToken } from './managed-bot-crypto';
 
 export const MINIAPP_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
 export const MINIAPP_TEXT_MAX_LENGTH = 4096;
@@ -55,19 +55,35 @@ export async function getMiniAppStatus(request: Request, env: Env) {
     accountReady: true,
     vkGroup: vkGroup ? { connected: true, ...vkGroup } : { connected: false },
     managedBot: managed ? { id: managed.botId, username: managed.username, destination: managed.chatId ? { connected: true, chatTitle: managed.chatTitle ?? 'Telegram-группа', chatType: managed.chatType } : { connected: false } } : null,
-    connection: account?.chatId ? { connected: true, chatTitle: account.chatTitle ?? 'Telegram-группа', chatType: account.chatType } : { connected: false },
   };
 }
 
-export async function createMiniAppPairing(request: Request, env: Env) {
-  const { telegramUserId, account } = await miniAppAccount(request, env);
-  const pairing = await createPairingCode(env, account.userId, telegramUserId);
-  return { code: pairing.code, command: pairing.command, expiresAt: pairing.expiresAt };
+type ManagedPublicationTarget = {
+  telegram_bot_id: string;
+  telegram_chat_id: string;
+  token_ciphertext: string;
+  token_iv: string;
+  token_key_version: number;
+};
+
+async function getManagedPublicationTarget(env: Env, userId: string) {
+  return env.DB.prepare(
+    `SELECT mb.telegram_bot_id,d.telegram_chat_id,mb.token_ciphertext,mb.token_iv,mb.token_key_version
+     FROM telegram_managed_bots mb
+     JOIN telegram_managed_bot_destinations d
+       ON d.telegram_bot_id=mb.telegram_bot_id AND d.user_id=mb.user_id AND d.status='active'
+     JOIN telegram_managed_bot_webhooks wh
+       ON wh.telegram_bot_id=mb.telegram_bot_id AND wh.status='active'
+     WHERE mb.user_id=? AND mb.status='active'
+       AND mb.token_ciphertext IS NOT NULL AND mb.token_iv IS NOT NULL
+     ORDER BY mb.updated_at DESC LIMIT 1`,
+  ).bind(userId).first<ManagedPublicationTarget>();
 }
 
-export async function publishFromMiniApp(request: Request, env: Env, publisher: typeof publishTelegram = publishTelegram) {
+export async function publishFromMiniApp(request: Request, env: Env) {
   const { account } = await miniAppAccount(request, env);
-  if (!account.chatId) throw new AppError('TELEGRAM_NOT_CONNECTED', 'Подключите Telegram-группу', 409);
+  const target = await getManagedPublicationTarget(env, account.userId);
+  if (!target) throw new AppError('MANAGED_TELEGRAM_NOT_CONNECTED', 'Подключите персонального Telegram-бота и группу', 409);
   if (!(request.headers.get('content-type') ?? '').toLowerCase().startsWith('multipart/form-data')) throw new AppError('INVALID_CONTENT_TYPE', 'Ожидается multipart/form-data', 415);
   const form = await request.formData().catch(() => { throw new AppError('INVALID_FORM_DATA', 'Не удалось прочитать форму публикации', 400); });
   const rawText = form.get('text'); const text = typeof rawText === 'string' ? rawText.trim() : '';
@@ -77,5 +93,10 @@ export async function publishFromMiniApp(request: Request, env: Env, publisher: 
   if (!text && !image) throw new AppError('EMPTY_PUBLICATION', 'Добавьте текст или изображение', 400);
   if (image && !image.type.toLowerCase().startsWith('image/')) throw new AppError('INVALID_IMAGE_TYPE', 'Можно выбрать только изображение', 400);
   if (image && image.size > MINIAPP_IMAGE_MAX_BYTES) throw new AppError('IMAGE_TOO_LARGE', 'Изображение должно быть не больше 10 МБ', 400);
-  return { ok: true, publication: await publisher(env, text, image, account.chatId) };
+  const token = await decryptManagedBotToken(target.telegram_bot_id, {
+    ciphertext: target.token_ciphertext,
+    iv: target.token_iv,
+    keyVersion: target.token_key_version,
+  }, env);
+  return { ok: true, publication: await publishTelegramWithToken(token, text, image, target.telegram_chat_id) };
 }
