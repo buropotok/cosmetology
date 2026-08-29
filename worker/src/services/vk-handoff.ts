@@ -4,6 +4,7 @@ import { resolveOrCreateTelegramIdentity } from './telegram-identity';
 
 const HANDOFF_TTL_SECONDS = 15 * 60;
 const IMAGE_MAX_BYTES = 10 * 1024 * 1024;
+const IMAGE_MAX_COUNT = 10;
 const TEXT_MAX_LENGTH = 4096;
 const VK_APP_ID = '54742217';
 
@@ -32,6 +33,17 @@ function imageExtension(type: string) {
   return ({ 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif' } as Record<string, string>)[type] ?? 'bin';
 }
 
+function decodeImageKeys(value: string | null) {
+  if (!value) return [];
+  if (value.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed) && parsed.every(item => typeof item === 'string')) return parsed as string[];
+    } catch {}
+  }
+  return [value];
+}
+
 function assertHandoffToken(token: string) {
   if (!/^[A-Za-z0-9_-]{40,64}$/.test(token)) throw new AppError('INVALID_HANDOFF', 'Некорректная ссылка публикации', 400);
 }
@@ -56,27 +68,35 @@ export async function createVkHandoff(request: Request, env: Env) {
   const form = await request.formData().catch(() => { throw new AppError('INVALID_FORM_DATA', 'Не удалось прочитать публикацию', 400); });
   const rawText = form.get('text');
   const text = typeof rawText === 'string' ? rawText.trim() : '';
-  const rawImage = form.get('image');
-  const image = rawImage instanceof File && rawImage.size > 0 ? rawImage : undefined;
-  if (rawImage !== null && !(rawImage instanceof File)) throw new AppError('INVALID_IMAGE', 'Некорректное изображение', 400);
+  const rawImages = form.getAll('images');
+  const legacyImage = form.get('image');
+  const candidates = rawImages.length ? rawImages : (legacyImage === null ? [] : [legacyImage]);
+  if (candidates.length > IMAGE_MAX_COUNT) throw new AppError('TOO_MANY_IMAGES', 'Можно выбрать не больше 10 изображений', 400);
+  if (candidates.some(item => !(item instanceof File))) throw new AppError('INVALID_IMAGE', 'Некорректное изображение', 400);
+  const images = (candidates as File[]).filter(image => image.size > 0);
   if (text.length > TEXT_MAX_LENGTH) throw new AppError('INVALID_TEXT', `Текст должен быть короче ${TEXT_MAX_LENGTH + 1} символов`, 400);
-  if (!text && !image) throw new AppError('EMPTY_PUBLICATION', 'Добавьте текст или изображение', 400);
-  if (image && !image.type.toLowerCase().startsWith('image/')) throw new AppError('INVALID_IMAGE_TYPE', 'Можно выбрать только изображение', 400);
-  if (image && image.size > IMAGE_MAX_BYTES) throw new AppError('IMAGE_TOO_LARGE', 'Изображение должно быть не больше 10 МБ', 400);
+  if (!text && !images.length) throw new AppError('EMPTY_PUBLICATION', 'Добавьте текст или изображение', 400);
+  for (const image of images) {
+    if (!image.type.toLowerCase().startsWith('image/')) throw new AppError('INVALID_IMAGE_TYPE', 'Можно выбрать только изображения', 400);
+    if (image.size > IMAGE_MAX_BYTES) throw new AppError('IMAGE_TOO_LARGE', 'Каждое изображение должно быть не больше 10 МБ', 400);
+  }
 
   const random = new Uint8Array(32);
   crypto.getRandomValues(random);
   const token = bytesToToken(random);
   const tokenHash = await hashToken(token);
   const expiresAt = new Date(Date.now() + HANDOFF_TTL_SECONDS * 1000).toISOString();
-  let imageKey: string | null = null;
-  if (image) {
-    imageKey = `vk-handoffs/${tokenHash}.${imageExtension(image.type)}`;
+  const imageKeys: string[] = [];
+  for (let index = 0; index < images.length; index++) {
+    const image = images[index];
+    const imageKey = `vk-handoffs/${tokenHash}-${index}.${imageExtension(image.type)}`;
     await env.IMAGES.put(imageKey, await image.arrayBuffer(), { httpMetadata: { contentType: image.type } });
+    imageKeys.push(imageKey);
   }
+  const storedImageKey = imageKeys.length ? JSON.stringify(imageKeys) : null;
 
   await env.DB.prepare('INSERT INTO vk_handoffs(token_hash,user_id,group_id,text,image_key,expires_at) VALUES(?,?,?,?,?,?)')
-    .bind(tokenHash, userId, group.groupId, text, imageKey, expiresAt).run();
+    .bind(tokenHash, userId, group.groupId, text, storedImageKey, expiresAt).run();
 
   return { ok: true, token, expiresAt, vkUrl: `https://vk.com/app${VK_APP_ID}#handoff=${encodeURIComponent(token)}` };
 }
@@ -87,10 +107,12 @@ export async function getVkHandoff(env: Env, token: string, origin: string) {
   const row = await env.DB.prepare('SELECT group_id AS groupId,text,image_key AS imageKey,expires_at AS expiresAt FROM vk_handoffs WHERE token_hash=?')
     .bind(tokenHash).first<{ groupId: number; text: string; imageKey: string | null; expiresAt: string }>();
   if (!row || Date.parse(row.expiresAt) <= Date.now()) throw new AppError('HANDOFF_EXPIRED', 'Ссылка публикации истекла. Вернитесь в Telegram и откройте VK снова.', 410);
+  const imageKeys = decodeImageKeys(row.imageKey);
   return {
     groupId: row.groupId,
     text: row.text,
-    imageUrl: row.imageKey ? `${origin}/api/vk-handoff-image/${encodeURIComponent(token)}` : null,
+    imageUrl: imageKeys.length ? `${origin}/api/vk-handoff-image/${encodeURIComponent(token)}` : null,
+    imageCount: imageKeys.length,
     expiresAt: row.expiresAt,
   };
 }
@@ -100,8 +122,9 @@ export async function getVkHandoffImage(env: Env, token: string) {
   const tokenHash = await hashToken(token);
   const row = await env.DB.prepare('SELECT image_key AS imageKey,expires_at AS expiresAt FROM vk_handoffs WHERE token_hash=?')
     .bind(tokenHash).first<{ imageKey: string | null; expiresAt: string }>();
-  if (!row?.imageKey || Date.parse(row.expiresAt) <= Date.now()) return null;
-  return env.IMAGES.get(row.imageKey);
+  const imageKey = decodeImageKeys(row?.imageKey ?? null)[0];
+  if (!imageKey || !row || Date.parse(row.expiresAt) <= Date.now()) return null;
+  return env.IMAGES.get(imageKey);
 }
 
 export async function uploadVkHandoffImage(env: Env, token: string, request: Request) {
@@ -109,11 +132,14 @@ export async function uploadVkHandoffImage(env: Env, token: string, request: Req
   const tokenHash = await hashToken(token);
   const row = await env.DB.prepare('SELECT image_key AS imageKey,expires_at AS expiresAt FROM vk_handoffs WHERE token_hash=?')
     .bind(tokenHash).first<{ imageKey: string | null; expiresAt: string }>();
-  if (!row?.imageKey || Date.parse(row.expiresAt) <= Date.now()) throw new AppError('HANDOFF_EXPIRED', 'Изображение публикации недоступно', 410);
+  if (!row || Date.parse(row.expiresAt) <= Date.now()) throw new AppError('HANDOFF_EXPIRED', 'Изображение публикации недоступно', 410);
 
-  const body = await request.json().catch(() => null) as { uploadUrl?: unknown } | null;
+  const body = await request.json().catch(() => null) as { uploadUrl?: unknown; index?: unknown } | null;
   const uploadUrl = assertVkUploadUrl(typeof body?.uploadUrl === 'string' ? body.uploadUrl : '');
-  const object = await env.IMAGES.get(row.imageKey);
+  const imageKeys = decodeImageKeys(row.imageKey);
+  const index = Number.isInteger(body?.index) ? Number(body?.index) : 0;
+  if (index < 0 || index >= imageKeys.length) throw new AppError('VK_IMAGE_NOT_FOUND', 'Изображение публикации не найдено', 404);
+  const object = await env.IMAGES.get(imageKeys[index]);
   if (!object) throw new AppError('VK_IMAGE_NOT_FOUND', 'Изображение публикации не найдено', 404);
 
   const blob = await object.blob();
