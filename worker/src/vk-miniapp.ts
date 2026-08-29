@@ -1,17 +1,145 @@
-export const vkMiniAppHtml = `<!doctype html><html lang="ru"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Публикация VK</title><script src="https://unpkg.com/@vkontakte/vk-bridge/dist/browser.min.js"></script><style>body{font-family:sans-serif;padding:24px}button{width:100%;padding:16px;font-size:18px}pre{margin-top:20px;white-space:pre-wrap;word-break:break-word;font-size:13px;line-height:1.4}</style></head><body><h2>Публикация в VK</h2><button id="post" disabled>Открыть публикацию</button><pre id="status">Загружаем публикацию…</pre><script>
-const VK_APP_ID=54742217,VK_API_VERSION='5.199',VK_PHOTO_CONCURRENCY=1,status=document.getElementById('status'),button=document.getElementById('post');let handoff=null,currentToken='',vkApiQueue=Promise.resolve(),logStarted=performance.now(),logs=[];
-function elapsed(){return((performance.now()-logStarted)/1000).toFixed(2)+'s'}
-function safeJson(value){try{return JSON.stringify(value,(key,val)=>/token|access_token/i.test(key)?'[hidden]':val)}catch{return String(value)}}
-function log(message,data){const suffix=data===undefined?'':' | '+safeJson(data);logs.push('['+elapsed()+'] '+message+suffix);status.textContent=logs.join('\\n');status.scrollTop=status.scrollHeight}
-function handoffToken(){const query=new URLSearchParams(location.search).get('handoff');if(query)return query;const hash=new URLSearchParams(location.hash.replace(/^#/,'')).get('handoff');if(hash)return hash;const launch=new URLSearchParams(location.search).get('vk_ref')||'',match=launch.match(/(?:^|[?&#])handoff=([A-Za-z0-9_-]+)/);return match?match[1]:''}
-function vkError(stage,error){const data=error&&typeof error==='object'?error:{},nested=data.error_data&&typeof data.error_data==='object'?data.error_data:{},api=nested.api_error&&typeof nested.api_error==='object'?nested.api_error:{},code=api.error_code||nested.error_code||data.error_code||'',message=api.error_msg||nested.error_reason||nested.error_msg||data.message||(error instanceof Error?error.message:'')||data.error_type||'Неизвестная ошибка',parts=['Этап: '+stage];if(data.error_type)parts.push('Тип: '+data.error_type);if(code!=='')parts.push('Код: '+code);parts.push('Сообщение: '+message);return parts.join('\\n')}
-function errorText(error){return error instanceof Error?error.message:String(error)}
-async function callVkApiNow(method,params){const started=performance.now();log(method+' → request');try{const result=await vkBridge.send('VKWebAppCallAPIMethod',{method,params:{...params,v:VK_API_VERSION}});log(method+' ← response '+((performance.now()-started)/1000).toFixed(2)+'s',result?.response);if(result?.response===undefined)throw new Error('VK API не вернул результат');return result.response}catch(error){log(method+' ✕ '+((performance.now()-started)/1000).toFixed(2)+'s',errorText(error));throw new Error(vkError(method,error))}}
-function callVkApi(method,params){const task=vkApiQueue.then(()=>callVkApiNow(method,params));vkApiQueue=task.catch(()=>{});return task}
-async function uploadPhotoToVk(index,uploadUrl){const started=performance.now();log('Фото '+(index+1)+': Worker → VK upload start',{uploadHost:(()=>{try{return new URL(uploadUrl).host}catch{return'unknown'}})()});let uploadResponse;try{uploadResponse=await fetch('/api/vk-handoff-upload/'+encodeURIComponent(currentToken),{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({uploadUrl,index})})}catch(error){log('Фото '+(index+1)+': Worker → VK upload network error '+((performance.now()-started)/1000).toFixed(2)+'s',errorText(error));throw new Error('Этап: upload image '+(index+1)+' to VK\\nСообщение: '+errorText(error))}const raw=await uploadResponse.text(),duration=((performance.now()-started)/1000).toFixed(2);let uploaded=null;try{uploaded=raw?JSON.parse(raw):null}catch{}log('Фото '+(index+1)+': Worker → VK upload response '+duration+'s',{httpStatus:uploadResponse.status,response:uploaded??raw.slice(0,500)});if(!uploadResponse.ok)throw new Error('Этап: upload image '+(index+1)+' to VK\\nСообщение: '+(uploaded?.error?.message||'HTTP '+uploadResponse.status));if(!uploaded?.photo||uploaded?.server===undefined||!uploaded?.hash)throw new Error('Этап: upload image '+(index+1)+' to VK\\nСообщение: VK вернул неполный результат загрузки');return uploaded}
-async function prepareOnePhotoAttempt(index,auth,attempt){const totalStarted=performance.now();log('Фото '+(index+1)+', попытка '+attempt+': начало');const server=await callVkApi('photos.getWallUploadServer',{access_token:auth.access_token,group_id:handoff.groupId});if(!server?.upload_url)throw new Error('Этап: photos.getWallUploadServer '+(index+1)+'\\nСообщение: VK не вернул upload_url');log('Фото '+(index+1)+': upload server получен',{uploadHost:(()=>{try{return new URL(server.upload_url).host}catch{return'unknown'}})()});const uploaded=await uploadPhotoToVk(index,server.upload_url);log('Фото '+(index+1)+': photos.saveWallPhoto start',{server:uploaded.server,photoLength:typeof uploaded.photo==='string'?uploaded.photo.length:null,hashLength:typeof uploaded.hash==='string'?uploaded.hash.length:null});const saved=await callVkApi('photos.saveWallPhoto',{access_token:auth.access_token,group_id:handoff.groupId,photo:uploaded.photo,server:uploaded.server,hash:uploaded.hash}),photo=Array.isArray(saved)?saved[0]:null;if(!photo?.owner_id||!photo?.id)throw new Error('Этап: photos.saveWallPhoto '+(index+1)+'\\nСообщение: VK не вернул сохранённую фотографию');log('Фото '+(index+1)+', попытка '+attempt+': готово за '+((performance.now()-totalStarted)/1000).toFixed(2)+'s',{owner_id:photo.owner_id,id:photo.id});return 'photo'+photo.owner_id+'_'+photo.id+(photo.access_key?'_'+photo.access_key:'')}
-async function prepareOnePhoto(index,auth){try{return await prepareOnePhotoAttempt(index,auth,1)}catch(firstError){log('Фото '+(index+1)+': первая попытка FAILED',errorText(firstError));try{log('Фото '+(index+1)+': retry');return await prepareOnePhotoAttempt(index,auth,2)}catch(secondError){log('Фото '+(index+1)+': вторая попытка FAILED',errorText(secondError));throw new Error('Изображение '+(index+1)+' не загрузилось после двух попыток.\\n\\nПервая попытка:\\n'+errorText(firstError)+'\\n\\nВторая попытка:\\n'+errorText(secondError))}}}
-async function prepareNativePhotoAttachments(){const count=Number(handoff.imageCount||0);if(!count)return'';logStarted=performance.now();logs=[];log('Старт подготовки '+count+' фото');const authStarted=performance.now();log('VKWebAppGetAuthToken → request',{scope:'photos'});let auth;try{auth=await vkBridge.send('VKWebAppGetAuthToken',{app_id:VK_APP_ID,scope:'photos'})}catch(error){log('VKWebAppGetAuthToken ✕',errorText(error));throw new Error(vkError('VKWebAppGetAuthToken (photos)',error))}if(!auth?.access_token)throw new Error('Этап: VKWebAppGetAuthToken (photos)\\nСообщение: VK не предоставил access_token');log('VKWebAppGetAuthToken ← success '+((performance.now()-authStarted)/1000).toFixed(2)+'s',{scope:auth.scope||'photos'});const attachments=new Array(count);let nextIndex=0,completed=0;async function worker(){while(true){const index=nextIndex++;if(index>=count)return;attachments[index]=await prepareOnePhoto(index,auth);completed++;log('Прогресс: '+completed+'/'+count+' фото готово')}}const workers=Array.from({length:Math.min(VK_PHOTO_CONCURRENCY,count)},()=>worker());await Promise.all(workers);log('Все фото готовы',{attachments:attachments});return attachments.join(',')}
-async function init(){try{await vkBridge.send('VKWebAppInit');currentToken=handoffToken();if(!currentToken)throw new Error('Не получен handoff token. Вернитесь в Telegram и откройте VK снова.');const response=await fetch('/api/vk-handoff/'+encodeURIComponent(currentToken),{cache:'no-store'}),result=await response.json().catch(()=>null);if(!response.ok)throw new Error(result?.error?.message||'Не удалось загрузить публикацию.');handoff=result;button.disabled=false;button.textContent='Открыть публикацию';status.textContent='Публикация готова. Фото: '+Number(handoff.imageCount||0)+'. Нажмите кнопку, чтобы открыть редактор VK.'}catch(error){status.textContent=errorText(error)}}
-button.addEventListener('click',async()=>{if(!handoff)return;button.disabled=true;try{const attachment=await prepareNativePhotoAttachments();log('VKWebAppShowWallPostBox → request');const params={owner_id:-handoff.groupId,message:handoff.text};if(attachment)params.attachments=attachment;let result;const started=performance.now();try{result=await vkBridge.send('VKWebAppShowWallPostBox',params);log('VKWebAppShowWallPostBox ← response '+((performance.now()-started)/1000).toFixed(2)+'s',result)}catch(error){log('VKWebAppShowWallPostBox ✕ '+((performance.now()-started)/1000).toFixed(2)+'s',errorText(error));throw new Error(vkError('VKWebAppShowWallPostBox',error))}if(result?.post_id){log('Публикация размещена. Открываем группу…');location.replace('https://vk.com/club'+handoff.groupId);return}log('VK завершил публикацию без post_id',result)}catch(error){log('FATAL',errorText(error))}finally{button.disabled=false;button.textContent='Открыть публикацию'}});init();
-</script></body></html>`;
+export const vkMiniAppHtml = `<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Публикация VK</title>
+  <script src="https://unpkg.com/@vkontakte/vk-bridge/dist/browser.min.js"></script>
+  <style>
+    body { font-family: sans-serif; padding: 24px; }
+    button { width: 100%; padding: 16px; font-size: 18px; }
+    pre { margin-top: 20px; white-space: pre-wrap; word-break: break-word; }
+  </style>
+</head>
+<body>
+  <h2>Публикация в VK</h2>
+  <button id="post" disabled>Открыть публикацию</button>
+  <pre id="status">Загружаем публикацию…</pre>
+
+  <script>
+    const VK_APP_ID = 54742217;
+    const VK_API_VERSION = '5.199';
+    const status = document.getElementById('status');
+    const button = document.getElementById('post');
+    let handoff = null;
+    let currentToken = '';
+
+    function handoffToken() {
+      const query = new URLSearchParams(location.search).get('handoff');
+      if (query) return query;
+      const hash = new URLSearchParams(location.hash.replace(/^#/, '')).get('handoff');
+      if (hash) return hash;
+      const launch = new URLSearchParams(location.search).get('vk_ref') || '';
+      const match = launch.match(/(?:^|[?&#])handoff=([A-Za-z0-9_-]+)/);
+      return match ? match[1] : '';
+    }
+
+    function vkError(stage, error) {
+      const data = error && typeof error === 'object' ? error : {};
+      const nested = data.error_data && typeof data.error_data === 'object' ? data.error_data : {};
+      const api = nested.api_error && typeof nested.api_error === 'object' ? nested.api_error : {};
+      const code = api.error_code || nested.error_code || data.error_code || '';
+      const message = api.error_msg || nested.error_reason || nested.error_msg || data.message || (error instanceof Error ? error.message : '') || data.error_type || 'Неизвестная ошибка';
+      const parts = ['Этап: ' + stage];
+      if (data.error_type) parts.push('Тип: ' + data.error_type);
+      if (code !== '') parts.push('Код: ' + code);
+      parts.push('Сообщение: ' + message);
+      return parts.join('\\n');
+    }
+
+    async function callVkApi(method, params) {
+      try {
+        const result = await vkBridge.send('VKWebAppCallAPIMethod', { method, params: { ...params, v: VK_API_VERSION } });
+        if (result?.response === undefined) throw new Error('VK API не вернул результат');
+        return result.response;
+      } catch (error) {
+        throw new Error(vkError(method, error));
+      }
+    }
+
+    async function prepareNativePhotoAttachment() {
+      status.textContent = 'Получаем разрешение VK на загрузку изображения…';
+      let auth;
+      try {
+        auth = await vkBridge.send('VKWebAppGetAuthToken', { app_id: VK_APP_ID, scope: 'photos' });
+      } catch (error) {
+        throw new Error(vkError('VKWebAppGetAuthToken (photos)', error));
+      }
+      if (!auth?.access_token) throw new Error('Этап: VKWebAppGetAuthToken (photos)\\nСообщение: VK не предоставил access_token');
+
+      status.textContent = 'Подготавливаем изображение в VK…';
+      const server = await callVkApi('photos.getWallUploadServer', {
+        access_token: auth.access_token,
+        group_id: handoff.groupId,
+      });
+      if (!server?.upload_url) throw new Error('Этап: photos.getWallUploadServer\\nСообщение: VK не вернул upload_url');
+
+      let uploadResponse;
+      try {
+        uploadResponse = await fetch('/api/vk-handoff-upload/' + encodeURIComponent(currentToken), {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ uploadUrl: server.upload_url }),
+        });
+      } catch (error) {
+        throw new Error('Этап: upload image to VK\\nСообщение: ' + (error instanceof Error ? error.message : String(error)));
+      }
+      const uploaded = await uploadResponse.json().catch(() => null);
+      if (!uploadResponse.ok) throw new Error('Этап: upload image to VK\\nСообщение: ' + (uploaded?.error?.message || 'HTTP ' + uploadResponse.status));
+      if (!uploaded?.photo || uploaded?.server === undefined || !uploaded?.hash) throw new Error('Этап: upload image to VK\\nСообщение: VK вернул неполный результат загрузки');
+
+      const saved = await callVkApi('photos.saveWallPhoto', {
+        access_token: auth.access_token,
+        group_id: handoff.groupId,
+        photo: uploaded.photo,
+        server: uploaded.server,
+        hash: uploaded.hash,
+      });
+      const photo = Array.isArray(saved) ? saved[0] : null;
+      if (!photo?.owner_id || !photo?.id) throw new Error('Этап: photos.saveWallPhoto\\nСообщение: VK не вернул сохранённую фотографию');
+      return 'photo' + photo.owner_id + '_' + photo.id + (photo.access_key ? '_' + photo.access_key : '');
+    }
+
+    async function init() {
+      try {
+        await vkBridge.send('VKWebAppInit');
+        currentToken = handoffToken();
+        if (!currentToken) throw new Error('Не получен handoff token. Вернитесь в Telegram и откройте VK снова.');
+        const response = await fetch('/api/vk-handoff/' + encodeURIComponent(currentToken), { cache: 'no-store' });
+        const result = await response.json().catch(() => null);
+        if (!response.ok) throw new Error(result?.error?.message || 'Не удалось загрузить публикацию.');
+        handoff = result;
+        button.disabled = false;
+        status.textContent = 'Публикация готова. Нажмите кнопку, чтобы открыть редактор VK.';
+      } catch (error) {
+        status.textContent = error instanceof Error ? error.message : String(error);
+      }
+    }
+
+    button.addEventListener('click', async () => {
+      if (!handoff) return;
+      button.disabled = true;
+      try {
+        let attachment = '';
+        if (handoff.imageUrl) attachment = await prepareNativePhotoAttachment();
+        status.textContent = 'Открываем редактор VK…';
+        const params = { owner_id: -handoff.groupId, message: handoff.text };
+        if (attachment) params.attachments = attachment;
+        let result;
+        try {
+          result = await vkBridge.send('VKWebAppShowWallPostBox', params);
+        } catch (error) {
+          throw new Error(vkError('VKWebAppShowWallPostBox', error));
+        }
+        status.textContent = result?.post_id ? 'Публикация размещена. ID: ' + result.post_id : 'VK завершил публикацию.';
+      } catch (error) {
+        status.textContent = 'Ошибка VK:\\n' + (error instanceof Error ? error.message : String(error));
+      } finally {
+        button.disabled = false;
+      }
+    });
+
+    init();
+  </script>
+</body>
+</html>`;
