@@ -34,32 +34,59 @@ export const vkMiniAppHtml = `<!doctype html>
       return match ? match[1] : '';
     }
 
+    function vkError(stage, error) {
+      const data = error && typeof error === 'object' ? error : {};
+      const nested = data.error_data && typeof data.error_data === 'object' ? data.error_data : {};
+      const api = nested.api_error && typeof nested.api_error === 'object' ? nested.api_error : {};
+      const code = api.error_code || nested.error_code || data.error_code || '';
+      const message = api.error_msg || nested.error_reason || nested.error_msg || data.message || (error instanceof Error ? error.message : '') || data.error_type || 'Неизвестная ошибка';
+      const parts = ['Этап: ' + stage];
+      if (data.error_type) parts.push('Тип: ' + data.error_type);
+      if (code !== '') parts.push('Код: ' + code);
+      parts.push('Сообщение: ' + message);
+      return parts.join('\\n');
+    }
+
     async function callVkApi(method, params) {
-      const result = await vkBridge.send('VKWebAppCallAPIMethod', { method, params: { ...params, v: VK_API_VERSION } });
-      if (result?.response === undefined) throw new Error('VK API не вернул результат для ' + method);
-      return result.response;
+      try {
+        const result = await vkBridge.send('VKWebAppCallAPIMethod', { method, params: { ...params, v: VK_API_VERSION } });
+        if (result?.response === undefined) throw new Error('VK API не вернул результат');
+        return result.response;
+      } catch (error) {
+        throw new Error(vkError(method, error));
+      }
     }
 
     async function prepareNativePhotoAttachment() {
       status.textContent = 'Получаем разрешение VK на загрузку изображения…';
-      const auth = await vkBridge.send('VKWebAppGetAuthToken', { app_id: VK_APP_ID, scope: 'photos' });
-      if (!auth?.access_token) throw new Error('VK не предоставил доступ к фотографиям.');
+      let auth;
+      try {
+        auth = await vkBridge.send('VKWebAppGetAuthToken', { app_id: VK_APP_ID, scope: 'photos' });
+      } catch (error) {
+        throw new Error(vkError('VKWebAppGetAuthToken (photos)', error));
+      }
+      if (!auth?.access_token) throw new Error('Этап: VKWebAppGetAuthToken (photos)\\nСообщение: VK не предоставил access_token');
 
       status.textContent = 'Подготавливаем изображение в VK…';
       const server = await callVkApi('photos.getWallUploadServer', {
         access_token: auth.access_token,
         group_id: handoff.groupId,
       });
-      if (!server?.upload_url) throw new Error('VK не вернул сервер загрузки фотографии.');
+      if (!server?.upload_url) throw new Error('Этап: photos.getWallUploadServer\\nСообщение: VK не вернул upload_url');
 
-      const uploadResponse = await fetch('/api/vk-handoff-upload/' + encodeURIComponent(currentToken), {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ uploadUrl: server.upload_url }),
-      });
+      let uploadResponse;
+      try {
+        uploadResponse = await fetch('/api/vk-handoff-upload/' + encodeURIComponent(currentToken), {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ uploadUrl: server.upload_url }),
+        });
+      } catch (error) {
+        throw new Error('Этап: upload image to VK\\nСообщение: ' + (error instanceof Error ? error.message : String(error)));
+      }
       const uploaded = await uploadResponse.json().catch(() => null);
-      if (!uploadResponse.ok) throw new Error(uploaded?.error?.message || 'Не удалось загрузить фотографию в VK.');
-      if (!uploaded?.photo || uploaded?.server === undefined || !uploaded?.hash) throw new Error('VK вернул неполный результат загрузки фотографии.');
+      if (!uploadResponse.ok) throw new Error('Этап: upload image to VK\\nСообщение: ' + (uploaded?.error?.message || 'HTTP ' + uploadResponse.status));
+      if (!uploaded?.photo || uploaded?.server === undefined || !uploaded?.hash) throw new Error('Этап: upload image to VK\\nСообщение: VK вернул неполный результат загрузки');
 
       const saved = await callVkApi('photos.saveWallPhoto', {
         access_token: auth.access_token,
@@ -69,7 +96,7 @@ export const vkMiniAppHtml = `<!doctype html>
         hash: uploaded.hash,
       });
       const photo = Array.isArray(saved) ? saved[0] : null;
-      if (!photo?.owner_id || !photo?.id) throw new Error('VK не сохранил фотографию для публикации.');
+      if (!photo?.owner_id || !photo?.id) throw new Error('Этап: photos.saveWallPhoto\\nСообщение: VK не вернул сохранённую фотографию');
       return 'photo' + photo.owner_id + '_' + photo.id + (photo.access_key ? '_' + photo.access_key : '');
     }
 
@@ -98,11 +125,15 @@ export const vkMiniAppHtml = `<!doctype html>
         status.textContent = 'Открываем редактор VK…';
         const params = { owner_id: -handoff.groupId, message: handoff.text };
         if (attachment) params.attachments = attachment;
-        const result = await vkBridge.send('VKWebAppShowWallPostBox', params);
+        let result;
+        try {
+          result = await vkBridge.send('VKWebAppShowWallPostBox', params);
+        } catch (error) {
+          throw new Error(vkError('VKWebAppShowWallPostBox', error));
+        }
         status.textContent = result?.post_id ? 'Публикация размещена. ID: ' + result.post_id : 'VK завершил публикацию.';
       } catch (error) {
-        const message = error instanceof Error ? error.message : (error?.error_data?.error_reason || error?.error_type || JSON.stringify(error));
-        status.textContent = 'Ошибка VK: ' + message;
+        status.textContent = 'Ошибка VK:\\n' + (error instanceof Error ? error.message : String(error));
       } finally {
         button.disabled = false;
       }
