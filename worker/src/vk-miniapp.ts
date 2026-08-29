@@ -13,7 +13,7 @@ export const vkMiniAppHtml = `<!doctype html>
 </head>
 <body>
   <h2>VK Wall Post Test</h2>
-  <button id="post">Открыть composer группы</button>
+  <button id="post">Открыть composer с фото</button>
   <pre id="status">Starting...</pre>
 
   <script>
@@ -30,11 +30,17 @@ export const vkMiniAppHtml = `<!doctype html>
     }
 
     button.addEventListener('click', async () => {
-      status.textContent = 'Opening composer...';
+      status.textContent = 'Opening composer with photo...';
       try {
         const result = await vkBridge.send('VKWebAppShowWallPostBox', {
           owner_id: -240907364,
-          message: 'TEST123 — текст автоматически передан из VK Mini App'
+          message: 'TEST PHOTO — текст и изображение автоматически переданы из VK Mini App',
+          upload_attachments: [
+            {
+              type: 'photo',
+              link: 'https://picsum.photos/1200/1200.jpg'
+            }
+          ]
         });
         status.textContent = 'RESULT:\\n' + JSON.stringify(result, null, 2);
       } catch (error) {
