@@ -6,97 +6,28 @@ import { getManagedBotStateForUser } from './managed-bot-onboarding';
 import { decryptManagedBotToken } from './managed-bot-crypto';
 
 export const MINIAPP_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
+export const MINIAPP_IMAGE_MAX_COUNT = 10;
 export const MINIAPP_TEXT_MAX_LENGTH = 4096;
-
-function initDataFrom(request: Request) {
-  return request.headers.get('authorization')?.match(/^tma\s+(.+)$/i)?.[1] ?? '';
-}
-
-async function miniAppAccount(request: Request, env: Env) {
-  const validated = await validateTelegramMiniAppInitData(initDataFrom(request), env.TELEGRAM_BOT_TOKEN);
-  const telegramUserId = String(validated.user.id);
-  const account = await resolveOrCreateTelegramIdentity(env, telegramUserId);
-  return { validated, telegramUserId, account };
-}
-
-async function getVkGroup(env: Env, userId: string) {
-  return env.DB.prepare('SELECT group_id AS groupId, group_url AS groupUrl, screen_name AS screenName FROM user_vk_group WHERE user_id=?')
-    .bind(userId).first<{ groupId: number; groupUrl: string; screenName: string | null }>();
-}
-
-function parseVkGroupUrl(value: string) {
-  let url: URL;
-  try { url = new URL(/^https?:\/\//i.test(value) ? value : `https://${value}`); }
-  catch { throw new AppError('INVALID_VK_GROUP', 'Некорректная ссылка на VK-группу', 400); }
-  if (!/(^|\.)vk\.(com|ru)$/i.test(url.hostname)) throw new AppError('INVALID_VK_GROUP', 'Нужна ссылка на группу VK', 400);
-  const screenName = url.pathname.split('/').filter(Boolean)[0] ?? '';
-  const match = screenName.match(/^(?:club|public)(\d+)$/i);
-  if (!match) throw new AppError('VK_GROUP_ID_REQUIRED', 'Пока используйте ссылку вида vk.com/club123456 или vk.com/public123456', 400);
-  return { groupId: Number(match[1]), groupUrl: `https://vk.com/${screenName}`, screenName };
-}
-
-export async function saveMiniAppVkGroup(request: Request, env: Env) {
-  const { account } = await miniAppAccount(request, env);
-  const body = await request.json().catch(() => { throw new AppError('INVALID_JSON', 'Некорректный JSON', 400); }) as { url?: unknown };
-  const raw = typeof body?.url === 'string' ? body.url.trim() : '';
-  if (!raw) throw new AppError('INVALID_VK_GROUP', 'Вставьте ссылку на VK-группу', 400);
-  const group = parseVkGroupUrl(raw);
-  await env.DB.prepare(`INSERT INTO user_vk_group(user_id,group_id,group_url,screen_name,updated_at) VALUES(?,?,?,?,CURRENT_TIMESTAMP)
-    ON CONFLICT(user_id) DO UPDATE SET group_id=excluded.group_id,group_url=excluded.group_url,screen_name=excluded.screen_name,updated_at=CURRENT_TIMESTAMP`)
-    .bind(account.userId, group.groupId, group.groupUrl, group.screenName).run();
-  return { ok: true, vkGroup: group };
-}
-
-export async function getMiniAppStatus(request: Request, env: Env) {
-  const { validated, account } = await miniAppAccount(request, env);
-  const [managed, vkGroup] = await Promise.all([getManagedBotStateForUser(env, account.userId), getVkGroup(env, account.userId)]);
-  return {
-    telegramUser: { id: String(validated.user.id), firstName: validated.user.first_name, ...(validated.user.last_name ? { lastName: validated.user.last_name } : {}), ...(validated.user.username ? { username: validated.user.username } : {}) },
-    accountReady: true,
-    vkGroup: vkGroup ? { connected: true, ...vkGroup } : { connected: false },
-    managedBot: managed ? { id: managed.botId, username: managed.username, destination: managed.chatId ? { connected: true, chatTitle: managed.chatTitle ?? 'Telegram-группа', chatType: managed.chatType } : { connected: false } } : null,
-  };
-}
-
-type ManagedPublicationTarget = {
-  telegram_bot_id: string;
-  telegram_chat_id: string;
-  token_ciphertext: string;
-  token_iv: string;
-  token_key_version: number;
-};
-
-async function getManagedPublicationTarget(env: Env, userId: string) {
-  return env.DB.prepare(
-    `SELECT mb.telegram_bot_id,d.telegram_chat_id,mb.token_ciphertext,mb.token_iv,mb.token_key_version
-     FROM telegram_managed_bots mb
-     JOIN telegram_managed_bot_destinations d
-       ON d.telegram_bot_id=mb.telegram_bot_id AND d.user_id=mb.user_id AND d.status='active'
-     JOIN telegram_managed_bot_webhooks wh
-       ON wh.telegram_bot_id=mb.telegram_bot_id AND wh.status='active'
-     WHERE mb.user_id=? AND mb.status='active'
-       AND mb.token_ciphertext IS NOT NULL AND mb.token_iv IS NOT NULL
-     ORDER BY mb.updated_at DESC LIMIT 1`,
-  ).bind(userId).first<ManagedPublicationTarget>();
-}
-
+function initDataFrom(request: Request) { return request.headers.get('authorization')?.match(/^tma\s+(.+)$/i)?.[1] ?? ''; }
+async function miniAppAccount(request: Request, env: Env) { const validated = await validateTelegramMiniAppInitData(initDataFrom(request), env.TELEGRAM_BOT_TOKEN); const telegramUserId = String(validated.user.id); const account = await resolveOrCreateTelegramIdentity(env, telegramUserId); return { validated, telegramUserId, account }; }
+async function getVkGroup(env: Env, userId: string) { return env.DB.prepare('SELECT group_id AS groupId, group_url AS groupUrl, screen_name AS screenName FROM user_vk_group WHERE user_id=?').bind(userId).first<{ groupId: number; groupUrl: string; screenName: string | null }>(); }
+function parseVkGroupUrl(value: string) { let url: URL; try { url = new URL(/^https?:\/\//i.test(value) ? value : `https://${value}`); } catch { throw new AppError('INVALID_VK_GROUP', 'Некорректная ссылка на VK-группу', 400); } if (!/(^|\.)vk\.(com|ru)$/i.test(url.hostname)) throw new AppError('INVALID_VK_GROUP', 'Нужна ссылка на группу VK', 400); const screenName = url.pathname.split('/').filter(Boolean)[0] ?? ''; const match = screenName.match(/^(?:club|public)(\d+)$/i); if (!match) throw new AppError('VK_GROUP_ID_REQUIRED', 'Пока используйте ссылку вида vk.com/club123456 или vk.com/public123456', 400); return { groupId: Number(match[1]), groupUrl: `https://vk.com/${screenName}`, screenName }; }
+export async function saveMiniAppVkGroup(request: Request, env: Env) { const { account } = await miniAppAccount(request, env); const body = await request.json().catch(() => { throw new AppError('INVALID_JSON', 'Некорректный JSON', 400); }) as { url?: unknown }; const raw = typeof body?.url === 'string' ? body.url.trim() : ''; if (!raw) throw new AppError('INVALID_VK_GROUP', 'Вставьте ссылку на VK-группу', 400); const group = parseVkGroupUrl(raw); await env.DB.prepare(`INSERT INTO user_vk_group(user_id,group_id,group_url,screen_name,updated_at) VALUES(?,?,?,?,CURRENT_TIMESTAMP) ON CONFLICT(user_id) DO UPDATE SET group_id=excluded.group_id,group_url=excluded.group_url,screen_name=excluded.screen_name,updated_at=CURRENT_TIMESTAMP`).bind(account.userId, group.groupId, group.groupUrl, group.screenName).run(); return { ok: true, vkGroup: group }; }
+export async function getMiniAppStatus(request: Request, env: Env) { const { validated, account } = await miniAppAccount(request, env); const [managed, vkGroup] = await Promise.all([getManagedBotStateForUser(env, account.userId), getVkGroup(env, account.userId)]); return { telegramUser: { id: String(validated.user.id), firstName: validated.user.first_name, ...(validated.user.last_name ? { lastName: validated.user.last_name } : {}), ...(validated.user.username ? { username: validated.user.username } : {}) }, accountReady: true, vkGroup: vkGroup ? { connected: true, ...vkGroup } : { connected: false }, managedBot: managed ? { id: managed.botId, username: managed.username, destination: managed.chatId ? { connected: true, chatTitle: managed.chatTitle ?? 'Telegram-группа', chatType: managed.chatType } : { connected: false } } : null }; }
+type ManagedPublicationTarget = { telegram_bot_id: string; telegram_chat_id: string; token_ciphertext: string; token_iv: string; token_key_version: number; };
+async function getManagedPublicationTarget(env: Env, userId: string) { return env.DB.prepare(`SELECT mb.telegram_bot_id,d.telegram_chat_id,mb.token_ciphertext,mb.token_iv,mb.token_key_version FROM telegram_managed_bots mb JOIN telegram_managed_bot_destinations d ON d.telegram_bot_id=mb.telegram_bot_id AND d.user_id=mb.user_id AND d.status='active' JOIN telegram_managed_bot_webhooks wh ON wh.telegram_bot_id=mb.telegram_bot_id AND wh.status='active' WHERE mb.user_id=? AND mb.status='active' AND mb.token_ciphertext IS NOT NULL AND mb.token_iv IS NOT NULL ORDER BY mb.updated_at DESC LIMIT 1`).bind(userId).first<ManagedPublicationTarget>(); }
 export async function publishFromMiniApp(request: Request, env: Env) {
-  const { account } = await miniAppAccount(request, env);
-  const target = await getManagedPublicationTarget(env, account.userId);
-  if (!target) throw new AppError('MANAGED_TELEGRAM_NOT_CONNECTED', 'Подключите персонального Telegram-бота и группу', 409);
+  const { account } = await miniAppAccount(request, env); const target = await getManagedPublicationTarget(env, account.userId); if (!target) throw new AppError('MANAGED_TELEGRAM_NOT_CONNECTED', 'Подключите персонального Telegram-бота и группу', 409);
   if (!(request.headers.get('content-type') ?? '').toLowerCase().startsWith('multipart/form-data')) throw new AppError('INVALID_CONTENT_TYPE', 'Ожидается multipart/form-data', 415);
   const form = await request.formData().catch(() => { throw new AppError('INVALID_FORM_DATA', 'Не удалось прочитать форму публикации', 400); });
   const rawText = form.get('text'); const text = typeof rawText === 'string' ? rawText.trim() : '';
-  const rawImage = form.get('image'); const image = rawImage instanceof File && rawImage.size > 0 ? rawImage : undefined;
-  if (rawImage !== null && !(rawImage instanceof File)) throw new AppError('INVALID_IMAGE', 'Некорректное изображение', 400);
+  const rawImages = form.getAll('images'); const legacy = form.get('image'); if (legacy !== null) rawImages.push(legacy);
+  if (rawImages.some(item => !(item instanceof File))) throw new AppError('INVALID_IMAGE', 'Некорректное изображение', 400);
+  const images = (rawImages as File[]).filter(file => file.size > 0);
+  if (images.length > MINIAPP_IMAGE_MAX_COUNT) throw new AppError('TOO_MANY_IMAGES', 'Можно выбрать не больше 10 изображений', 400);
   if (text.length > MINIAPP_TEXT_MAX_LENGTH) throw new AppError('INVALID_TEXT', `Текст должен быть короче ${MINIAPP_TEXT_MAX_LENGTH + 1} символов`, 400);
-  if (!text && !image) throw new AppError('EMPTY_PUBLICATION', 'Добавьте текст или изображение', 400);
-  if (image && !image.type.toLowerCase().startsWith('image/')) throw new AppError('INVALID_IMAGE_TYPE', 'Можно выбрать только изображение', 400);
-  if (image && image.size > MINIAPP_IMAGE_MAX_BYTES) throw new AppError('IMAGE_TOO_LARGE', 'Изображение должно быть не больше 10 МБ', 400);
-  const token = await decryptManagedBotToken(target.telegram_bot_id, {
-    ciphertext: target.token_ciphertext,
-    iv: target.token_iv,
-    keyVersion: target.token_key_version,
-  }, env);
-  return { ok: true, publication: await publishTelegramWithToken(token, text, image, target.telegram_chat_id) };
+  if (!text && !images.length) throw new AppError('EMPTY_PUBLICATION', 'Добавьте текст или изображение', 400);
+  for (const image of images) { if (!image.type.toLowerCase().startsWith('image/')) throw new AppError('INVALID_IMAGE_TYPE', 'Можно выбрать только изображения', 400); if (image.size > MINIAPP_IMAGE_MAX_BYTES) throw new AppError('IMAGE_TOO_LARGE', 'Каждое изображение должно быть не больше 10 МБ', 400); }
+  const token = await decryptManagedBotToken(target.telegram_bot_id, { ciphertext: target.token_ciphertext, iv: target.token_iv, keyVersion: target.token_key_version }, env);
+  return { ok: true, publication: await publishTelegramWithToken(token, text, images, target.telegram_chat_id) };
 }
