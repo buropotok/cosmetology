@@ -7,7 +7,7 @@ import { publishPlatform } from './services/publisher';
 import { testVKAuthorizationCode } from './services/vk-auth-debug';
 import { requireUser } from './services/auth';
 import { activeChatId, createPairing, disconnect, getConnection, telegramWebhook } from './services/telegram-account';
-import { createMiniAppPairing, getMiniAppStatus, publishFromMiniApp, saveMiniAppVkGroup } from './services/miniapp';
+import { getMiniAppStatus, publishFromMiniApp, saveMiniAppVkGroup } from './services/miniapp';
 import { createManagedBotLink, getManagerBotDiagnostic, requestManagedBotCreation } from './services/telegram-managed-bots';
 import { createManagedBotGroupLink, managedBotWebhook } from './services/managed-bot-onboarding';
 
@@ -19,7 +19,6 @@ if(req.method==='POST'&&u.pathname==='/api/telegram/webhook')return json(await t
 if(req.method==='POST'&&u.pathname==='/api/miniapp/publish')return json(await publishFromMiniApp(req,env));
 if(req.method==='GET'&&u.pathname==='/api/miniapp/me')return json(await getMiniAppStatus(req,env),200,{'cache-control':'no-store'});
 if(req.method==='POST'&&u.pathname==='/api/miniapp/vk-group')return json(await saveMiniAppVkGroup(req,env));
-if(req.method==='POST'&&u.pathname==='/api/miniapp/telegram/pairing')return json(await createMiniAppPairing(req,env),201);
 if(req.method==='POST'&&u.pathname==='/api/miniapp/telegram/managed-bot/group-link')return json(await createManagedBotGroupLink(req,env),201);
 if(req.method==='POST'&&u.pathname==='/api/miniapp/debug/managed-bot/create-link')return json(await createManagedBotLink(req,env),201);
 if(req.method==='POST'&&u.pathname==='/api/miniapp/debug/managed-bot/request')return json(await requestManagedBotCreation(req,env),201);
