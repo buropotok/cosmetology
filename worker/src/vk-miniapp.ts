@@ -23,6 +23,7 @@ export const vkMiniAppHtml = `<!doctype html>
     const button = document.getElementById('post');
     let handoff = null;
     let currentToken = '';
+    let currentStage = 'init';
 
     function handoffToken() {
       const query = new URLSearchParams(location.search).get('handoff');
@@ -34,13 +35,32 @@ export const vkMiniAppHtml = `<!doctype html>
       return match ? match[1] : '';
     }
 
+    function errorDetails(error) {
+      const data = error && typeof error === 'object' ? error : {};
+      const nested = data.error_data && typeof data.error_data === 'object' ? data.error_data : {};
+      const api = nested.api_error && typeof nested.api_error === 'object' ? nested.api_error : {};
+      const code = api.error_code ?? nested.error_code ?? data.error_code ?? '';
+      const message = api.error_msg ?? nested.error_reason ?? nested.error_msg ?? data.message ?? (error instanceof Error ? error.message : '') ?? '';
+      let raw = '';
+      try { raw = JSON.stringify(error, null, 2); } catch { raw = String(error); }
+      return [
+        'Этап: ' + currentStage,
+        data.error_type ? 'error_type: ' + data.error_type : '',
+        code !== '' ? 'error_code: ' + code : '',
+        message ? 'error_msg: ' + message : '',
+        raw && raw !== '{}' ? 'error_data:\n' + raw : '',
+      ].filter(Boolean).join('\n');
+    }
+
     async function callVkApi(method, params) {
+      currentStage = method;
       const result = await vkBridge.send('VKWebAppCallAPIMethod', { method, params: { ...params, v: VK_API_VERSION } });
       if (result?.response === undefined) throw new Error('VK API не вернул результат для ' + method);
       return result.response;
     }
 
     async function prepareNativePhotoAttachment() {
+      currentStage = 'VKWebAppGetAuthToken(photos)';
       status.textContent = 'Получаем разрешение VK на загрузку изображения…';
       const auth = await vkBridge.send('VKWebAppGetAuthToken', { app_id: VK_APP_ID, scope: 'photos' });
       if (!auth?.access_token) throw new Error('VK не предоставил доступ к фотографиям.');
@@ -52,6 +72,7 @@ export const vkMiniAppHtml = `<!doctype html>
       });
       if (!server?.upload_url) throw new Error('VK не вернул сервер загрузки фотографии.');
 
+      currentStage = 'upload image to VK upload server';
       const uploadResponse = await fetch('/api/vk-handoff-upload/' + encodeURIComponent(currentToken), {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -75,7 +96,9 @@ export const vkMiniAppHtml = `<!doctype html>
 
     async function init() {
       try {
+        currentStage = 'VKWebAppInit';
         await vkBridge.send('VKWebAppInit');
+        currentStage = 'load handoff';
         currentToken = handoffToken();
         if (!currentToken) throw new Error('Не получен handoff token. Вернитесь в Telegram и откройте VK снова.');
         const response = await fetch('/api/vk-handoff/' + encodeURIComponent(currentToken), { cache: 'no-store' });
@@ -85,7 +108,7 @@ export const vkMiniAppHtml = `<!doctype html>
         button.disabled = false;
         status.textContent = 'Публикация готова. Нажмите кнопку, чтобы открыть редактор VK.';
       } catch (error) {
-        status.textContent = error instanceof Error ? error.message : String(error);
+        status.textContent = 'Ошибка VK:\n' + errorDetails(error);
       }
     }
 
@@ -95,14 +118,14 @@ export const vkMiniAppHtml = `<!doctype html>
       try {
         let attachment = '';
         if (handoff.imageUrl) attachment = await prepareNativePhotoAttachment();
+        currentStage = 'VKWebAppShowWallPostBox';
         status.textContent = 'Открываем редактор VK…';
         const params = { owner_id: -handoff.groupId, message: handoff.text };
         if (attachment) params.attachments = attachment;
         const result = await vkBridge.send('VKWebAppShowWallPostBox', params);
         status.textContent = result?.post_id ? 'Публикация размещена. ID: ' + result.post_id : 'VK завершил публикацию.';
       } catch (error) {
-        const message = error instanceof Error ? error.message : (error?.error_data?.error_reason || error?.error_type || JSON.stringify(error));
-        status.textContent = 'Ошибка VK: ' + message;
+        status.textContent = 'Ошибка VK:\n' + errorDetails(error);
       } finally {
         button.disabled = false;
       }
