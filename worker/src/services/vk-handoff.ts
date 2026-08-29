@@ -128,6 +128,7 @@ export async function getVkHandoffImage(env: Env, token: string) {
 }
 
 export async function uploadVkHandoffImage(env: Env, token: string, request: Request) {
+  const startedAt = Date.now();
   assertHandoffToken(token);
   const tokenHash = await hashToken(token);
   const row = await env.DB.prepare('SELECT image_key AS imageKey,expires_at AS expiresAt FROM vk_handoffs WHERE token_hash=?')
@@ -136,29 +137,66 @@ export async function uploadVkHandoffImage(env: Env, token: string, request: Req
 
   const body = await request.json().catch(() => null) as { uploadUrl?: unknown; index?: unknown } | null;
   const uploadUrl = assertVkUploadUrl(typeof body?.uploadUrl === 'string' ? body.uploadUrl : '');
+  const uploadHost = new URL(uploadUrl).hostname;
   const imageKeys = decodeImageKeys(row.imageKey);
   const index = Number.isInteger(body?.index) ? Number(body?.index) : 0;
   if (index < 0 || index >= imageKeys.length) throw new AppError('VK_IMAGE_NOT_FOUND', 'Изображение публикации не найдено', 404);
+
+  const r2StartedAt = Date.now();
   const object = await env.IMAGES.get(imageKeys[index]);
+  const r2Ms = Date.now() - r2StartedAt;
   if (!object) throw new AppError('VK_IMAGE_NOT_FOUND', 'Изображение публикации не найдено', 404);
 
+  const blobStartedAt = Date.now();
   const blob = await object.blob();
+  const blobMs = Date.now() - blobStartedAt;
   const contentType = (blob.type || 'image/jpeg').toLowerCase();
   const extension = imageExtension(contentType);
+  const filename = `photo.${extension}`;
   if (extension === 'bin') throw new AppError('VK_IMAGE_TYPE_UNSUPPORTED', 'VK не поддерживает формат изображения', 415);
 
   const form = new FormData();
-  form.set('photo', new File([blob], `photo.${extension}`, { type: contentType }));
+  form.set('photo', new File([blob], filename, { type: contentType }));
+  const vkStartedAt = Date.now();
   const response = await fetch(uploadUrl, { method: 'POST', body: form });
-  const result = await response.json().catch(() => null) as Record<string, unknown> | null;
-  if (!response.ok || !result || typeof result !== 'object') throw new AppError('VK_IMAGE_UPLOAD_FAILED', 'VK не принял изображение', 502);
+  const vkFetchMs = Date.now() - vkStartedAt;
+  const responseContentType = response.headers.get('content-type') ?? '';
+  const raw = await response.text();
+  const totalMs = Date.now() - startedAt;
+  let result: Record<string, unknown> | null = null;
+  try {
+    const parsed = raw ? JSON.parse(raw) : null;
+    if (parsed && typeof parsed === 'object') result = parsed as Record<string, unknown>;
+  } catch {}
+
+  const diagnostic = {
+    index,
+    imageCount: imageKeys.length,
+    r2Ms,
+    blobMs,
+    blobSize: blob.size,
+    contentType,
+    extension,
+    filename,
+    uploadHost,
+    vkStatus: response.status,
+    vkStatusText: response.statusText,
+    vkContentType: responseContentType,
+    vkFetchMs,
+    totalMs,
+    vkRaw: raw.slice(0, 1500),
+  };
+
+  if (!response.ok || !result) {
+    throw new AppError('VK_IMAGE_UPLOAD_FAILED', `VK не принял изображение | debug=${JSON.stringify(diagnostic)}`, 502);
+  }
 
   const photo = typeof result.photo === 'string' ? result.photo.trim() : '';
   const hash = typeof result.hash === 'string' ? result.hash.trim() : '';
   const server = typeof result.server === 'number' || typeof result.server === 'string' ? result.server : undefined;
   if (!photo || photo === '[]' || !hash || server === undefined) {
-    throw new AppError('VK_IMAGE_UPLOAD_INVALID', 'VK не распознал загруженное изображение', 502);
+    throw new AppError('VK_IMAGE_UPLOAD_INVALID', `VK не распознал загруженное изображение | debug=${JSON.stringify({ ...diagnostic, parsed: result })}`, 502);
   }
 
-  return { ...result, photo, hash, server };
+  return { ...result, photo, hash, server, debug: diagnostic };
 }
