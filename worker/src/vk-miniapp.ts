@@ -10,12 +10,11 @@ export const vkMiniAppHtml = `<!doctype html>
     html,body{margin:0;min-height:100%;background:#0b1739;color:#fff}
     body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;min-height:100vh;padding:28px 22px;display:flex;align-items:center;justify-content:center}
     .card{width:100%;max-width:440px;padding:34px 26px 30px;border:1px solid rgba(255,255,255,.11);border-radius:26px;background:rgba(255,255,255,.065);box-shadow:0 22px 65px rgba(0,0,0,.24);text-align:center}
-    .logo{width:72px;height:72px;margin:0 auto 18px;border-radius:20px;display:block;object-fit:cover;box-shadow:0 10px 28px rgba(0,0,0,.20)}
+    .logo{width:72px;height:72px;margin:0 auto 18px;display:block;filter:drop-shadow(0 10px 28px rgba(0,0,0,.20))}
     h1{margin:0 0 10px;font-size:28px;line-height:1.18;font-weight:800;letter-spacing:-.5px}
-    .return-title{margin:0 0 12px;font-size:31px;line-height:1.12;font-weight:900;letter-spacing:.2px;text-transform:uppercase}
+    .return-title{margin:0 auto 14px;max-width:360px;font-size:31px;line-height:1.18;font-weight:700;letter-spacing:-.35px;text-transform:none}
     .subtitle{margin:0 auto 24px;max-width:340px;color:rgba(255,255,255,.72);font-size:16px;line-height:1.5}
-    .published-message{margin:0 auto 10px;max-width:350px;color:#fff;font-size:18px;line-height:1.45;font-weight:700}
-    .return-note{margin:0 auto;max-width:340px;color:rgba(255,255,255,.66);font-size:15px;line-height:1.45}
+    .published-message{margin:0 auto;max-width:350px;color:rgba(255,255,255,.78);font-size:30px;line-height:1.22;font-weight:400;letter-spacing:-.25px}
     button{width:100%;min-height:56px;padding:15px 20px;border:0;border-radius:18px;background:#fff;color:#0b1739;font:inherit;font-size:17px;font-weight:750;cursor:pointer;box-shadow:0 9px 26px rgba(0,0,0,.20);transition:transform .12s ease,opacity .12s ease}
     button:active:not(:disabled){transform:scale(.985)}
     button:disabled{opacity:.55;cursor:default}
@@ -23,7 +22,10 @@ export const vkMiniAppHtml = `<!doctype html>
   </style>
 </head><body>
   <main class="card">
-    <img class="logo" src="https://vk.com/images/icons/pwa-192.png" alt="VK">
+    <svg class="logo" viewBox="0 0 72 72" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="VK">
+      <rect width="72" height="72" rx="20" fill="#0077FF"/>
+      <path fill="#fff" d="M38.93 51.3c-16.4 0-25.75-11.24-26.14-29.95h8.22c.27 13.73 6.32 19.55 11.11 20.75V21.35h7.75V33.2c4.73-.51 9.7-5.91 11.38-11.85H59c-1.29 7.31-6.68 12.71-10.51 14.93 3.83 1.8 9.97 6.51 12.31 15.02h-8.53c-1.83-5.7-6.38-10.12-12.4-10.72V51.3h-.94Z"/>
+    </svg>
     <h1 id="title">Публикация во ВКонтакте</h1>
     <p id="subtitle" class="subtitle">Разместите подготовленное сообщение в вашей группе.</p>
     <button id="post" disabled>Открыть публикацию</button>
@@ -34,7 +36,7 @@ const VK_APP_ID=54742217,VK_API_VERSION='5.199',status=document.getElementById('
 function elapsed(){return((performance.now()-started)/1000).toFixed(2)+'s'}
 function clean(value){if(value==null)return value;if(typeof value==='string'){if(value.length>600)return value.slice(0,600)+'…';return value.replace(/access_token=[^&\\s]+/gi,'access_token=***')}if(Array.isArray(value))return value.map(clean);if(typeof value==='object'){const out={};for(const[k,v]of Object.entries(value)){if(/token/i.test(k))out[k]='***';else if(k==='upload_url'||k==='uploadUrl'){try{const u=new URL(String(v));out[k]=u.origin+u.pathname}catch{out[k]=String(v)}}else out[k]=clean(v)}return out}return value}
 function log(label,data){const line='['+elapsed()+'] '+label+(data===undefined?'':' | '+JSON.stringify(clean(data)));logs.push(line);console.log(label,clean(data))}
-function showReturnScreen(){button.style.display='none';status.style.display='none';title.className='return-title';title.textContent='Нажмите крестик';subtitle.className='published-message';subtitle.innerHTML='Ваше сообщение опубликовано в группе<div class="return-note">Чтобы вернуться в Телеграм</div>'}
+function showReturnScreen(){button.style.display='none';status.style.display='none';title.className='return-title';title.textContent='Нажмите крестик, чтобы вернуться в Телеграм';subtitle.className='published-message';subtitle.textContent='Ваше сообщение опубликовано в группе'}
 function handoffToken(){const query=new URLSearchParams(location.search).get('handoff');if(query)return query;const hash=new URLSearchParams(location.hash.replace(/^#/, '')).get('handoff');if(hash)return hash;const launch=new URLSearchParams(location.search).get('vk_ref')||'';const match=launch.match(/(?:^|[?&#])handoff=([A-Za-z0-9_-]+)/);return match?match[1]:''}
 function vkError(stage,error){const data=error&&typeof error==='object'?error:{},nested=data.error_data&&typeof data.error_data==='object'?data.error_data:{},api=nested.api_error&&typeof nested.api_error==='object'?nested.api_error:{},code=api.error_code||nested.error_code||data.error_code||'',message=api.error_msg||nested.error_reason||nested.error_msg||data.message||(error instanceof Error?error.message:'')||data.error_type||'Неизвестная ошибка',parts=['Этап: '+stage];if(data.error_type)parts.push('Тип: '+data.error_type);if(code!=='')parts.push('Код: '+code);parts.push('Сообщение: '+message);return parts.join('\\n')}
 async function bridge(name,payload){log('→ Bridge '+name,payload);try{const r=await vkBridge.send(name,payload);log('← Bridge '+name,r);return r}catch(e){log('← Bridge '+name+' ERROR',e);throw e}}
