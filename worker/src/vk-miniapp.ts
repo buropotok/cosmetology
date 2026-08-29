@@ -3,7 +3,7 @@ export const vkMiniAppHtml = `<!doctype html>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>VK Wall Test</title>
+  <title>Публикация VK</title>
   <script src="https://unpkg.com/@vkontakte/vk-bridge/dist/browser.min.js"></script>
   <style>
     body { font-family: sans-serif; padding: 24px; }
@@ -12,39 +12,54 @@ export const vkMiniAppHtml = `<!doctype html>
   </style>
 </head>
 <body>
-  <h2>VK Wall Post Test</h2>
-  <button id="post">Открыть composer с R2 фото</button>
-  <pre id="status">Starting...</pre>
+  <h2>Публикация в VK</h2>
+  <button id="post" disabled>Открыть публикацию</button>
+  <pre id="status">Загружаем публикацию…</pre>
 
   <script>
     const status = document.getElementById('status');
     const button = document.getElementById('post');
+    let handoff = null;
+
+    function handoffToken() {
+      const query = new URLSearchParams(location.search).get('handoff');
+      if (query) return query;
+      const hash = new URLSearchParams(location.hash.replace(/^#/, '')).get('handoff');
+      if (hash) return hash;
+      const launch = new URLSearchParams(location.search).get('vk_ref') || '';
+      const match = launch.match(/(?:^|[?&#])handoff=([A-Za-z0-9_-]+)/);
+      return match ? match[1] : '';
+    }
 
     async function init() {
       try {
         await vkBridge.send('VKWebAppInit');
-        status.textContent = 'VK Bridge initialized';
+        const token = handoffToken();
+        if (!token) throw new Error('Не получен handoff token. Вернитесь в Telegram и откройте VK снова.');
+        const response = await fetch('/api/vk-handoff/' + encodeURIComponent(token), { cache: 'no-store' });
+        const result = await response.json().catch(() => null);
+        if (!response.ok) throw new Error(result?.error?.message || 'Не удалось загрузить публикацию.');
+        handoff = result;
+        button.disabled = false;
+        status.textContent = 'Публикация готова. Нажмите кнопку, чтобы открыть редактор VK.';
       } catch (error) {
-        status.textContent = 'VKWebAppInit ERROR:\\n' + JSON.stringify(error, null, 2);
+        status.textContent = error instanceof Error ? error.message : String(error);
       }
     }
 
     button.addEventListener('click', async () => {
-      status.textContent = 'Opening composer with R2 photo...';
+      if (!handoff) return;
+      button.disabled = true;
+      status.textContent = 'Открываем редактор VK…';
       try {
-        const result = await vkBridge.send('VKWebAppShowWallPostBox', {
-          owner_id: -240907364,
-          message: 'TEST R2 PHOTO — изображение загружено из нашего Cloudflare R2',
-          upload_attachments: [
-            {
-              type: 'photo',
-              link: 'https://cosmetology-social-publisher.buropotok.workers.dev/vk-test-image'
-            }
-          ]
-        });
-        status.textContent = 'RESULT:\\n' + JSON.stringify(result, null, 2);
+        const params = { owner_id: -handoff.groupId, message: handoff.text };
+        if (handoff.imageUrl) params.upload_attachments = [{ type: 'photo', link: handoff.imageUrl }];
+        const result = await vkBridge.send('VKWebAppShowWallPostBox', params);
+        status.textContent = 'VK завершил действие: ' + JSON.stringify(result);
       } catch (error) {
-        status.textContent = 'ERROR:\\n' + JSON.stringify(error, null, 2);
+        status.textContent = 'Ошибка VK: ' + JSON.stringify(error, null, 2);
+      } finally {
+        button.disabled = false;
       }
     });
 

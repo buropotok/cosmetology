@@ -1,42 +1,59 @@
 import worker from './index';
 import { vkMiniAppHtml } from './vk-miniapp';
-import type { Env } from './types';
+import { createVkHandoff, getVkHandoff, getVkHandoffImage } from './services/vk-handoff';
+import { AppError, type Env } from './types';
 
 const VK_TEST_IMAGE_KEY = 'posts/2026/08/10.png';
+const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
 
 export default {
   async fetch(req: Request, env: Env) {
     const url = new URL(req.url);
 
-    if (
-      req.method === 'GET' &&
-      (url.pathname === '/vk-test' || url.pathname === '/vk-test/')
-    ) {
-      return new Response(vkMiniAppHtml, {
-        headers: {
-          'content-type': 'text/html; charset=utf-8',
-          'cache-control': 'no-store',
-          'x-content-type-options': 'nosniff',
-        },
-      });
-    }
-
-    if (req.method === 'GET' && url.pathname === '/vk-test-image') {
-      const object = await env.IMAGES.get(VK_TEST_IMAGE_KEY);
-
-      if (!object) {
-        return new Response('Not found', { status: 404 });
+    try {
+      if (req.method === 'GET' && (url.pathname === '/vk-test' || url.pathname === '/vk-test/')) {
+        return new Response(vkMiniAppHtml, {
+          headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' },
+        });
       }
 
-      const headers = new Headers();
-      object.writeHttpMetadata(headers);
-      headers.set('etag', object.httpEtag);
-      headers.set('cache-control', 'public, max-age=300');
-      headers.set('x-content-type-options', 'nosniff');
+      if (req.method === 'POST' && url.pathname === '/api/miniapp/vk-handoff') {
+        return json(await createVkHandoff(req, env), 201);
+      }
 
-      return new Response(object.body, { headers });
+      const handoffMatch = url.pathname.match(/^\/api\/vk-handoff\/([A-Za-z0-9_-]+)$/);
+      if (req.method === 'GET' && handoffMatch) {
+        return json(await getVkHandoff(env, handoffMatch[1], url.origin));
+      }
+
+      const handoffImageMatch = url.pathname.match(/^\/api\/vk-handoff-image\/([A-Za-z0-9_-]+)$/);
+      if (req.method === 'GET' && handoffImageMatch) {
+        const object = await getVkHandoffImage(env, handoffImageMatch[1]);
+        if (!object) return new Response('Not found', { status: 404 });
+        const headers = new Headers();
+        object.writeHttpMetadata(headers);
+        headers.set('etag', object.httpEtag);
+        headers.set('cache-control', 'public, max-age=300');
+        headers.set('x-content-type-options', 'nosniff');
+        return new Response(object.body, { headers });
+      }
+
+      if (req.method === 'GET' && url.pathname === '/vk-test-image') {
+        const object = await env.IMAGES.get(VK_TEST_IMAGE_KEY);
+        if (!object) return new Response('Not found', { status: 404 });
+        const headers = new Headers();
+        object.writeHttpMetadata(headers);
+        headers.set('etag', object.httpEtag);
+        headers.set('cache-control', 'public, max-age=300');
+        headers.set('x-content-type-options', 'nosniff');
+        return new Response(object.body, { headers });
+      }
+
+      return worker.fetch(req, env);
+    } catch (error) {
+      const err = error instanceof AppError ? error : new AppError('INTERNAL_ERROR', 'Внутренняя ошибка сервера');
+      if (!(error instanceof AppError)) console.error(error);
+      return json({ error: { code: err.code, message: err.message } }, err.status);
     }
-
-    return worker.fetch(req, env);
   },
 };
