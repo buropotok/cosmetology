@@ -13,7 +13,7 @@ export const vkMiniAppHtml = `<!doctype html>
 </head>
 <body>
   <h2>VK Wall Post Test</h2>
-  <button id="post">Открыть composer с фото</button>
+  <button id="post">Открыть composer с R2 фото</button>
   <pre id="status">Starting...</pre>
 
   <script>
@@ -30,15 +30,15 @@ export const vkMiniAppHtml = `<!doctype html>
     }
 
     button.addEventListener('click', async () => {
-      status.textContent = 'Opening composer with static photo...';
+      status.textContent = 'Opening composer with R2 photo...';
       try {
         const result = await vkBridge.send('VKWebAppShowWallPostBox', {
           owner_id: -240907364,
-          message: 'TEST PHOTO STATIC — текст и изображение автоматически переданы из VK Mini App',
+          message: 'TEST R2 PHOTO — изображение загружено из нашего Cloudflare R2',
           upload_attachments: [
             {
               type: 'photo',
-              link: 'https://upload.wikimedia.org/wikipedia/commons/a/a9/Example.jpg'
+              link: 'https://cosmetology-social-publisher.buropotok.workers.dev/vk-test-image'
             }
           ]
         });
