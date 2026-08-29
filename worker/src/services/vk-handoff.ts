@@ -32,6 +32,19 @@ function imageExtension(type: string) {
   return ({ 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif' } as Record<string, string>)[type] ?? 'bin';
 }
 
+function assertHandoffToken(token: string) {
+  if (!/^[A-Za-z0-9_-]{40,64}$/.test(token)) throw new AppError('INVALID_HANDOFF', 'Некорректная ссылка публикации', 400);
+}
+
+function assertVkUploadUrl(raw: string) {
+  let url: URL;
+  try { url = new URL(raw); } catch { throw new AppError('INVALID_VK_UPLOAD_URL', 'VK вернул некорректный адрес загрузки', 400); }
+  const host = url.hostname.toLowerCase();
+  const allowed = host === 'vk.com' || host.endsWith('.vk.com') || host === 'vk.ru' || host.endsWith('.vk.ru') || host === 'vk.me' || host.endsWith('.vk.me');
+  if (url.protocol !== 'https:' || !allowed) throw new AppError('INVALID_VK_UPLOAD_URL', 'VK вернул неподдерживаемый адрес загрузки', 400);
+  return url.toString();
+}
+
 export async function createVkHandoff(request: Request, env: Env) {
   const userId = await userIdFromMiniApp(request, env);
   const group = await env.DB.prepare('SELECT group_id AS groupId FROM user_vk_group WHERE user_id=?')
@@ -69,7 +82,7 @@ export async function createVkHandoff(request: Request, env: Env) {
 }
 
 export async function getVkHandoff(env: Env, token: string, origin: string) {
-  if (!/^[A-Za-z0-9_-]{40,64}$/.test(token)) throw new AppError('INVALID_HANDOFF', 'Некорректная ссылка публикации', 400);
+  assertHandoffToken(token);
   const tokenHash = await hashToken(token);
   const row = await env.DB.prepare('SELECT group_id AS groupId,text,image_key AS imageKey,expires_at AS expiresAt FROM vk_handoffs WHERE token_hash=?')
     .bind(tokenHash).first<{ groupId: number; text: string; imageKey: string | null; expiresAt: string }>();
@@ -89,4 +102,24 @@ export async function getVkHandoffImage(env: Env, token: string) {
     .bind(tokenHash).first<{ imageKey: string | null; expiresAt: string }>();
   if (!row?.imageKey || Date.parse(row.expiresAt) <= Date.now()) return null;
   return env.IMAGES.get(row.imageKey);
+}
+
+export async function uploadVkHandoffImage(env: Env, token: string, request: Request) {
+  assertHandoffToken(token);
+  const tokenHash = await hashToken(token);
+  const row = await env.DB.prepare('SELECT image_key AS imageKey,expires_at AS expiresAt FROM vk_handoffs WHERE token_hash=?')
+    .bind(tokenHash).first<{ imageKey: string | null; expiresAt: string }>();
+  if (!row?.imageKey || Date.parse(row.expiresAt) <= Date.now()) throw new AppError('HANDOFF_EXPIRED', 'Изображение публикации недоступно', 410);
+
+  const body = await request.json().catch(() => null) as { uploadUrl?: unknown } | null;
+  const uploadUrl = assertVkUploadUrl(typeof body?.uploadUrl === 'string' ? body.uploadUrl : '');
+  const object = await env.IMAGES.get(row.imageKey);
+  if (!object) throw new AppError('VK_IMAGE_NOT_FOUND', 'Изображение публикации не найдено', 404);
+  const blob = await object.blob();
+  const form = new FormData();
+  form.set('photo', new File([blob], 'image', { type: blob.type || 'image/jpeg' }));
+  const response = await fetch(uploadUrl, { method: 'POST', body: form });
+  const result = await response.json().catch(() => null);
+  if (!response.ok || !result || typeof result !== 'object') throw new AppError('VK_IMAGE_UPLOAD_FAILED', 'VK не принял изображение', 502);
+  return result;
 }
