@@ -8,7 +8,8 @@ export const vkMiniAppHtml = `<!doctype html>
   <style>
     *{box-sizing:border-box}
     html,body{margin:0;min-height:100%;background:#0b1739;color:#fff}
-    body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;min-height:100vh;padding:28px 22px;display:flex;align-items:center;justify-content:center}
+    body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display","Helvetica Neue",Arial,sans-serif;min-height:100vh;padding:28px 22px;display:flex;align-items:center;justify-content:center;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+    button,input,textarea,select{font-family:inherit}
     .card{width:100%;max-width:440px;padding:34px 26px 30px;border:1px solid rgba(255,255,255,.11);border-radius:26px;background:rgba(255,255,255,.065);box-shadow:0 22px 65px rgba(0,0,0,.24);text-align:center}
     .logo{width:72px;height:72px;margin:0 auto 18px;display:block;filter:drop-shadow(0 10px 28px rgba(0,0,0,.20))}
     h1{margin:0 0 10px;font-size:28px;line-height:1.18;font-weight:800;letter-spacing:-.5px}
