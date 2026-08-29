@@ -11,192 +11,36 @@ const VK_APP_ID = '54742217';
 function initDataFrom(request: Request) {
   return request.headers.get('authorization')?.match(/^tma\s+(.+)$/i)?.[1] ?? '';
 }
-
 async function userIdFromMiniApp(request: Request, env: Env) {
   const validated = await validateTelegramMiniAppInitData(initDataFrom(request), env.TELEGRAM_BOT_TOKEN);
   const account = await resolveOrCreateTelegramIdentity(env, String(validated.user.id));
   return account.userId;
 }
+function bytesToToken(bytes: Uint8Array) { let binary=''; for(const byte of bytes) binary+=String.fromCharCode(byte); return btoa(binary).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/g,''); }
+async function hashToken(token: string) { const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(token)); return Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,'0')).join(''); }
+function imageExtension(type: string) { return ({'image/jpeg':'jpg','image/png':'png','image/webp':'webp','image/gif':'gif'} as Record<string,string>)[type]??'bin'; }
+function decodeImageKeys(value: string|null) { if(!value)return[]; if(value.startsWith('[')){try{const parsed=JSON.parse(value);if(Array.isArray(parsed)&&parsed.every(item=>typeof item==='string'))return parsed as string[]}catch{}} return[value]; }
+function assertHandoffToken(token:string){if(!/^[A-Za-z0-9_-]{40,64}$/.test(token))throw new AppError('INVALID_HANDOFF','Некорректная ссылка публикации',400)}
+function assertVkUploadUrl(raw:string){let url:URL;try{url=new URL(raw)}catch{throw new AppError('INVALID_VK_UPLOAD_URL','VK вернул некорректный адрес загрузки',400)}const host=url.hostname.toLowerCase(),allowed=host==='vk.com'||host.endsWith('.vk.com')||host==='vk.ru'||host.endsWith('.vk.ru')||host==='vk.me'||host.endsWith('.vk.me');if(url.protocol!=='https:'||!allowed)throw new AppError('INVALID_VK_UPLOAD_URL','VK вернул неподдерживаемый адрес загрузки',400);return url.toString()}
 
-function bytesToToken(bytes: Uint8Array) {
-  let binary = '';
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+export async function createVkHandoff(request:Request,env:Env){
+  const userId=await userIdFromMiniApp(request,env);const group=await env.DB.prepare('SELECT group_id AS groupId FROM user_vk_group WHERE user_id=?').bind(userId).first<{groupId:number}>();if(!group)throw new AppError('VK_GROUP_NOT_CONNECTED','Сначала сохраните VK-группу',409);if(!(request.headers.get('content-type')??'').toLowerCase().startsWith('multipart/form-data'))throw new AppError('INVALID_CONTENT_TYPE','Ожидается multipart/form-data',415);
+  const form=await request.formData().catch(()=>{throw new AppError('INVALID_FORM_DATA','Не удалось прочитать публикацию',400)});const rawText=form.get('text'),text=typeof rawText==='string'?rawText.trim():'';const legacyImage=form.get('image');const rawImages=form.getAll('images');
+  let images:File[]=[];let legacySingle=false;
+  if(legacyImage!==null){if(!(legacyImage instanceof File))throw new AppError('INVALID_IMAGE','Некорректное изображение',400);if(legacyImage.size>0){images=[legacyImage];legacySingle=true}}
+  else {if(rawImages.length>IMAGE_MAX_COUNT)throw new AppError('TOO_MANY_IMAGES','Можно выбрать не больше 10 изображений',400);if(rawImages.some(item=>!(item instanceof File)))throw new AppError('INVALID_IMAGE','Некорректное изображение',400);images=(rawImages as File[]).filter(image=>image.size>0)}
+  if(text.length>TEXT_MAX_LENGTH)throw new AppError('INVALID_TEXT',`Текст должен быть короче ${TEXT_MAX_LENGTH+1} символов`,400);if(!text&&!images.length)throw new AppError('EMPTY_PUBLICATION','Добавьте текст или изображение',400);for(const image of images){if(!image.type.toLowerCase().startsWith('image/'))throw new AppError('INVALID_IMAGE_TYPE','Можно выбрать только изображения',400);if(image.size>IMAGE_MAX_BYTES)throw new AppError('IMAGE_TOO_LARGE','Каждое изображение должно быть не больше 10 МБ',400)}
+  const random=new Uint8Array(32);crypto.getRandomValues(random);const token=bytesToToken(random),tokenHash=await hashToken(token),expiresAt=new Date(Date.now()+HANDOFF_TTL_SECONDS*1000).toISOString();let storedImageKey:string|null=null;
+  if(legacySingle&&images[0]){const image=images[0];const imageKey=`vk-handoffs/${tokenHash}.${imageExtension(image.type)}`;await env.IMAGES.put(imageKey,await image.arrayBuffer(),{httpMetadata:{contentType:image.type}});storedImageKey=imageKey}
+  else if(images.length){const imageKeys:string[]=[];for(let index=0;index<images.length;index++){const image=images[index],imageKey=`vk-handoffs/${tokenHash}-${index}.${imageExtension(image.type)}`;await env.IMAGES.put(imageKey,await image.arrayBuffer(),{httpMetadata:{contentType:image.type}});imageKeys.push(imageKey)}storedImageKey=JSON.stringify(imageKeys)}
+  await env.DB.prepare('INSERT INTO vk_handoffs(token_hash,user_id,group_id,text,image_key,expires_at) VALUES(?,?,?,?,?,?)').bind(tokenHash,userId,group.groupId,text,storedImageKey,expiresAt).run();return{ok:true,token,expiresAt,vkUrl:`https://vk.com/app${VK_APP_ID}#handoff=${encodeURIComponent(token)}`};
 }
-
-async function hashToken(token: string) {
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token));
-  return Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
-}
-
-function imageExtension(type: string) {
-  return ({ 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif' } as Record<string, string>)[type] ?? 'bin';
-}
-
-function decodeImageKeys(value: string | null) {
-  if (!value) return [];
-  if (value.startsWith('[')) {
-    try {
-      const parsed = JSON.parse(value);
-      if (Array.isArray(parsed) && parsed.every(item => typeof item === 'string')) return parsed as string[];
-    } catch {}
-  }
-  return [value];
-}
-
-function assertHandoffToken(token: string) {
-  if (!/^[A-Za-z0-9_-]{40,64}$/.test(token)) throw new AppError('INVALID_HANDOFF', 'Некорректная ссылка публикации', 400);
-}
-
-function assertVkUploadUrl(raw: string) {
-  let url: URL;
-  try { url = new URL(raw); } catch { throw new AppError('INVALID_VK_UPLOAD_URL', 'VK вернул некорректный адрес загрузки', 400); }
-  const host = url.hostname.toLowerCase();
-  const allowed = host === 'vk.com' || host.endsWith('.vk.com') || host === 'vk.ru' || host.endsWith('.vk.ru') || host === 'vk.me' || host.endsWith('.vk.me');
-  if (url.protocol !== 'https:' || !allowed) throw new AppError('INVALID_VK_UPLOAD_URL', 'VK вернул неподдерживаемый адрес загрузки', 400);
-  return url.toString();
-}
-
-export async function createVkHandoff(request: Request, env: Env) {
-  const userId = await userIdFromMiniApp(request, env);
-  const group = await env.DB.prepare('SELECT group_id AS groupId FROM user_vk_group WHERE user_id=?')
-    .bind(userId).first<{ groupId: number }>();
-  if (!group) throw new AppError('VK_GROUP_NOT_CONNECTED', 'Сначала сохраните VK-группу', 409);
-  if (!(request.headers.get('content-type') ?? '').toLowerCase().startsWith('multipart/form-data'))
-    throw new AppError('INVALID_CONTENT_TYPE', 'Ожидается multipart/form-data', 415);
-
-  const form = await request.formData().catch(() => { throw new AppError('INVALID_FORM_DATA', 'Не удалось прочитать публикацию', 400); });
-  const rawText = form.get('text');
-  const text = typeof rawText === 'string' ? rawText.trim() : '';
-  const rawImages = form.getAll('images');
-  const legacyImage = form.get('image');
-  const candidates = rawImages.length ? rawImages : (legacyImage === null ? [] : [legacyImage]);
-  if (candidates.length > IMAGE_MAX_COUNT) throw new AppError('TOO_MANY_IMAGES', 'Можно выбрать не больше 10 изображений', 400);
-  if (candidates.some(item => !(item instanceof File))) throw new AppError('INVALID_IMAGE', 'Некорректное изображение', 400);
-  const images = (candidates as File[]).filter(image => image.size > 0);
-  if (text.length > TEXT_MAX_LENGTH) throw new AppError('INVALID_TEXT', `Текст должен быть короче ${TEXT_MAX_LENGTH + 1} символов`, 400);
-  if (!text && !images.length) throw new AppError('EMPTY_PUBLICATION', 'Добавьте текст или изображение', 400);
-  for (const image of images) {
-    if (!image.type.toLowerCase().startsWith('image/')) throw new AppError('INVALID_IMAGE_TYPE', 'Можно выбрать только изображения', 400);
-    if (image.size > IMAGE_MAX_BYTES) throw new AppError('IMAGE_TOO_LARGE', 'Каждое изображение должно быть не больше 10 МБ', 400);
-  }
-
-  const random = new Uint8Array(32);
-  crypto.getRandomValues(random);
-  const token = bytesToToken(random);
-  const tokenHash = await hashToken(token);
-  const expiresAt = new Date(Date.now() + HANDOFF_TTL_SECONDS * 1000).toISOString();
-  const imageKeys: string[] = [];
-  for (let index = 0; index < images.length; index++) {
-    const image = images[index];
-    const imageKey = `vk-handoffs/${tokenHash}-${index}.${imageExtension(image.type)}`;
-    await env.IMAGES.put(imageKey, await image.arrayBuffer(), { httpMetadata: { contentType: image.type } });
-    imageKeys.push(imageKey);
-  }
-  const storedImageKey = imageKeys.length ? JSON.stringify(imageKeys) : null;
-
-  await env.DB.prepare('INSERT INTO vk_handoffs(token_hash,user_id,group_id,text,image_key,expires_at) VALUES(?,?,?,?,?,?)')
-    .bind(tokenHash, userId, group.groupId, text, storedImageKey, expiresAt).run();
-
-  return { ok: true, token, expiresAt, vkUrl: `https://vk.com/app${VK_APP_ID}#handoff=${encodeURIComponent(token)}` };
-}
-
-export async function getVkHandoff(env: Env, token: string, origin: string) {
-  assertHandoffToken(token);
-  const tokenHash = await hashToken(token);
-  const row = await env.DB.prepare('SELECT group_id AS groupId,text,image_key AS imageKey,expires_at AS expiresAt FROM vk_handoffs WHERE token_hash=?')
-    .bind(tokenHash).first<{ groupId: number; text: string; imageKey: string | null; expiresAt: string }>();
-  if (!row || Date.parse(row.expiresAt) <= Date.now()) throw new AppError('HANDOFF_EXPIRED', 'Ссылка публикации истекла. Вернитесь в Telegram и откройте VK снова.', 410);
-  const imageKeys = decodeImageKeys(row.imageKey);
-  return {
-    groupId: row.groupId,
-    text: row.text,
-    imageUrl: imageKeys.length ? `${origin}/api/vk-handoff-image/${encodeURIComponent(token)}` : null,
-    imageCount: imageKeys.length,
-    expiresAt: row.expiresAt,
-  };
-}
-
-export async function getVkHandoffImage(env: Env, token: string) {
-  if (!/^[A-Za-z0-9_-]{40,64}$/.test(token)) return null;
-  const tokenHash = await hashToken(token);
-  const row = await env.DB.prepare('SELECT image_key AS imageKey,expires_at AS expiresAt FROM vk_handoffs WHERE token_hash=?')
-    .bind(tokenHash).first<{ imageKey: string | null; expiresAt: string }>();
-  const imageKey = decodeImageKeys(row?.imageKey ?? null)[0];
-  if (!imageKey || !row || Date.parse(row.expiresAt) <= Date.now()) return null;
-  return env.IMAGES.get(imageKey);
-}
-
-export async function uploadVkHandoffImage(env: Env, token: string, request: Request) {
-  const startedAt = Date.now();
-  assertHandoffToken(token);
-  const tokenHash = await hashToken(token);
-  const row = await env.DB.prepare('SELECT image_key AS imageKey,expires_at AS expiresAt FROM vk_handoffs WHERE token_hash=?')
-    .bind(tokenHash).first<{ imageKey: string | null; expiresAt: string }>();
-  if (!row || Date.parse(row.expiresAt) <= Date.now()) throw new AppError('HANDOFF_EXPIRED', 'Изображение публикации недоступно', 410);
-
-  const body = await request.json().catch(() => null) as { uploadUrl?: unknown; index?: unknown } | null;
-  const uploadUrl = assertVkUploadUrl(typeof body?.uploadUrl === 'string' ? body.uploadUrl : '');
-  const uploadHost = new URL(uploadUrl).hostname;
-  const imageKeys = decodeImageKeys(row.imageKey);
-  const index = Number.isInteger(body?.index) ? Number(body?.index) : 0;
-  if (index < 0 || index >= imageKeys.length) throw new AppError('VK_IMAGE_NOT_FOUND', 'Изображение публикации не найдено', 404);
-
-  const r2StartedAt = Date.now();
-  const object = await env.IMAGES.get(imageKeys[index]);
-  const r2Ms = Date.now() - r2StartedAt;
-  if (!object) throw new AppError('VK_IMAGE_NOT_FOUND', 'Изображение публикации не найдено', 404);
-
-  const blobStartedAt = Date.now();
-  const blob = await object.blob();
-  const blobMs = Date.now() - blobStartedAt;
-  const contentType = (blob.type || 'image/jpeg').toLowerCase();
-  const extension = imageExtension(contentType);
-  const filename = `photo.${extension}`;
-  if (extension === 'bin') throw new AppError('VK_IMAGE_TYPE_UNSUPPORTED', 'VK не поддерживает формат изображения', 415);
-
-  const form = new FormData();
-  form.set('photo', new File([blob], filename, { type: contentType }));
-  const vkStartedAt = Date.now();
-  const response = await fetch(uploadUrl, { method: 'POST', body: form });
-  const vkFetchMs = Date.now() - vkStartedAt;
-  const responseContentType = response.headers.get('content-type') ?? '';
-  const raw = await response.text();
-  const totalMs = Date.now() - startedAt;
-  let result: Record<string, unknown> | null = null;
-  try {
-    const parsed = raw ? JSON.parse(raw) : null;
-    if (parsed && typeof parsed === 'object') result = parsed as Record<string, unknown>;
-  } catch {}
-
-  const diagnostic = {
-    index,
-    imageCount: imageKeys.length,
-    r2Ms,
-    blobMs,
-    blobSize: blob.size,
-    contentType,
-    extension,
-    filename,
-    uploadHost,
-    vkStatus: response.status,
-    vkStatusText: response.statusText,
-    vkContentType: responseContentType,
-    vkFetchMs,
-    totalMs,
-    vkRaw: raw.slice(0, 1500),
-  };
-
-  if (!response.ok || !result) {
-    throw new AppError('VK_IMAGE_UPLOAD_FAILED', `VK не принял изображение | debug=${JSON.stringify(diagnostic)}`, 502);
-  }
-
-  const photo = typeof result.photo === 'string' ? result.photo.trim() : '';
-  const hash = typeof result.hash === 'string' ? result.hash.trim() : '';
-  const server = typeof result.server === 'number' || typeof result.server === 'string' ? result.server : undefined;
-  if (!photo || photo === '[]' || !hash || server === undefined) {
-    throw new AppError('VK_IMAGE_UPLOAD_INVALID', `VK не распознал загруженное изображение | debug=${JSON.stringify({ ...diagnostic, parsed: result })}`, 502);
-  }
-
-  return { ...result, photo, hash, server, debug: diagnostic };
+export async function getVkHandoff(env:Env,token:string,origin:string){assertHandoffToken(token);const tokenHash=await hashToken(token),row=await env.DB.prepare('SELECT group_id AS groupId,text,image_key AS imageKey,expires_at AS expiresAt FROM vk_handoffs WHERE token_hash=?').bind(tokenHash).first<{groupId:number;text:string;imageKey:string|null;expiresAt:string}>();if(!row||Date.parse(row.expiresAt)<=Date.now())throw new AppError('HANDOFF_EXPIRED','Ссылка публикации истекла. Вернитесь в Telegram и откройте VK снова.',410);const imageKeys=decodeImageKeys(row.imageKey);return{groupId:row.groupId,text:row.text,imageUrl:imageKeys.length?`${origin}/api/vk-handoff-image/${encodeURIComponent(token)}`:null,imageCount:imageKeys.length,expiresAt:row.expiresAt}}
+export async function getVkHandoffImage(env:Env,token:string){if(!/^[A-Za-z0-9_-]{40,64}$/.test(token))return null;const tokenHash=await hashToken(token),row=await env.DB.prepare('SELECT image_key AS imageKey,expires_at AS expiresAt FROM vk_handoffs WHERE token_hash=?').bind(tokenHash).first<{imageKey:string|null;expiresAt:string}>();const imageKey=decodeImageKeys(row?.imageKey??null)[0];if(!imageKey||!row||Date.parse(row.expiresAt)<=Date.now())return null;return env.IMAGES.get(imageKey)}
+export async function uploadVkHandoffImage(env:Env,token:string,request:Request){
+  const startedAt=Date.now();assertHandoffToken(token);const tokenHash=await hashToken(token),row=await env.DB.prepare('SELECT image_key AS imageKey,expires_at AS expiresAt FROM vk_handoffs WHERE token_hash=?').bind(tokenHash).first<{imageKey:string|null;expiresAt:string}>();if(!row||Date.parse(row.expiresAt)<=Date.now())throw new AppError('HANDOFF_EXPIRED','Изображение публикации недоступно',410);
+  const body=await request.json().catch(()=>null) as {uploadUrl?:unknown;index?:unknown}|null,uploadUrl=assertVkUploadUrl(typeof body?.uploadUrl==='string'?body.uploadUrl:''),uploadHost=new URL(uploadUrl).hostname,imageKeys=decodeImageKeys(row.imageKey),index=Number.isInteger(body?.index)?Number(body?.index):0;if(index<0||index>=imageKeys.length)throw new AppError('VK_IMAGE_NOT_FOUND','Изображение публикации не найдено',404);
+  const r2StartedAt=Date.now(),object=await env.IMAGES.get(imageKeys[index]),r2Ms=Date.now()-r2StartedAt;if(!object)throw new AppError('VK_IMAGE_NOT_FOUND','Изображение публикации не найдено',404);const blobStartedAt=Date.now(),blob=await object.blob(),blobMs=Date.now()-blobStartedAt,contentType=(blob.type||'image/jpeg').toLowerCase(),extension=imageExtension(contentType),filename=`photo.${extension}`;if(extension==='bin')throw new AppError('VK_IMAGE_TYPE_UNSUPPORTED','VK не поддерживает формат изображения',415);
+  const form=new FormData();form.set('photo',new File([blob],filename,{type:contentType}));const vkStartedAt=Date.now(),response=await fetch(uploadUrl,{method:'POST',body:form}),vkFetchMs=Date.now()-vkStartedAt,responseContentType=response.headers.get('content-type')??'',raw=await response.text(),totalMs=Date.now()-startedAt;let result:Record<string,unknown>|null=null;try{const parsed=raw?JSON.parse(raw):null;if(parsed&&typeof parsed==='object')result=parsed as Record<string,unknown>}catch{}
+  const diagnostic={index,imageCount:imageKeys.length,r2Ms,blobMs,blobSize:blob.size,contentType,extension,filename,uploadHost,vkStatus:response.status,vkStatusText:response.statusText,vkContentType:responseContentType,vkFetchMs,totalMs,vkRaw:raw.slice(0,1500)};if(!response.ok||!result)throw new AppError('VK_IMAGE_UPLOAD_FAILED',`VK не принял изображение | debug=${JSON.stringify(diagnostic)}`,502);const photo=typeof result.photo==='string'?result.photo.trim():'',hash=typeof result.hash==='string'?result.hash.trim():'',server=typeof result.server==='number'||typeof result.server==='string'?result.server:undefined;if(!photo||photo==='[]'||!hash||server===undefined)throw new AppError('VK_IMAGE_UPLOAD_INVALID',`VK не распознал загруженное изображение | debug=${JSON.stringify({...diagnostic,parsed:result})}`,502);return{...result,photo,hash,server,debug:diagnostic};
 }
