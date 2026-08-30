@@ -1,6 +1,7 @@
 import worker from './index';
 import { vkMiniAppHtml } from './vk-miniapp';
 import { createVkHandoff, getVkHandoff, getVkHandoffImage, uploadVkHandoffImage } from './services/vk-handoff';
+import { adminHtml, listAdminUsers, resetAdminOnboarding } from './admin';
 import { AppError, type Env } from './types';
 
 const VK_TEST_IMAGE_KEY = 'posts/2026/08/10.png';
@@ -11,6 +12,13 @@ export default {
     const url = new URL(req.url);
 
     try {
+      if (req.method === 'GET' && (url.pathname === '/admin' || url.pathname === '/admin/')) {
+        return new Response(adminHtml(), { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' } });
+      }
+      if (req.method === 'GET' && url.pathname === '/api/admin/users') return json(await listAdminUsers(req, env));
+      const adminReset = url.pathname.match(/^\/api\/admin\/users\/([^/]+)\/reset-onboarding$/);
+      if (req.method === 'POST' && adminReset) return json(await resetAdminOnboarding(req, env, decodeURIComponent(adminReset[1])));
+
       if (req.method === 'GET' && (url.pathname === '/vk-test' || url.pathname === '/vk-test/')) {
         return new Response(vkMiniAppHtml, {
           headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' },
