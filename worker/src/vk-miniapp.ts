@@ -22,6 +22,7 @@ export const vkMiniAppHtml = `<!doctype html>
     button{width:100%;min-height:56px;padding:15px 20px;border:0;border-radius:18px;background:#fff;color:#0b1739;font:inherit;font-size:17px;font-weight:700;cursor:pointer;box-shadow:0 9px 26px rgba(0,0,0,.20);transition:transform .12s ease,opacity .12s ease}
     button:active:not(:disabled){transform:scale(.985)}
     button:disabled{opacity:.55;cursor:default}
+    #copy-logs{margin-top:12px;min-height:44px;padding:10px 16px;background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.18);box-shadow:none;font-size:14px}
     #status{margin:18px 0 0;color:rgba(255,255,255,.62);font-size:14px;line-height:1.45;white-space:pre-wrap}
   </style>
 </head><body>
@@ -33,13 +34,16 @@ export const vkMiniAppHtml = `<!doctype html>
     <h1 id="title">Публикация во ВКонтакте</h1>
     <p id="subtitle" class="subtitle">Разместите подготовленное сообщение в вашей группе.</p>
     <button id="post" disabled>Открыть публикацию</button>
+    <button id="copy-logs" type="button">Скопировать логи</button>
     <div id="status">Подготавливаем публикацию…</div>
   </main>
 <script>
-const VK_APP_ID=54742217,VK_API_VERSION='5.199',status=document.getElementById('status'),button=document.getElementById('post'),title=document.getElementById('title'),subtitle=document.getElementById('subtitle');let handoff=null,currentToken='',logs=[],started=performance.now(),published=false,returningFromGroup=false;
+const VK_APP_ID=54742217,VK_API_VERSION='5.199',status=document.getElementById('status'),button=document.getElementById('post'),copyLogsButton=document.getElementById('copy-logs'),title=document.getElementById('title'),subtitle=document.getElementById('subtitle');let handoff=null,currentToken='',logs=[],started=performance.now(),published=false,returningFromGroup=false;
 function elapsed(){return((performance.now()-started)/1000).toFixed(2)+'s'}
 function clean(value){if(value==null)return value;if(typeof value==='string'){if(value.length>600)return value.slice(0,600)+'…';return value.replace(/access_token=[^&\\s]+/gi,'access_token=***')}if(Array.isArray(value))return value.map(clean);if(typeof value==='object'){const out={};for(const[k,v]of Object.entries(value)){if(/token/i.test(k))out[k]='***';else if(k==='upload_url'||k==='uploadUrl'){try{const u=new URL(String(v));out[k]=u.origin+u.pathname}catch{out[k]=String(v)}}else out[k]=clean(v)}return out}return value}
 function log(label,data){const line='['+elapsed()+'] '+label+(data===undefined?'':' | '+JSON.stringify(clean(data)));logs.push(line);console.log(label,clean(data))}
+async function copyAllLogs(){const text=logs.join('\\n');if(!text){status.textContent='Лог пока пуст';return}try{if(navigator.clipboard?.writeText){await navigator.clipboard.writeText(text)}else{const area=document.createElement('textarea');area.value=text;area.style.position='fixed';area.style.opacity='0';document.body.appendChild(area);area.focus();area.select();if(!document.execCommand('copy'))throw new Error('copy failed');area.remove()}const previous=copyLogsButton.textContent;copyLogsButton.textContent='Логи скопированы';setTimeout(()=>{copyLogsButton.textContent=previous},1500)}catch(error){log('COPY LOGS ERROR',{message:error instanceof Error?error.message:String(error)});status.textContent='Не удалось скопировать логи'}}
+copyLogsButton.addEventListener('click',copyAllLogs);
 function showReturnScreen(){button.style.display='none';status.style.display='none';title.className='return-title';title.textContent='Нажмите крестик, чтобы вернуться в Телеграм';subtitle.className='published-message';subtitle.textContent='Ваше сообщение опубликовано в группе'}
 function handoffToken(){const query=new URLSearchParams(location.search).get('handoff');if(query)return query;const hash=new URLSearchParams(location.hash.replace(/^#/, '')).get('handoff');if(hash)return hash;const launch=new URLSearchParams(location.search).get('vk_ref')||'';const match=launch.match(/(?:^|[?&#])handoff=([A-Za-z0-9_-]+)/);return match?match[1]:''}
 function vkError(stage,error){const data=error&&typeof error==='object'?error:{},nested=data.error_data&&typeof data.error_data==='object'?data.error_data:{},api=nested.api_error&&typeof nested.api_error==='object'?nested.api_error:{},code=api.error_code||nested.error_code||data.error_code||'',message=api.error_msg||nested.error_reason||nested.error_msg||data.message||(error instanceof Error?error.message:'')||data.error_type||'Неизвестная ошибка',parts=['Этап: '+stage];if(data.error_type)parts.push('Тип: '+data.error_type);if(code!=='')parts.push('Код: '+code);parts.push('Сообщение: '+message);return parts.join('\\n')}
