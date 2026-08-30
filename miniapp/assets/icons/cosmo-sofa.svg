@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0B001A"/>
+      <stop offset="50%" stop-color="#190A33"/>
+      <stop offset="100%" stop-color="#3A103B"/>
+    </linearGradient>
+    <linearGradient id="sofaGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00F2FE"/>
+      <stop offset="100%" stop-color="#4FACFE"/>
+    </linearGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="12" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bgGrad)"/>
+  <circle cx="100" cy="120" r="8" fill="#FFF" opacity="0.9" filter="url(#glow)"/>
+  <circle cx="420" cy="380" r="6" fill="#00F2FE" opacity="0.8" filter="url(#glow)"/>
+  <circle cx="80" cy="360" r="5" fill="#FFF" opacity="0.6" filter="url(#glow)"/>
+  <path d="M400 110 L405 140 L435 145 L405 150 L400 180 L395 150 L365 145 L395 140 Z" fill="#FFF" opacity="0.95" filter="url(#glow)"/>
+  <g filter="url(#glow)">
+    <path d="M90 200 C 90 150, 422 150, 422 200 L 422 340 L 90 340 Z" fill="url(#sofaGrad)"/>
+    <path d="M60 295 C 60 275, 75 270, 95 270 L 253 270 L 253 340 L 85 340 C 65 340, 60 320, 60 295 Z" fill="#00F2FE"/>
+    <path d="M452 295 C 452 275, 437 270, 417 270 L 259 270 L 259 340 L 427 340 C 447 340, 452 320, 452 295 Z" fill="#00F2FE"/>
+    <rect x="60" y="220" width="55" height="120" rx="22" fill="url(#sofaGrad)"/>
+    <rect x="397" y="220" width="55" height="120" rx="22" fill="url(#sofaGrad)"/>
+    <line x1="256" y1="190" x2="256" y2="270" stroke="#190A33" stroke-width="4" opacity="0.2" stroke-linecap="round"/>
+  </g>
+</svg>
