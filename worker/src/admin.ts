@@ -37,8 +37,6 @@ export async function resetAdminOnboarding(req: Request, env: Env, userId: strin
     env.DB.prepare('DELETE FROM vk_handoffs WHERE user_id=?').bind(userId),
     env.DB.prepare('DELETE FROM telegram_managed_bot_group_pairings WHERE user_id=?').bind(userId),
     env.DB.prepare('DELETE FROM telegram_managed_bot_destinations WHERE user_id=?').bind(userId),
-    env.DB.prepare('DELETE FROM telegram_pairings WHERE user_id=?').bind(userId),
-    env.DB.prepare('DELETE FROM telegram_connections WHERE user_id=?').bind(userId),
     env.DB.prepare('DELETE FROM telegram_managed_bots WHERE user_id=?').bind(userId),
   ]);
   return { ok: true, user_id: userId, managed_bot_ids: botIds, history_preserved: true, database_operations: result.length };
