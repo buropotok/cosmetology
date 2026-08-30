@@ -52,7 +52,7 @@ export default {
 
       const handoffImageMatch = url.pathname.match(/^\/api\/vk-handoff-image\/([A-Za-z0-9_-]+)$/);
       if (req.method === 'GET' && handoffImageMatch) {
-        const object = await getVkHandoffImage(env, handoffMatch ? handoffMatch[1] : handoffImageMatch[1]);
+        const object = await getVkHandoffImage(env, handoffImageMatch[1]);
         if (!object) return new Response('Not found', { status: 404 });
         const headers = new Headers();
         object.writeHttpMetadata(headers);
