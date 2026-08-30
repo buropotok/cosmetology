@@ -11,16 +11,16 @@ export async function listAdminUsers(req: Request, env: Env) {
   requireAdmin(req, env);
   const { results } = await env.DB.prepare(`
     SELECT u.id,u.google_sub,u.created_at,u.updated_at,
-      ti.telegram_user_id,
-      mb.telegram_bot_id,mb.username AS bot_username,mb.display_name AS bot_name,
-      d.chat_title AS telegram_group,
-      vg.group_id AS vk_group_id,vg.group_name AS vk_group_name,vg.group_url AS vk_group_url,
+      (SELECT ti.telegram_user_id FROM telegram_identities ti WHERE ti.user_id=u.id ORDER BY ti.telegram_user_id LIMIT 1) AS telegram_user_id,
+      (SELECT mb.telegram_bot_id FROM telegram_managed_bots mb WHERE mb.user_id=u.id AND mb.status='active' ORDER BY mb.telegram_bot_id DESC LIMIT 1) AS telegram_bot_id,
+      (SELECT mb.username FROM telegram_managed_bots mb WHERE mb.user_id=u.id AND mb.status='active' ORDER BY mb.telegram_bot_id DESC LIMIT 1) AS bot_username,
+      (SELECT mb.display_name FROM telegram_managed_bots mb WHERE mb.user_id=u.id AND mb.status='active' ORDER BY mb.telegram_bot_id DESC LIMIT 1) AS bot_name,
+      (SELECT d.chat_title FROM telegram_managed_bot_destinations d WHERE d.user_id=u.id AND d.status='active' ORDER BY d.updated_at DESC LIMIT 1) AS telegram_group,
+      (SELECT vg.group_id FROM user_vk_group vg WHERE vg.user_id=u.id LIMIT 1) AS vk_group_id,
+      (SELECT vg.group_name FROM user_vk_group vg WHERE vg.user_id=u.id LIMIT 1) AS vk_group_name,
+      (SELECT vg.group_url FROM user_vk_group vg WHERE vg.user_id=u.id LIMIT 1) AS vk_group_url,
       (SELECT COUNT(*) FROM posts p WHERE p.user_id=u.id) AS post_count
     FROM users u
-    LEFT JOIN telegram_identities ti ON ti.user_id=u.id
-    LEFT JOIN telegram_managed_bots mb ON mb.user_id=u.id AND mb.status='active'
-    LEFT JOIN telegram_managed_bot_destinations d ON d.user_id=u.id AND d.status='active'
-    LEFT JOIN user_vk_group vg ON vg.user_id=u.id
     ORDER BY u.created_at DESC
   `).all();
   return { users: results };
