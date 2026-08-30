@@ -1,6 +1,7 @@
 import worker from './index';
 import { vkMiniAppHtml } from './vk-miniapp';
 import { createVkHandoff, getVkHandoff, getVkHandoffImage, uploadVkHandoffImage } from './services/vk-handoff';
+import { getMiniAppDraft, saveMiniAppDraft, getMiniAppDraftImage } from './services/miniapp-drafts';
 import { adminHtml, listAdminUsers, resetAdminOnboarding } from './admin';
 import { AppError, type Env } from './types';
 
@@ -12,6 +13,16 @@ export default {
     const url = new URL(req.url);
 
     try {
+      if (req.method === 'GET' && url.pathname === '/app.js') {
+        const asset = await env.ASSETS.fetch(req);
+        const source = await asset.text();
+        return new Response(`${source}\nimport('/drafts.js').catch(error=>console.warn('Draft client load failed',error));`, { headers: { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-store' } });
+      }
+      if (req.method === 'GET' && url.pathname === '/api/miniapp/draft') return json(await getMiniAppDraft(req, env));
+      if (req.method === 'POST' && url.pathname === '/api/miniapp/draft') return json(await saveMiniAppDraft(req, env));
+      const draftImage = url.pathname.match(/^\/api\/miniapp\/draft\/image\/(.+)$/);
+      if (req.method === 'GET' && draftImage) return getMiniAppDraftImage(req, env, decodeURIComponent(draftImage[1]));
+
       if (req.method === 'GET' && (url.pathname === '/admin' || url.pathname === '/admin/')) {
         return new Response(adminHtml(), { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' } });
       }
@@ -41,7 +52,7 @@ export default {
 
       const handoffImageMatch = url.pathname.match(/^\/api\/vk-handoff-image\/([A-Za-z0-9_-]+)$/);
       if (req.method === 'GET' && handoffImageMatch) {
-        const object = await getVkHandoffImage(env, handoffImageMatch[1]);
+        const object = await getVkHandoffImage(env, handoffMatch ? handoffMatch[1] : handoffImageMatch[1]);
         if (!object) return new Response('Not found', { status: 404 });
         const headers = new Headers();
         object.writeHttpMetadata(headers);
