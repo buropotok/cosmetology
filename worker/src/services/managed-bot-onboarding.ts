@@ -2,15 +2,12 @@ import { AppError, type Env } from '../types';
 import { validateTelegramMiniAppInitData } from './telegram-miniapp-auth';
 import { resolveOrCreateTelegramIdentity } from './telegram-identity';
 import { setTelegramWebhookWithToken } from './telegram';
+import { decryptManagedBotToken } from './managed-bot-crypto';
 
 const PAIRING_TTL_SECONDS = 10 * 60;
 const WEBHOOK_PATH = '/api/telegram/managed/';
 
-function base64Url(bytes: Uint8Array) {
-  let binary = '';
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '');
-}
+function base64Url(bytes: Uint8Array) { let binary = ''; for (const byte of bytes) binary += String.fromCharCode(byte); return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, ''); }
 function randomOpaque(byteLength: number) { return base64Url(crypto.getRandomValues(new Uint8Array(byteLength))); }
 async function sha256(value: string) { const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value)); return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join(''); }
 function safeEqual(left: string, right: string) { if (left.length !== right.length) return false; let difference = 0; for (let index = 0; index < left.length; index += 1) difference |= left.charCodeAt(index) ^ right.charCodeAt(index); return difference === 0; }
@@ -51,7 +48,10 @@ export async function getManagedBotStateForUser(env: Env, userId: string) {
 }
 
 type IncomingWebhookRow = { telegram_bot_id: string; secret_hash: string };
+type PrivateOwnerRow={user_id:string;token_ciphertext:string;token_iv:string;token_key_version:number};
 function startPayload(text: unknown) { if (typeof text !== 'string') return null; return text.match(/^\/start(?:@[A-Za-z0-9_]+)?\s+([A-Za-z0-9_-]{16,64})$/)?.[1] ?? null; }
+function isPlainStart(text:unknown){return typeof text==='string'&&/^\/start(?:@[A-Za-z0-9_]+)?\s*$/.test(text)}
+async function sendManagedBotReturn(env:Env,token:string,chatId:string){if(!env.MINIAPP_URL)return;const body=new FormData();body.set('chat_id',chatId);body.set('text','Вернитесь в приложение Cosmo Sofa.');body.set('reply_markup',JSON.stringify({inline_keyboard:[[{text:'Открыть Cosmo Sofa',web_app:{url:env.MINIAPP_URL}}]]}));const r=await fetch(`https://api.telegram.org/bot${token}/sendMessage`,{method:'POST',body});if(!r.ok)console.error({event:'managed_bot_return_button_failed',status:r.status})}
 export async function managedBotWebhook(request: Request, env: Env, webhookId: string) {
   const route = await env.DB.prepare(`SELECT telegram_bot_id,secret_hash FROM telegram_managed_bot_webhooks WHERE webhook_id=? AND status='active'`).bind(webhookId).first<IncomingWebhookRow>();
   if (!route) throw new AppError('MANAGED_BOT_WEBHOOK_UNAUTHORIZED', 'Webhook не авторизован', 401);
@@ -65,6 +65,11 @@ export async function managedBotWebhook(request: Request, env: Env, webhookId: s
     return { ok: true };
   }
   const message = update?.message, nonce = startPayload(message?.text), chatType = message?.chat?.type, chatId = message?.chat?.id != null ? String(message.chat.id) : null, telegramUserId = message?.from?.id != null ? String(message.from.id) : null;
+  if(chatType==='private'&&chatId&&telegramUserId&&isPlainStart(message?.text)){
+    const owner=await env.DB.prepare(`SELECT mb.user_id,mb.token_ciphertext,mb.token_iv,mb.token_key_version FROM telegram_managed_bots mb JOIN telegram_identities ti ON ti.user_id=mb.user_id AND ti.telegram_user_id=? WHERE mb.telegram_bot_id=? AND mb.status='active' AND mb.token_ciphertext IS NOT NULL AND mb.token_iv IS NOT NULL LIMIT 1`).bind(telegramUserId,route.telegram_bot_id).first<PrivateOwnerRow>();
+    if(owner){await env.DB.prepare(`INSERT INTO telegram_managed_bot_private_chats(user_id,telegram_bot_id,telegram_chat_id,telegram_user_id,status,updated_at) VALUES(?,?,?,?,'active',CURRENT_TIMESTAMP) ON CONFLICT(user_id,telegram_bot_id) DO UPDATE SET telegram_chat_id=excluded.telegram_chat_id,telegram_user_id=excluded.telegram_user_id,status='active',updated_at=CURRENT_TIMESTAMP`).bind(owner.user_id,route.telegram_bot_id,chatId,telegramUserId).run();const token=await decryptManagedBotToken(route.telegram_bot_id,{ciphertext:owner.token_ciphertext,iv:owner.token_iv,keyVersion:owner.token_key_version},env);await sendManagedBotReturn(env,token,chatId);console.log({event:'telegram_managed_bot_private_chat_ready',managedBotId:route.telegram_bot_id,userId:owner.user_id})}
+    return {ok:true};
+  }
   if (!nonce || !chatId || !telegramUserId || (chatType !== 'group' && chatType !== 'supergroup')) return { ok: true };
   const nonceHash = await sha256(nonce);
   const pairing = await env.DB.prepare(`SELECT p.id,p.user_id,p.telegram_bot_id FROM telegram_managed_bot_group_pairings p JOIN telegram_identities ti ON ti.user_id=p.user_id AND ti.telegram_user_id=? WHERE p.nonce_hash=? AND p.telegram_bot_id=? AND p.status='pending' AND p.expires_at>CURRENT_TIMESTAMP`).bind(telegramUserId, nonceHash, route.telegram_bot_id).first<{id:string;user_id:string;telegram_bot_id:string}>();
