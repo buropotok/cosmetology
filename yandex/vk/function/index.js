@@ -1,6 +1,5 @@
 const crypto = require("node:crypto");
 const { S3Client, GetObjectCommand, PutObjectCommand } = require("@aws-sdk/client-s3");
-const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 
 const s3 = new S3Client({
   region: "ru-central1",
@@ -12,6 +11,7 @@ const TEST_ARTIFACT_ID = "test-artifact-001";
 const TEST_IMAGE_KEY = `artifacts/${TEST_ARTIFACT_ID}/cosmo-sofa.svg`;
 const MAX_IMAGES = 10;
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+const PULL_ATTEMPTS = 3;
 
 function response(statusCode, body, headers = {}) {
   return {
@@ -62,7 +62,7 @@ function jsonBody(event) {
 
 function requireReplicaAuth(event) {
   const expected = process.env.REPLICA_TOKEN || "";
-  if (!expected) throw Object.assign(new Error("Replica token is not configured"), { statusCode: 503, code: "REPLICA_NOT_CONFIGURED" });
+  if (!expected || expected === "not-configured") throw Object.assign(new Error("Replica token is not configured"), { statusCode: 503, code: "REPLICA_NOT_CONFIGURED" });
   const authorization = headersOf(event).authorization || "";
   const supplied = authorization.match(/^Bearer\s+(.+)$/i)?.[1] || "";
   const expectedBuffer = Buffer.from(expected);
@@ -86,6 +86,16 @@ function assertHandoffToken(value) {
   const token = String(value || "");
   if (!/^[A-Za-z0-9_-]{40,64}$/.test(token)) throw Object.assign(new Error("Invalid handoff token"), { statusCode: 400, code: "INVALID_HANDOFF" });
   return token;
+}
+
+function assertR2SourceUrl(value) {
+  let url;
+  try { url = new URL(String(value || "")); } catch { throw Object.assign(new Error("Invalid R2 source URL"), { statusCode: 400, code: "INVALID_R2_SOURCE_URL" }); }
+  const host = url.hostname.toLowerCase();
+  if (url.protocol !== "https:" || !host.endsWith(".r2.cloudflarestorage.com")) {
+    throw Object.assign(new Error("Unsupported R2 source URL"), { statusCode: 400, code: "INVALID_R2_SOURCE_URL" });
+  }
+  return url.toString();
 }
 
 function extensionFor(contentType) {
@@ -123,6 +133,49 @@ async function artifactByHandoff(token) {
   return getJson(`artifacts/${alias.artifactId}/artifact.json`);
 }
 
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function pullImage(image) {
+  let lastError;
+  for (let attempt = 1; attempt <= PULL_ATTEMPTS; attempt++) {
+    try {
+      const source = await fetch(image.sourceUrl, {
+        method: "GET",
+        signal: AbortSignal.timeout(30000),
+      });
+      if (!source.ok) throw new Error(`R2 returned ${source.status}`);
+      const bytes = Buffer.from(await source.arrayBuffer());
+      if (bytes.length !== image.size) throw new Error(`R2 size mismatch: expected ${image.size}, got ${bytes.length}`);
+
+      await s3.send(new PutObjectCommand({
+        Bucket: BUCKET,
+        Key: image.key,
+        Body: bytes,
+        ContentType: image.contentType,
+        CacheControl: "private, max-age=300",
+      }));
+      return;
+    } catch (error) {
+      lastError = error;
+      if (attempt < PULL_ATTEMPTS) await sleep(500 * 2 ** (attempt - 1));
+    }
+  }
+  throw new Error(`R2 pull failed for image ${image.index}: ${lastError?.message || String(lastError)}`);
+}
+
+async function pullImages(images) {
+  let cursor = 0;
+  const worker = async () => {
+    while (cursor < images.length) {
+      const index = cursor++;
+      await pullImage(images[index]);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(2, images.length) }, worker));
+}
+
 async function initReplica(event) {
   requireReplicaAuth(event);
   const body = jsonBody(event);
@@ -145,9 +198,23 @@ async function initReplica(event) {
     if (sourceIndex !== index || size <= 0 || size > MAX_IMAGE_BYTES) throw Object.assign(new Error(`Invalid image ${index}`), { statusCode: 400, code: "INVALID_IMAGE" });
     const ext = extensionFor(contentType);
     if (ext === "bin") throw Object.assign(new Error(`Unsupported image ${index}`), { statusCode: 415, code: "UNSUPPORTED_IMAGE_TYPE" });
-    return { index, contentType, size, key: `artifacts/${artifactId}/images/${String(index).padStart(2, "0")}.${ext}` };
+    return {
+      index,
+      contentType,
+      size,
+      sourceUrl: assertR2SourceUrl(image?.sourceUrl),
+      key: `artifacts/${artifactId}/images/${String(index).padStart(2, "0")}.${ext}`,
+    };
   });
 
+  const artifactKey = `artifacts/${artifactId}/artifact.json`;
+  const existing = await getJson(artifactKey);
+  if (existing?.status === "ready" && Number(existing.version) >= version) {
+    await putJson(`handoffs/${hashHandoff(handoffToken)}.json`, { artifactId, version: existing.version, expiresAt: existing.expiresAt });
+    return response(200, { artifactId, status: "ready", imageCount: existing.images?.length || 0, idempotent: true });
+  }
+
+  const now = new Date().toISOString();
   const artifact = {
     artifactId,
     version,
@@ -155,26 +222,27 @@ async function initReplica(event) {
     vkGroupId,
     text,
     expiresAt,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    createdAt: existing?.createdAt || now,
+    updatedAt: now,
     images: normalizedImages.map(({ index, contentType, size, key }) => ({ index, contentType, size, key })),
   };
 
-  await putJson(`artifacts/${artifactId}/artifact.json`, artifact);
+  await putJson(artifactKey, artifact);
   await putJson(`handoffs/${hashHandoff(handoffToken)}.json`, { artifactId, version, expiresAt });
 
-  const uploads = [];
-  for (const image of normalizedImages) {
-    const url = await getSignedUrl(s3, new PutObjectCommand({
-      Bucket: BUCKET,
-      Key: image.key,
-      ContentType: image.contentType,
-      CacheControl: "private, max-age=300",
-    }), { expiresIn: 10 * 60 });
-    uploads.push({ index: image.index, url });
+  try {
+    await pullImages(normalizedImages);
+    artifact.status = "ready";
+    artifact.updatedAt = new Date().toISOString();
+    await putJson(artifactKey, artifact);
+    return response(200, { artifactId, status: "ready", imageCount: normalizedImages.length });
+  } catch (error) {
+    artifact.status = "replicating_ru";
+    artifact.updatedAt = new Date().toISOString();
+    artifact.replicationError = error?.message || String(error);
+    await putJson(artifactKey, artifact);
+    throw Object.assign(error instanceof Error ? error : new Error(String(error)), { statusCode: 502, code: "R2_PULL_FAILED" });
   }
-
-  return response(200, { artifactId, status: artifact.status, uploads });
 }
 
 async function completeReplica(event, artifactId) {
@@ -191,6 +259,7 @@ async function completeReplica(event, artifactId) {
   if (!artifact) throw Object.assign(new Error("Artifact not found"), { statusCode: 404, code: "ARTIFACT_NOT_FOUND" });
   artifact.status = "ready";
   artifact.updatedAt = new Date().toISOString();
+  delete artifact.replicationError;
   await putJson(key, artifact);
   return response(200, { artifactId, status: "ready" });
 }
