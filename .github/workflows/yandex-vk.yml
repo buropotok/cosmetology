@@ -70,6 +70,7 @@ jobs:
           environment: |
             AWS_ACCESS_KEY_ID=${{ secrets.YC_S3_ACCESS_KEY_ID }}
             AWS_SECRET_ACCESS_KEY=${{ secrets.YC_S3_SECRET_ACCESS_KEY }}
+            REPLICA_TOKEN=${{ secrets.YANDEX_REPLICA_TOKEN }}
           tags: |
             main
 
@@ -113,6 +114,7 @@ jobs:
         run: |
           set -euo pipefail
           curl -sSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh | bash -s -- -i "$HOME/yandex-cloud" -n
+
           echo "$HOME/yandex-cloud/bin" >> "$GITHUB_PATH"
           "$HOME/yandex-cloud/bin/yc" version
 
