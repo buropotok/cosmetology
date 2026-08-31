@@ -47,6 +47,19 @@ async function uploadVkArtifactImage(event, token) {
   const form = new FormData(); form.set("photo", new Blob([bytes], { type: contentType }), `photo.${extension}`); const vkResponse = await fetch(uploadUrl, { method: "POST", body: form, signal: AbortSignal.timeout(30000) }), raw = await vkResponse.text(); let result = null; try { result = raw ? JSON.parse(raw) : null; } catch {}
   if (!vkResponse.ok || !result || typeof result !== "object") throw Object.assign(new Error(`VK не принял изображение: HTTP ${vkResponse.status}`), { statusCode: 502, code: "VK_IMAGE_UPLOAD_FAILED" }); const photo = typeof result.photo === "string" ? result.photo.trim() : "", hash = typeof result.hash === "string" ? result.hash.trim() : "", server = typeof result.server === "number" || typeof result.server === "string" ? result.server : undefined; if (!photo || photo === "[]" || !hash || server === undefined) throw Object.assign(new Error("VK не распознал загруженное изображение"), { statusCode: 502, code: "VK_IMAGE_UPLOAD_INVALID" }); return response(200, { ...result, photo, hash, server });
 }
+async function postVkWallServer(event, token) {
+  token = assertHandoffToken(token);
+  const artifact = await artifactByHandoff(token);
+  if (!artifact || artifact.status !== "ready" || Date.parse(artifact.expiresAt) <= Date.now()) throw Object.assign(new Error("Публикация недоступна"), { statusCode: 410, code: "HANDOFF_EXPIRED" });
+  const body = jsonBody(event), accessToken = String(body.accessToken || "").trim();
+  if (!accessToken) throw Object.assign(new Error("VK access token is required"), { statusCode: 400, code: "VK_TOKEN_REQUIRED" });
+  const params = new URLSearchParams({ access_token: accessToken, owner_id: String(-artifact.vkGroupId), from_group: "1", message: artifact.text || "", v: "5.199" });
+  const vkResponse = await fetch("https://api.vk.com/method/wall.post", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: params, signal: AbortSignal.timeout(30000) });
+  const raw = await vkResponse.text(); let result = null; try { result = raw ? JSON.parse(raw) : null; } catch {}
+  if (!vkResponse.ok) throw Object.assign(new Error(`VK API HTTP ${vkResponse.status}`), { statusCode: 502, code: "VK_API_HTTP_ERROR" });
+  if (result?.error) return response(200, { ok: false, vkError: { error_code: result.error.error_code, error_msg: result.error.error_msg } });
+  return response(200, { ok: true, response: result?.response || null });
+}
 async function getTestArtifact(path) { if (path.endsWith("/image")) { const object = await s3.send(new GetObjectCommand({ Bucket: BUCKET, Key: TEST_IMAGE_KEY })); return binaryResponse(await object.Body.transformToByteArray(), object.ContentType || "image/svg+xml"); } return response(200, { artifactId: TEST_ARTIFACT_ID, status: "ready", text: "Тестовая публикация Cosmo Sofa", images: ["/api/test-artifact/image"] }); }
 
 module.exports.handler = async function (event) {
@@ -55,6 +68,7 @@ module.exports.handler = async function (event) {
     if (method === "POST" && path === "/api/replica/artifacts/init") return initReplica(event);
     const completeMatch = path.match(/^\/api\/replica\/artifacts\/([A-Za-z0-9_-]+)\/complete$/); if (method === "POST" && completeMatch) return completeReplica(event, completeMatch[1]);
     const vkUploadMatch = path.match(/^\/api\/artifacts\/([A-Za-z0-9_-]+)\/vk-upload$/); if (method === "POST" && vkUploadMatch) return uploadVkArtifactImage(event, vkUploadMatch[1]);
+    const vkWallMatch = path.match(/^\/api\/artifacts\/([A-Za-z0-9_-]+)\/vk-wall-post$/); if (method === "POST" && vkWallMatch) return postVkWallServer(event, vkWallMatch[1]);
     const imageMatch = path.match(/^\/api\/artifacts\/([A-Za-z0-9_-]+)\/images\/(\d+)$/); if (method === "GET" && imageMatch) return getArtifactImage(imageMatch[1], Number(imageMatch[2]));
     const artifactMatch = path.match(/^\/api\/artifacts\/([A-Za-z0-9_-]+)$/); if (method === "GET" && artifactMatch) return getArtifact(artifactMatch[1]);
     if (method === "GET" && (path === "/api/test-artifact" || path === "/api/test-artifact/image")) return getTestArtifact(path);
