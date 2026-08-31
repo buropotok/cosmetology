@@ -107,8 +107,8 @@ async function loadArtifact() {
   }
   artifactEl.hidden = false;
   buttonEl.disabled = !currentToken;
-  buttonEl.textContent = currentToken ? "Тест: личная стена" : "Yandex-контур готов";
-  statusEl.textContent = currentToken ? "Диагностический тест: публикация на личную стену" : "Публикация и изображения загружены из Yandex Cloud";
+  buttonEl.textContent = currentToken ? "Опубликовать во ВКонтакте" : "Yandex-контур готов";
+  statusEl.textContent = currentToken ? "Публикация готова к размещению" : "Публикация и изображения загружены из Yandex Cloud";
   log("Yandex artifact ready", { artifactId: artifact.artifactId, version: artifact.version || 1, status: artifact.status || "ready", vkGroupId: artifact.vkGroupId || null, textLength: (artifact.text || "").length, imageCount: (artifact.images || []).length });
 }
 async function uploadPhotoAttempt(auth, index, attempt, imageCount) {
@@ -167,25 +167,28 @@ async function prepareNativePhotoAttachments() {
 }
 buttonEl.addEventListener("click", async () => {
   if (!artifact || !currentToken || published) return;
-  buttonEl.disabled = true; statusEl.textContent = "Подготавливаем диагностическую публикацию…";
+  buttonEl.disabled = true; statusEl.textContent = "Подготавливаем публикацию…";
   try {
     const attachments = await prepareNativePhotoAttachments();
-    const params = { message: artifact.text || "" };
+    const params = { owner_id: -artifact.vkGroupId, message: artifact.text || "" };
     if (attachments.length) params.attachments = attachments.join(",");
-    log("→ VKWebAppShowWallPostBox PERSONAL WALL TEST", params);
-    let result; try { result = await bridge("VKWebAppShowWallPostBox", params); } catch (error) { throw new Error(vkError("VKWebAppShowWallPostBox PERSONAL WALL TEST", error)); }
-    log("← Личная публикация завершена", result);
-    if (result?.post_id) { published = true; buttonEl.disabled = true; buttonEl.textContent = "Тест успешен"; statusEl.textContent = "VKWebAppShowWallPostBox работает для личной стены"; }
+    log("→ VKWebAppShowWallPostBox", params);
+    let result; try { result = await bridge("VKWebAppShowWallPostBox", params); } catch (error) { throw new Error(vkError("VKWebAppShowWallPostBox", error)); }
+    log("← Публикация завершена", result);
+    if (result?.post_id) { published = true; buttonEl.disabled = true; buttonEl.textContent = "Опубликовано"; statusEl.textContent = "Публикация размещена во ВКонтакте"; }
   } catch (error) {
-    statusEl.textContent = "Диагностический тест не прошёл.";
+    statusEl.textContent = "Не удалось разместить публикацию. Попробуйте ещё раз.";
     log("PUBLISH ERROR", { message: error instanceof Error ? error.message : String(error) }); diagnosticsEl.open = true;
   } finally { if (!published) buttonEl.disabled = false; }
 });
 async function init() {
   try {
-    log("Mini App init", { href: location.href, appId: VK_APP_ID, hasHandoff: Boolean(handoffToken()) });
+    log("Mini App init", { href: location.href, appId: VK_APP_ID, hasHandoff: Boolean(handoffToken()), platform: new URLSearchParams(location.search).get("vk_platform") || null });
     if (!window.vkBridge) throw new Error("VK Bridge недоступен");
     await bridge("VKWebAppInit");
+    log("Bridge support", { showWallPostBox: typeof vkBridge.supports === "function" ? vkBridge.supports("VKWebAppShowWallPostBox") : "supports() unavailable", getClientVersion: typeof vkBridge.supports === "function" ? vkBridge.supports("VKWebAppGetClientVersion") : "supports() unavailable" });
+    try { const client = await bridge("VKWebAppGetClientVersion"); log("VK client diagnostic", client); }
+    catch (error) { log("VK client diagnostic unavailable", { message: vkError("VKWebAppGetClientVersion", error) }); }
     await loadArtifact();
   } catch (error) { statusEl.textContent = "Не удалось подготовить публикацию"; log("INIT ERROR", { message: error?.message || String(error) }); diagnosticsEl.open = true; }
 }
