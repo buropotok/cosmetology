@@ -1,11 +1,7 @@
 const crypto = require("node:crypto");
 const { S3Client, GetObjectCommand, PutObjectCommand } = require("@aws-sdk/client-s3");
 
-const s3 = new S3Client({
-  region: "ru-central1",
-  endpoint: "https://storage.yandexcloud.net",
-});
-
+const s3 = new S3Client({ region: "ru-central1", endpoint: "https://storage.yandexcloud.net" });
 const BUCKET = "cosmetology-publisher-images";
 const TEST_ARTIFACT_ID = "test-artifact-001";
 const TEST_IMAGE_KEY = `artifacts/${TEST_ARTIFACT_ID}/cosmo-sofa.svg`;
@@ -13,324 +9,55 @@ const MAX_IMAGES = 10;
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const PULL_ATTEMPTS = 3;
 
-function response(statusCode, body, headers = {}) {
-  return {
-    statusCode,
-    headers: {
-      "Content-Type": "application/json; charset=utf-8",
-      "Cache-Control": "no-store",
-      ...headers,
-    },
-    body: typeof body === "string" ? body : JSON.stringify(body),
-  };
-}
-
-function binaryResponse(bytes, contentType) {
-  return {
-    statusCode: 200,
-    headers: {
-      "Content-Type": contentType || "application/octet-stream",
-      "Cache-Control": "private, max-age=300",
-      "X-Content-Type-Options": "nosniff",
-    },
-    body: Buffer.from(bytes).toString("base64"),
-    isBase64Encoded: true,
-  };
-}
-
-function pathOf(event) {
-  return event?.path || event?.rawPath || event?.requestContext?.http?.path || "";
-}
-
-function methodOf(event) {
-  return String(event?.httpMethod || event?.requestContext?.http?.method || "GET").toUpperCase();
-}
-
-function headersOf(event) {
-  const source = event?.headers || {};
-  const result = {};
-  for (const [key, value] of Object.entries(source)) result[String(key).toLowerCase()] = String(value);
-  return result;
-}
-
-function jsonBody(event) {
-  const raw = event?.body || "";
-  if (!raw) return {};
-  const text = event?.isBase64Encoded ? Buffer.from(raw, "base64").toString("utf8") : raw;
-  return JSON.parse(text);
-}
-
-function requireReplicaAuth(event) {
-  const expected = process.env.REPLICA_TOKEN || "";
-  if (!expected || expected === "not-configured") throw Object.assign(new Error("Replica token is not configured"), { statusCode: 503, code: "REPLICA_NOT_CONFIGURED" });
-  const authorization = headersOf(event).authorization || "";
-  const supplied = authorization.match(/^Bearer\s+(.+)$/i)?.[1] || "";
-  const expectedBuffer = Buffer.from(expected);
-  const suppliedBuffer = Buffer.from(supplied);
-  if (expectedBuffer.length !== suppliedBuffer.length || !crypto.timingSafeEqual(expectedBuffer, suppliedBuffer)) {
-    throw Object.assign(new Error("Invalid replica token"), { statusCode: 401, code: "INVALID_REPLICA_TOKEN" });
-  }
-}
-
-function hashHandoff(token) {
-  return crypto.createHash("sha256").update(token).digest("hex");
-}
-
-function assertArtifactId(value) {
-  const id = String(value || "");
-  if (!/^[A-Za-z0-9_-]{16,80}$/.test(id)) throw Object.assign(new Error("Invalid artifact id"), { statusCode: 400, code: "INVALID_ARTIFACT_ID" });
-  return id;
-}
-
-function assertHandoffToken(value) {
-  const token = String(value || "");
-  if (!/^[A-Za-z0-9_-]{40,64}$/.test(token)) throw Object.assign(new Error("Invalid handoff token"), { statusCode: 400, code: "INVALID_HANDOFF" });
-  return token;
-}
-
-function assertR2SourceUrl(value) {
-  let url;
-  try { url = new URL(String(value || "")); } catch { throw Object.assign(new Error("Invalid R2 source URL"), { statusCode: 400, code: "INVALID_R2_SOURCE_URL" }); }
-  const host = url.hostname.toLowerCase();
-  if (url.protocol !== "https:" || !host.endsWith(".r2.cloudflarestorage.com")) {
-    throw Object.assign(new Error("Unsupported R2 source URL"), { statusCode: 400, code: "INVALID_R2_SOURCE_URL" });
-  }
-  return url.toString();
-}
-
-function extensionFor(contentType) {
-  return ({
-    "image/jpeg": "jpg",
-    "image/png": "png",
-    "image/webp": "webp",
-    "image/gif": "gif",
-  })[String(contentType || "").toLowerCase()] || "bin";
-}
-
-async function putJson(key, value) {
-  await s3.send(new PutObjectCommand({
-    Bucket: BUCKET,
-    Key: key,
-    Body: JSON.stringify(value),
-    ContentType: "application/json; charset=utf-8",
-    CacheControl: "no-store",
-  }));
-}
-
-async function getJson(key) {
-  try {
-    const object = await s3.send(new GetObjectCommand({ Bucket: BUCKET, Key: key }));
-    return JSON.parse(await object.Body.transformToString());
-  } catch (error) {
-    if (error?.name === "NoSuchKey" || error?.$metadata?.httpStatusCode === 404) return null;
-    throw error;
-  }
-}
-
-async function artifactByHandoff(token) {
-  const alias = await getJson(`handoffs/${hashHandoff(token)}.json`);
-  if (!alias?.artifactId) return null;
-  return getJson(`artifacts/${alias.artifactId}/artifact.json`);
-}
-
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-async function pullImage(image) {
-  let lastError;
-  for (let attempt = 1; attempt <= PULL_ATTEMPTS; attempt++) {
-    try {
-      const source = await fetch(image.sourceUrl, {
-        method: "GET",
-        signal: AbortSignal.timeout(30000),
-      });
-      if (!source.ok) throw new Error(`R2 returned ${source.status}`);
-      const bytes = Buffer.from(await source.arrayBuffer());
-      if (bytes.length !== image.size) throw new Error(`R2 size mismatch: expected ${image.size}, got ${bytes.length}`);
-
-      await s3.send(new PutObjectCommand({
-        Bucket: BUCKET,
-        Key: image.key,
-        Body: bytes,
-        ContentType: image.contentType,
-        CacheControl: "private, max-age=300",
-      }));
-      return;
-    } catch (error) {
-      lastError = error;
-      if (attempt < PULL_ATTEMPTS) await sleep(500 * 2 ** (attempt - 1));
-    }
-  }
-  throw new Error(`R2 pull failed for image ${image.index}: ${lastError?.message || String(lastError)}`);
-}
-
-async function pullImages(images) {
-  let cursor = 0;
-  const worker = async () => {
-    while (cursor < images.length) {
-      const index = cursor++;
-      await pullImage(images[index]);
-    }
-  };
-  await Promise.all(Array.from({ length: Math.min(2, images.length) }, worker));
-}
-
+function response(statusCode, body, headers = {}) { return { statusCode, headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", ...headers }, body: typeof body === "string" ? body : JSON.stringify(body) }; }
+function binaryResponse(bytes, contentType) { return { statusCode: 200, headers: { "Content-Type": contentType || "application/octet-stream", "Cache-Control": "private, max-age=300", "X-Content-Type-Options": "nosniff" }, body: Buffer.from(bytes).toString("base64"), isBase64Encoded: true }; }
+function pathOf(event) { return event?.path || event?.rawPath || event?.requestContext?.http?.path || ""; }
+function methodOf(event) { return String(event?.httpMethod || event?.requestContext?.http?.method || "GET").toUpperCase(); }
+function headersOf(event) { const source = event?.headers || {}, result = {}; for (const [key, value] of Object.entries(source)) result[String(key).toLowerCase()] = String(value); return result; }
+function jsonBody(event) { const raw = event?.body || ""; if (!raw) return {}; const text = event?.isBase64Encoded ? Buffer.from(raw, "base64").toString("utf8") : raw; return JSON.parse(text); }
+function requireReplicaAuth(event) { const expected = process.env.REPLICA_TOKEN || ""; if (!expected || expected === "not-configured") throw Object.assign(new Error("Replica token is not configured"), { statusCode: 503, code: "REPLICA_NOT_CONFIGURED" }); const authorization = headersOf(event).authorization || "", supplied = authorization.match(/^Bearer\s+(.+)$/i)?.[1] || "", expectedBuffer = Buffer.from(expected), suppliedBuffer = Buffer.from(supplied); if (expectedBuffer.length !== suppliedBuffer.length || !crypto.timingSafeEqual(expectedBuffer, suppliedBuffer)) throw Object.assign(new Error("Invalid replica token"), { statusCode: 401, code: "INVALID_REPLICA_TOKEN" }); }
+function hashHandoff(token) { return crypto.createHash("sha256").update(token).digest("hex"); }
+function assertArtifactId(value) { const id = String(value || ""); if (!/^[A-Za-z0-9_-]{16,80}$/.test(id)) throw Object.assign(new Error("Invalid artifact id"), { statusCode: 400, code: "INVALID_ARTIFACT_ID" }); return id; }
+function assertHandoffToken(value) { const token = String(value || ""); if (!/^[A-Za-z0-9_-]{40,64}$/.test(token)) throw Object.assign(new Error("Invalid handoff token"), { statusCode: 400, code: "INVALID_HANDOFF" }); return token; }
+function assertR2SourceUrl(value) { let url; try { url = new URL(String(value || "")); } catch { throw Object.assign(new Error("Invalid R2 source URL"), { statusCode: 400, code: "INVALID_R2_SOURCE_URL" }); } const host = url.hostname.toLowerCase(); if (url.protocol !== "https:" || !host.endsWith(".r2.cloudflarestorage.com")) throw Object.assign(new Error("Unsupported R2 source URL"), { statusCode: 400, code: "INVALID_R2_SOURCE_URL" }); return url.toString(); }
+function assertVkUploadUrl(value) { let url; try { url = new URL(String(value || "")); } catch { throw Object.assign(new Error("Invalid VK upload URL"), { statusCode: 400, code: "INVALID_VK_UPLOAD_URL" }); } const host = url.hostname.toLowerCase(), allowed = host === "vk.com" || host.endsWith(".vk.com") || host === "vk.ru" || host.endsWith(".vk.ru") || host === "vk.me" || host.endsWith(".vk.me"); if (url.protocol !== "https:" || !allowed) throw Object.assign(new Error("Unsupported VK upload URL"), { statusCode: 400, code: "INVALID_VK_UPLOAD_URL" }); return url.toString(); }
+function extensionFor(contentType) { return ({ "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif" })[String(contentType || "").toLowerCase()] || "bin"; }
+async function putJson(key, value) { await s3.send(new PutObjectCommand({ Bucket: BUCKET, Key: key, Body: JSON.stringify(value), ContentType: "application/json; charset=utf-8", CacheControl: "no-store" })); }
+async function getJson(key) { try { const object = await s3.send(new GetObjectCommand({ Bucket: BUCKET, Key: key })); return JSON.parse(await object.Body.transformToString()); } catch (error) { if (error?.name === "NoSuchKey" || error?.$metadata?.httpStatusCode === 404) return null; throw error; } }
+async function artifactByHandoff(token) { const alias = await getJson(`handoffs/${hashHandoff(token)}.json`); if (!alias?.artifactId) return null; return getJson(`artifacts/${alias.artifactId}/artifact.json`); }
+function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+async function pullImage(image) { let lastError; for (let attempt = 1; attempt <= PULL_ATTEMPTS; attempt++) { try { const source = await fetch(image.sourceUrl, { method: "GET", signal: AbortSignal.timeout(30000) }); if (!source.ok) throw new Error(`R2 returned ${source.status}`); const bytes = Buffer.from(await source.arrayBuffer()); if (bytes.length !== image.size) throw new Error(`R2 size mismatch: expected ${image.size}, got ${bytes.length}`); await s3.send(new PutObjectCommand({ Bucket: BUCKET, Key: image.key, Body: bytes, ContentType: image.contentType, CacheControl: "private, max-age=300" })); return; } catch (error) { lastError = error; if (attempt < PULL_ATTEMPTS) await sleep(500 * 2 ** (attempt - 1)); } } throw new Error(`R2 pull failed for image ${image.index}: ${lastError?.message || String(lastError)}`); }
+async function pullImages(images) { let cursor = 0; const worker = async () => { while (cursor < images.length) { const index = cursor++; await pullImage(images[index]); } }; await Promise.all(Array.from({ length: Math.min(2, images.length) }, worker)); }
 async function initReplica(event) {
-  requireReplicaAuth(event);
-  const body = jsonBody(event);
-  const artifactId = assertArtifactId(body.artifactId);
-  const handoffToken = assertHandoffToken(body.handoffToken);
-  const version = Math.max(1, Number(body.version) || 1);
-  const vkGroupId = Number(body.vkGroupId);
-  const text = typeof body.text === "string" ? body.text : "";
-  const expiresAt = String(body.expiresAt || "");
-  const images = Array.isArray(body.images) ? body.images : [];
-
-  if (!Number.isInteger(vkGroupId) || vkGroupId <= 0) throw Object.assign(new Error("Invalid VK group"), { statusCode: 400, code: "INVALID_VK_GROUP" });
-  if (!expiresAt || !Number.isFinite(Date.parse(expiresAt))) throw Object.assign(new Error("Invalid artifact expiry"), { statusCode: 400, code: "INVALID_EXPIRY" });
-  if (images.length > MAX_IMAGES) throw Object.assign(new Error("Too many images"), { statusCode: 400, code: "TOO_MANY_IMAGES" });
-
-  const normalizedImages = images.map((image, index) => {
-    const sourceIndex = Number(image?.index);
-    const contentType = String(image?.contentType || "application/octet-stream").toLowerCase();
-    const size = Number(image?.size) || 0;
-    if (sourceIndex !== index || size <= 0 || size > MAX_IMAGE_BYTES) throw Object.assign(new Error(`Invalid image ${index}`), { statusCode: 400, code: "INVALID_IMAGE" });
-    const ext = extensionFor(contentType);
-    if (ext === "bin") throw Object.assign(new Error(`Unsupported image ${index}`), { statusCode: 415, code: "UNSUPPORTED_IMAGE_TYPE" });
-    return {
-      index,
-      contentType,
-      size,
-      sourceUrl: assertR2SourceUrl(image?.sourceUrl),
-      key: `artifacts/${artifactId}/images/${String(index).padStart(2, "0")}.${ext}`,
-    };
-  });
-
-  const artifactKey = `artifacts/${artifactId}/artifact.json`;
-  const existing = await getJson(artifactKey);
-  if (existing?.status === "ready" && Number(existing.version) >= version) {
-    await putJson(`handoffs/${hashHandoff(handoffToken)}.json`, { artifactId, version: existing.version, expiresAt: existing.expiresAt });
-    return response(200, { artifactId, status: "ready", imageCount: existing.images?.length || 0, idempotent: true });
-  }
-
-  const now = new Date().toISOString();
-  const artifact = {
-    artifactId,
-    version,
-    status: "replicating_ru",
-    vkGroupId,
-    text,
-    expiresAt,
-    createdAt: existing?.createdAt || now,
-    updatedAt: now,
-    images: normalizedImages.map(({ index, contentType, size, key }) => ({ index, contentType, size, key })),
-  };
-
-  await putJson(artifactKey, artifact);
-  await putJson(`handoffs/${hashHandoff(handoffToken)}.json`, { artifactId, version, expiresAt });
-
-  try {
-    await pullImages(normalizedImages);
-    artifact.status = "ready";
-    artifact.updatedAt = new Date().toISOString();
-    await putJson(artifactKey, artifact);
-    return response(200, { artifactId, status: "ready", imageCount: normalizedImages.length });
-  } catch (error) {
-    artifact.status = "replicating_ru";
-    artifact.updatedAt = new Date().toISOString();
-    artifact.replicationError = error?.message || String(error);
-    await putJson(artifactKey, artifact);
-    throw Object.assign(error instanceof Error ? error : new Error(String(error)), { statusCode: 502, code: "R2_PULL_FAILED" });
-  }
+  requireReplicaAuth(event); const body = jsonBody(event), artifactId = assertArtifactId(body.artifactId), handoffToken = assertHandoffToken(body.handoffToken), version = Math.max(1, Number(body.version) || 1), vkGroupId = Number(body.vkGroupId), text = typeof body.text === "string" ? body.text : "", expiresAt = String(body.expiresAt || ""), images = Array.isArray(body.images) ? body.images : [];
+  if (!Number.isInteger(vkGroupId) || vkGroupId <= 0) throw Object.assign(new Error("Invalid VK group"), { statusCode: 400, code: "INVALID_VK_GROUP" }); if (!expiresAt || !Number.isFinite(Date.parse(expiresAt))) throw Object.assign(new Error("Invalid artifact expiry"), { statusCode: 400, code: "INVALID_EXPIRY" }); if (images.length > MAX_IMAGES) throw Object.assign(new Error("Too many images"), { statusCode: 400, code: "TOO_MANY_IMAGES" });
+  const normalizedImages = images.map((image, index) => { const sourceIndex = Number(image?.index), contentType = String(image?.contentType || "application/octet-stream").toLowerCase(), size = Number(image?.size) || 0; if (sourceIndex !== index || size <= 0 || size > MAX_IMAGE_BYTES) throw Object.assign(new Error(`Invalid image ${index}`), { statusCode: 400, code: "INVALID_IMAGE" }); const ext = extensionFor(contentType); if (ext === "bin") throw Object.assign(new Error(`Unsupported image ${index}`), { statusCode: 415, code: "UNSUPPORTED_IMAGE_TYPE" }); return { index, contentType, size, sourceUrl: assertR2SourceUrl(image?.sourceUrl), key: `artifacts/${artifactId}/images/${String(index).padStart(2, "0")}.${ext}` }; });
+  const artifactKey = `artifacts/${artifactId}/artifact.json`, existing = await getJson(artifactKey); if (existing?.status === "ready" && Number(existing.version) >= version) { await putJson(`handoffs/${hashHandoff(handoffToken)}.json`, { artifactId, version: existing.version, expiresAt: existing.expiresAt }); return response(200, { artifactId, status: "ready", imageCount: existing.images?.length || 0, idempotent: true }); }
+  const now = new Date().toISOString(), artifact = { artifactId, version, status: "replicating_ru", vkGroupId, text, expiresAt, createdAt: existing?.createdAt || now, updatedAt: now, images: normalizedImages.map(({ index, contentType, size, key }) => ({ index, contentType, size, key })) };
+  await putJson(artifactKey, artifact); await putJson(`handoffs/${hashHandoff(handoffToken)}.json`, { artifactId, version, expiresAt });
+  try { await pullImages(normalizedImages); artifact.status = "ready"; artifact.updatedAt = new Date().toISOString(); await putJson(artifactKey, artifact); return response(200, { artifactId, status: "ready", imageCount: normalizedImages.length }); } catch (error) { artifact.status = "replicating_ru"; artifact.updatedAt = new Date().toISOString(); artifact.replicationError = error?.message || String(error); await putJson(artifactKey, artifact); throw Object.assign(error instanceof Error ? error : new Error(String(error)), { statusCode: 502, code: "R2_PULL_FAILED" }); }
 }
-
-async function completeReplica(event, artifactId) {
-  requireReplicaAuth(event);
-  artifactId = assertArtifactId(artifactId);
-  const body = jsonBody(event);
-  const handoffToken = assertHandoffToken(body.handoffToken);
-  const aliasKey = `handoffs/${hashHandoff(handoffToken)}.json`;
-  const alias = await getJson(aliasKey);
-  if (!alias || alias.artifactId !== artifactId) throw Object.assign(new Error("Artifact handoff mismatch"), { statusCode: 409, code: "ARTIFACT_HANDOFF_MISMATCH" });
-
-  const key = `artifacts/${artifactId}/artifact.json`;
-  const artifact = await getJson(key);
-  if (!artifact) throw Object.assign(new Error("Artifact not found"), { statusCode: 404, code: "ARTIFACT_NOT_FOUND" });
-  artifact.status = "ready";
-  artifact.updatedAt = new Date().toISOString();
-  delete artifact.replicationError;
-  await putJson(key, artifact);
-  return response(200, { artifactId, status: "ready" });
+async function completeReplica(event, artifactId) { requireReplicaAuth(event); artifactId = assertArtifactId(artifactId); const body = jsonBody(event), handoffToken = assertHandoffToken(body.handoffToken), aliasKey = `handoffs/${hashHandoff(handoffToken)}.json`, alias = await getJson(aliasKey); if (!alias || alias.artifactId !== artifactId) throw Object.assign(new Error("Artifact handoff mismatch"), { statusCode: 409, code: "ARTIFACT_HANDOFF_MISMATCH" }); const key = `artifacts/${artifactId}/artifact.json`, artifact = await getJson(key); if (!artifact) throw Object.assign(new Error("Artifact not found"), { statusCode: 404, code: "ARTIFACT_NOT_FOUND" }); artifact.status = "ready"; artifact.updatedAt = new Date().toISOString(); delete artifact.replicationError; await putJson(key, artifact); return response(200, { artifactId, status: "ready" }); }
+async function getArtifact(token) { token = assertHandoffToken(token); const artifact = await artifactByHandoff(token); if (!artifact) return response(404, { error: { code: "ARTIFACT_NOT_FOUND", message: "Публикация не найдена" } }); if (Date.parse(artifact.expiresAt) <= Date.now()) return response(410, { error: { code: "ARTIFACT_EXPIRED", message: "Ссылка публикации истекла" } }); if (artifact.status !== "ready") return response(409, { error: { code: "ARTIFACT_NOT_READY", message: "Публикация ещё синхронизируется" }, status: artifact.status }); return response(200, { artifactId: artifact.artifactId, version: artifact.version, status: artifact.status, vkGroupId: artifact.vkGroupId, text: artifact.text, expiresAt: artifact.expiresAt, images: artifact.images.map(image => `/api/artifacts/${encodeURIComponent(token)}/images/${image.index}`) }); }
+async function getArtifactImage(token, index) { token = assertHandoffToken(token); const artifact = await artifactByHandoff(token); if (!artifact || artifact.status !== "ready" || Date.parse(artifact.expiresAt) <= Date.now()) return response(404, { error: { code: "IMAGE_NOT_FOUND" } }); const image = artifact.images.find(item => Number(item.index) === Number(index)); if (!image) return response(404, { error: { code: "IMAGE_NOT_FOUND" } }); const object = await s3.send(new GetObjectCommand({ Bucket: BUCKET, Key: image.key })), bytes = await object.Body.transformToByteArray(); return binaryResponse(bytes, object.ContentType || image.contentType); }
+async function uploadVkArtifactImage(event, token) {
+  token = assertHandoffToken(token); const artifact = await artifactByHandoff(token); if (!artifact || artifact.status !== "ready" || Date.parse(artifact.expiresAt) <= Date.now()) throw Object.assign(new Error("Изображение публикации недоступно"), { statusCode: 410, code: "HANDOFF_EXPIRED" });
+  const body = jsonBody(event), uploadUrl = assertVkUploadUrl(body.uploadUrl), index = Number(body.index); if (!Number.isInteger(index) || index < 0 || index >= artifact.images.length) throw Object.assign(new Error("Изображение публикации не найдено"), { statusCode: 404, code: "VK_IMAGE_NOT_FOUND" });
+  const image = artifact.images[index], object = await s3.send(new GetObjectCommand({ Bucket: BUCKET, Key: image.key })), bytes = Buffer.from(await object.Body.transformToByteArray()), contentType = String(object.ContentType || image.contentType || "image/jpeg").toLowerCase(), extension = extensionFor(contentType); if (extension === "bin") throw Object.assign(new Error("VK не поддерживает формат изображения"), { statusCode: 415, code: "VK_IMAGE_TYPE_UNSUPPORTED" });
+  const form = new FormData(); form.set("photo", new Blob([bytes], { type: contentType }), `photo.${extension}`); const vkResponse = await fetch(uploadUrl, { method: "POST", body: form, signal: AbortSignal.timeout(30000) }), raw = await vkResponse.text(); let result = null; try { result = raw ? JSON.parse(raw) : null; } catch {}
+  if (!vkResponse.ok || !result || typeof result !== "object") throw Object.assign(new Error(`VK не принял изображение: HTTP ${vkResponse.status}`), { statusCode: 502, code: "VK_IMAGE_UPLOAD_FAILED" }); const photo = typeof result.photo === "string" ? result.photo.trim() : "", hash = typeof result.hash === "string" ? result.hash.trim() : "", server = typeof result.server === "number" || typeof result.server === "string" ? result.server : undefined; if (!photo || photo === "[]" || !hash || server === undefined) throw Object.assign(new Error("VK не распознал загруженное изображение"), { statusCode: 502, code: "VK_IMAGE_UPLOAD_INVALID" }); return response(200, { ...result, photo, hash, server });
 }
-
-async function getArtifact(token) {
-  token = assertHandoffToken(token);
-  const artifact = await artifactByHandoff(token);
-  if (!artifact) return response(404, { error: { code: "ARTIFACT_NOT_FOUND", message: "Публикация не найдена" } });
-  if (Date.parse(artifact.expiresAt) <= Date.now()) return response(410, { error: { code: "ARTIFACT_EXPIRED", message: "Ссылка публикации истекла" } });
-  if (artifact.status !== "ready") return response(409, { error: { code: "ARTIFACT_NOT_READY", message: "Публикация ещё синхронизируется" }, status: artifact.status });
-  return response(200, {
-    artifactId: artifact.artifactId,
-    version: artifact.version,
-    status: artifact.status,
-    vkGroupId: artifact.vkGroupId,
-    text: artifact.text,
-    expiresAt: artifact.expiresAt,
-    images: artifact.images.map((image) => `/api/artifacts/${encodeURIComponent(token)}/images/${image.index}`),
-  });
-}
-
-async function getArtifactImage(token, index) {
-  token = assertHandoffToken(token);
-  const artifact = await artifactByHandoff(token);
-  if (!artifact || artifact.status !== "ready" || Date.parse(artifact.expiresAt) <= Date.now()) return response(404, { error: { code: "IMAGE_NOT_FOUND" } });
-  const image = artifact.images.find((item) => Number(item.index) === Number(index));
-  if (!image) return response(404, { error: { code: "IMAGE_NOT_FOUND" } });
-  const object = await s3.send(new GetObjectCommand({ Bucket: BUCKET, Key: image.key }));
-  const bytes = await object.Body.transformToByteArray();
-  return binaryResponse(bytes, object.ContentType || image.contentType);
-}
-
-async function getTestArtifact(path) {
-  if (path.endsWith("/image")) {
-    const object = await s3.send(new GetObjectCommand({ Bucket: BUCKET, Key: TEST_IMAGE_KEY }));
-    return binaryResponse(await object.Body.transformToByteArray(), object.ContentType || "image/svg+xml");
-  }
-  return response(200, {
-    artifactId: TEST_ARTIFACT_ID,
-    status: "ready",
-    text: "Тестовая публикация Cosmo Sofa",
-    images: ["/api/test-artifact/image"],
-  });
-}
+async function getTestArtifact(path) { if (path.endsWith("/image")) { const object = await s3.send(new GetObjectCommand({ Bucket: BUCKET, Key: TEST_IMAGE_KEY })); return binaryResponse(await object.Body.transformToByteArray(), object.ContentType || "image/svg+xml"); } return response(200, { artifactId: TEST_ARTIFACT_ID, status: "ready", text: "Тестовая публикация Cosmo Sofa", images: ["/api/test-artifact/image"] }); }
 
 module.exports.handler = async function (event) {
-  const path = pathOf(event);
-  const method = methodOf(event);
-
+  const path = pathOf(event), method = methodOf(event);
   try {
     if (method === "POST" && path === "/api/replica/artifacts/init") return initReplica(event);
-
-    const completeMatch = path.match(/^\/api\/replica\/artifacts\/([A-Za-z0-9_-]+)\/complete$/);
-    if (method === "POST" && completeMatch) return completeReplica(event, completeMatch[1]);
-
-    const imageMatch = path.match(/^\/api\/artifacts\/([A-Za-z0-9_-]+)\/images\/(\d+)$/);
-    if (method === "GET" && imageMatch) return getArtifactImage(imageMatch[1], Number(imageMatch[2]));
-
-    const artifactMatch = path.match(/^\/api\/artifacts\/([A-Za-z0-9_-]+)$/);
-    if (method === "GET" && artifactMatch) return getArtifact(artifactMatch[1]);
-
+    const completeMatch = path.match(/^\/api\/replica\/artifacts\/([A-Za-z0-9_-]+)\/complete$/); if (method === "POST" && completeMatch) return completeReplica(event, completeMatch[1]);
+    const vkUploadMatch = path.match(/^\/api\/artifacts\/([A-Za-z0-9_-]+)\/vk-upload$/); if (method === "POST" && vkUploadMatch) return uploadVkArtifactImage(event, vkUploadMatch[1]);
+    const imageMatch = path.match(/^\/api\/artifacts\/([A-Za-z0-9_-]+)\/images\/(\d+)$/); if (method === "GET" && imageMatch) return getArtifactImage(imageMatch[1], Number(imageMatch[2]));
+    const artifactMatch = path.match(/^\/api\/artifacts\/([A-Za-z0-9_-]+)$/); if (method === "GET" && artifactMatch) return getArtifact(artifactMatch[1]);
     if (method === "GET" && (path === "/api/test-artifact" || path === "/api/test-artifact/image")) return getTestArtifact(path);
-
     return response(404, { error: { code: "NOT_FOUND", message: "Route not found" } });
-  } catch (error) {
-    console.error("Yandex VK function error", error);
-    return response(error?.statusCode || 500, {
-      error: {
-        code: error?.code || "INTERNAL_ERROR",
-        message: error?.message || "Internal error",
-      },
-    });
-  }
+  } catch (error) { console.error("Yandex VK function error", error); return response(error?.statusCode || 500, { error: { code: error?.code || "INTERNAL_ERROR", message: error?.message || "Internal error" } }); }
 };
