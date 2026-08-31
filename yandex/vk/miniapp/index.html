@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>Cosmo Sofa VK</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <main class="app-shell">
+    <header class="topbar">
+      <div class="brand">Cosmo Sofa</div>
+      <div class="badge">VK</div>
+    </header>
+
+    <section class="card" id="artifact-card" aria-live="polite">
+      <div class="status" id="status">Загружаем публикацию…</div>
+      <div id="content" hidden>
+        <div class="image-frame" id="image-frame"></div>
+        <p class="post-text" id="post-text"></p>
+      </div>
+    </section>
+  </main>
+
+  <script src="./app.js"></script>
+</body>
+</html>

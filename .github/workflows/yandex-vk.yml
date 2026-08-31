@@ -1,0 +1,60 @@
+name: Deploy Yandex VK
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "yandex/vk/function/**"
+      - ".github/workflows/yandex-vk.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  YC_FUNCTION_NAME: cosmetology-social-publisher
+  YC_FUNCTION_RUNTIME: nodejs22
+  YC_FUNCTION_ENTRYPOINT: index.handler
+  YC_FUNCTION_MEMORY: 128Mb
+  YC_FUNCTION_TIMEOUT: "10"
+  YC_FUNCTION_SOURCE_ROOT: yandex/vk/function
+
+jobs:
+  deploy-function:
+    if: ${{ vars.YC_FOLDER_ID != '' && vars.YC_DEPLOY_SA_ID != '' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate runtime Object Storage credentials
+        env:
+          ACCESS_KEY_ID: ${{ secrets.YC_S3_ACCESS_KEY_ID }}
+          SECRET_ACCESS_KEY: ${{ secrets.YC_S3_SECRET_ACCESS_KEY }}
+        run: |
+          test -n "$ACCESS_KEY_ID" || (echo "Missing YC_S3_ACCESS_KEY_ID secret" && exit 1)
+          test -n "$SECRET_ACCESS_KEY" || (echo "Missing YC_S3_SECRET_ACCESS_KEY secret" && exit 1)
+
+      - name: Deploy Yandex Cloud Function
+        uses: yc-actions/yc-sls-function@v5
+        with:
+          yc-sa-id: ${{ vars.YC_DEPLOY_SA_ID }}
+          folder-id: ${{ vars.YC_FOLDER_ID }}
+          function-name: ${{ env.YC_FUNCTION_NAME }}
+          runtime: ${{ env.YC_FUNCTION_RUNTIME }}
+          entrypoint: ${{ env.YC_FUNCTION_ENTRYPOINT }}
+          memory: ${{ env.YC_FUNCTION_MEMORY }}
+          execution-timeout: ${{ env.YC_FUNCTION_TIMEOUT }}
+          service-account-name: cf-service-account
+          source-root: ${{ env.YC_FUNCTION_SOURCE_ROOT }}
+          include: |
+            **/*.js
+            **/*.json
+          environment: |
+            AWS_ACCESS_KEY_ID=${{ secrets.YC_S3_ACCESS_KEY_ID }}
+            AWS_SECRET_ACCESS_KEY=${{ secrets.YC_S3_SECRET_ACCESS_KEY }}
+          tags: |
+            main
