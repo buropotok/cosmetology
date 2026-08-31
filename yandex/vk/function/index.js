@@ -53,25 +53,31 @@ async function postVkWallServer(event, token) {
   if (!artifact || artifact.status !== "ready" || Date.parse(artifact.expiresAt) <= Date.now()) throw Object.assign(new Error("Публикация недоступна"), { statusCode: 410, code: "HANDOFF_EXPIRED" });
   const body = jsonBody(event), accessToken = String(body.accessToken || "").trim();
   if (!accessToken) throw Object.assign(new Error("VK access token is required"), { statusCode: 400, code: "VK_TOKEN_REQUIRED" });
+  const attachments = Array.isArray(body.attachments) ? body.attachments.map(value => String(value || "").trim()).filter(value => /^photo-?\d+_\d+(?:_[A-Za-z0-9_-]+)?$/.test(value)).slice(0, 10) : [];
   const params = new URLSearchParams({ access_token: accessToken, owner_id: String(-artifact.vkGroupId), from_group: "1", message: artifact.text || "", v: "5.199" });
+  if (attachments.length) params.set("attachments", attachments.join(","));
   const vkResponse = await fetch("https://api.vk.com/method/wall.post", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: params, signal: AbortSignal.timeout(30000) });
   const raw = await vkResponse.text(); let result = null; try { result = raw ? JSON.parse(raw) : null; } catch {}
   if (!vkResponse.ok) throw Object.assign(new Error(`VK API HTTP ${vkResponse.status}`), { statusCode: 502, code: "VK_API_HTTP_ERROR" });
   if (result?.error) return response(200, { ok: false, vkError: { error_code: result.error.error_code, error_msg: result.error.error_msg } });
   return response(200, { ok: true, response: result?.response || null });
 }
-async function getTestArtifact(path) { if (path.endsWith("/image")) { const object = await s3.send(new GetObjectCommand({ Bucket: BUCKET, Key: TEST_IMAGE_KEY })); return binaryResponse(await object.Body.transformToByteArray(), object.ContentType || "image/svg+xml"); } return response(200, { artifactId: TEST_ARTIFACT_ID, status: "ready", text: "Тестовая публикация Cosmo Sofa", images: ["/api/test-artifact/image"] }); }
+async function getTestArtifact(path) { if (path.endsWith("/image")) { const object = await s3.send(new GetObjectCommand({ Bucket: BUCKET, Key: TEST_IMAGE_KEY })); return binaryResponse(await object.Body.transformToByteArray(), object.ContentType || "image/svg+xml"); } return response(200, { artifactId: TEST_ARTIFACT_ID, status: "ready", text: "Тестовая публикация Cosmo Sofa", vkGroupId: 240907364, images: ["/api/test-artifact/image"] }); }
 
-module.exports.handler = async function (event) {
-  const path = pathOf(event), method = methodOf(event);
+exports.handler = async function handler(event) {
   try {
-    if (method === "POST" && path === "/api/replica/artifacts/init") return initReplica(event);
-    const completeMatch = path.match(/^\/api\/replica\/artifacts\/([A-Za-z0-9_-]+)\/complete$/); if (method === "POST" && completeMatch) return completeReplica(event, completeMatch[1]);
-    const vkUploadMatch = path.match(/^\/api\/artifacts\/([A-Za-z0-9_-]+)\/vk-upload$/); if (method === "POST" && vkUploadMatch) return uploadVkArtifactImage(event, vkUploadMatch[1]);
-    const vkWallMatch = path.match(/^\/api\/artifacts\/([A-Za-z0-9_-]+)\/vk-wall-post$/); if (method === "POST" && vkWallMatch) return postVkWallServer(event, vkWallMatch[1]);
-    const imageMatch = path.match(/^\/api\/artifacts\/([A-Za-z0-9_-]+)\/images\/(\d+)$/); if (method === "GET" && imageMatch) return getArtifactImage(imageMatch[1], Number(imageMatch[2]));
-    const artifactMatch = path.match(/^\/api\/artifacts\/([A-Za-z0-9_-]+)$/); if (method === "GET" && artifactMatch) return getArtifact(artifactMatch[1]);
-    if (method === "GET" && (path === "/api/test-artifact" || path === "/api/test-artifact/image")) return getTestArtifact(path);
-    return response(404, { error: { code: "NOT_FOUND", message: "Route not found" } });
-  } catch (error) { console.error("Yandex VK function error", error); return response(error?.statusCode || 500, { error: { code: error?.code || "INTERNAL_ERROR", message: error?.message || "Internal error" } }); }
+    const path = pathOf(event), method = methodOf(event);
+    if (path === "/health") return response(200, { ok: true, service: "cosmetology-social-publisher", region: "ru-central1" });
+    if (path === "/api/test-artifact" || path === "/api/test-artifact/image") return getTestArtifact(path);
+    if (path === "/api/replica/init" && method === "POST") return await initReplica(event);
+    const completeMatch = path.match(/^\/api\/replica\/artifacts\/([^/]+)\/complete$/); if (completeMatch && method === "POST") return await completeReplica(event, completeMatch[1]);
+    const imageMatch = path.match(/^\/api\/artifacts\/([^/]+)\/images\/(\d+)$/); if (imageMatch && method === "GET") return await getArtifactImage(imageMatch[1], Number(imageMatch[2]));
+    const uploadMatch = path.match(/^\/api\/artifacts\/([^/]+)\/vk-upload$/); if (uploadMatch && method === "POST") return await uploadVkArtifactImage(event, uploadMatch[1]);
+    const wallPostMatch = path.match(/^\/api\/artifacts\/([^/]+)\/vk-wall-post$/); if (wallPostMatch && method === "POST") return await postVkWallServer(event, wallPostMatch[1]);
+    const artifactMatch = path.match(/^\/api\/artifacts\/([^/]+)$/); if (artifactMatch && method === "GET") return await getArtifact(artifactMatch[1]);
+    return response(404, { error: { code: "NOT_FOUND", path, method } });
+  } catch (error) {
+    console.error("Yandex VK function error", { message: error?.message || String(error), code: error?.code, statusCode: error?.statusCode });
+    return response(error?.statusCode || 500, { error: { code: error?.code || "INTERNAL_ERROR", message: error?.message || "Internal error" } });
+  }
 };
