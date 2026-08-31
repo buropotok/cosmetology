@@ -107,8 +107,8 @@ async function loadArtifact() {
   }
   artifactEl.hidden = false;
   buttonEl.disabled = !currentToken;
-  buttonEl.textContent = currentToken ? "Опубликовать во ВКонтакте" : "Yandex-контур готов";
-  statusEl.textContent = currentToken ? "Публикация готова к размещению" : "Публикация и изображения загружены из Yandex Cloud";
+  buttonEl.textContent = currentToken ? "Тест: прямой wall.post" : "Yandex-контур готов";
+  statusEl.textContent = currentToken ? "Тест прямой публикации через VK API" : "Публикация и изображения загружены из Yandex Cloud";
   log("Yandex artifact ready", { artifactId: artifact.artifactId, version: artifact.version || 1, status: artifact.status || "ready", vkGroupId: artifact.vkGroupId || null, textLength: (artifact.text || "").length, imageCount: (artifact.images || []).length });
 }
 async function uploadPhotoAttempt(auth, index, attempt, imageCount) {
@@ -148,37 +148,46 @@ async function preparePhotoAttachment(auth, index, imageCount) {
   log(`Фото ${index + 1}: attachment готов`, { attachment });
   return attachment;
 }
-async function prepareNativePhotoAttachments() {
+async function prepareSinglePhoto(auth) {
   const imageCount = (artifact.images || []).length;
   if (!imageCount) return [];
-  log("Начало подготовки фото", { groupId: artifact.vkGroupId, imageCount });
-  let auth;
-  try { auth = await bridge("VKWebAppGetAuthToken", { app_id: VK_APP_ID, scope: "photos" }); }
-  catch (error) { throw new Error(vkError("VKWebAppGetAuthToken (photos)", error)); }
-  if (!auth?.access_token) throw new Error("VK не предоставил access_token");
-  log("Auth token получен", { hasAccessToken: true, expiresIn: auth.expires_in || null });
-  if (imageCount === 1) { log("Single-photo fast path"); return [await preparePhotoAttachment(auth, 0, 1)]; }
-  const attachments = new Array(imageCount), concurrency = Math.min(3, imageCount); let nextIndex = 0;
-  log("Multi-photo parallel path", { imageCount, concurrency });
-  async function worker() { while (true) { const index = nextIndex++; if (index >= imageCount) return; attachments[index] = await preparePhotoAttachment(auth, index, imageCount); } }
-  await Promise.all(Array.from({ length: concurrency }, () => worker()));
-  log("Все фото подготовлены", { count: attachments.length, attachments });
-  return attachments;
+  log("Прямой wall.post: готовим только первое фото", { groupId: artifact.vkGroupId, availableImages: imageCount });
+  return [await preparePhotoAttachment(auth, 0, imageCount)];
 }
 buttonEl.addEventListener("click", async () => {
   if (!artifact || !currentToken || published) return;
-  buttonEl.disabled = true; statusEl.textContent = "Подготавливаем публикацию…";
+  buttonEl.disabled = true;
+  statusEl.textContent = "Проверяем прямую публикацию через VK API…";
   try {
-    const attachments = await prepareNativePhotoAttachments();
-    const params = { owner_id: -artifact.vkGroupId, message: artifact.text || "" };
+    let auth;
+    try { auth = await bridge("VKWebAppGetAuthToken", { app_id: VK_APP_ID, scope: "photos,wall" }); }
+    catch (error) { throw new Error(vkError("VKWebAppGetAuthToken (photos,wall)", error)); }
+    if (!auth?.access_token) throw new Error("VK не предоставил access_token");
+    log("Direct wall.post auth token получен", { scope: auth.scope || null, expires: auth.expires || null });
+
+    const attachments = await prepareSinglePhoto(auth);
+    const params = {
+      access_token: auth.access_token,
+      owner_id: -artifact.vkGroupId,
+      from_group: 1,
+      message: artifact.text || ""
+    };
     if (attachments.length) params.attachments = attachments.join(",");
-    log("→ VKWebAppShowWallPostBox", params);
-    let result; try { result = await bridge("VKWebAppShowWallPostBox", params); } catch (error) { throw new Error(vkError("VKWebAppShowWallPostBox", error)); }
-    log("← Публикация завершена", result);
-    if (result?.post_id) { published = true; buttonEl.disabled = true; buttonEl.textContent = "Опубликовано"; statusEl.textContent = "Публикация размещена во ВКонтакте"; }
+    log("→ VK API wall.post DIRECT TEST", params);
+    const result = await callVkApi("wall.post", params);
+    log("← VK API wall.post DIRECT TEST SUCCESS", result);
+    if (result?.post_id) {
+      published = true;
+      buttonEl.disabled = true;
+      buttonEl.textContent = "Опубликовано через wall.post";
+      statusEl.textContent = `Пост ${result.post_id} размещён во ВКонтакте`;
+    } else {
+      throw new Error("wall.post не вернул post_id");
+    }
   } catch (error) {
-    statusEl.textContent = "Не удалось разместить публикацию. Попробуйте ещё раз.";
-    log("PUBLISH ERROR", { message: error instanceof Error ? error.message : String(error) }); diagnosticsEl.open = true;
+    statusEl.textContent = "Прямая публикация не прошла. Смотрите диагностику.";
+    log("DIRECT WALL.POST ERROR", { message: error instanceof Error ? error.message : String(error) });
+    diagnosticsEl.open = true;
   } finally { if (!published) buttonEl.disabled = false; }
 });
 async function init() {
