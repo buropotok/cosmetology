@@ -1,6 +1,7 @@
 import { AppError, type Env } from '../types';
 import { validateTelegramMiniAppInitData } from './telegram-miniapp-auth';
 import { resolveOrCreateTelegramIdentity } from './telegram-identity';
+import { replicateVkArtifactToYandex } from './yandex-vk-replica';
 
 const HANDOFF_TTL_SECONDS = 15 * 60;
 const IMAGE_MAX_BYTES = 10 * 1024 * 1024;
@@ -23,7 +24,7 @@ function decodeImageKeys(value: string|null) { if(!value)return[]; if(value.star
 function assertHandoffToken(token:string){if(!/^[A-Za-z0-9_-]{40,64}$/.test(token))throw new AppError('INVALID_HANDOFF','Некорректная ссылка публикации',400)}
 function assertVkUploadUrl(raw:string){let url:URL;try{url=new URL(raw)}catch{throw new AppError('INVALID_VK_UPLOAD_URL','VK вернул некорректный адрес загрузки',400)}const host=url.hostname.toLowerCase(),allowed=host==='vk.com'||host.endsWith('.vk.com')||host==='vk.ru'||host.endsWith('.vk.ru')||host==='vk.me'||host.endsWith('.vk.me');if(url.protocol!=='https:'||!allowed)throw new AppError('INVALID_VK_UPLOAD_URL','VK вернул неподдерживаемый адрес загрузки',400);return url.toString()}
 
-export async function createVkHandoff(request:Request,env:Env){
+export async function createVkHandoff(request:Request,env:Env,ctx?:ExecutionContext){
   const userId=await userIdFromMiniApp(request,env);const group=await env.DB.prepare('SELECT group_id AS groupId FROM user_vk_group WHERE user_id=?').bind(userId).first<{groupId:number}>();if(!group)throw new AppError('VK_GROUP_NOT_CONNECTED','Сначала сохраните VK-группу',409);if(!(request.headers.get('content-type')??'').toLowerCase().startsWith('multipart/form-data'))throw new AppError('INVALID_CONTENT_TYPE','Ожидается multipart/form-data',415);
   const form=await request.formData().catch(()=>{throw new AppError('INVALID_FORM_DATA','Не удалось прочитать публикацию',400)});const rawText=form.get('text'),text=typeof rawText==='string'?rawText.trim():'';const legacyImage=form.get('image');const rawImages=form.getAll('images');
   let images:File[]=[];let legacySingle=false;
@@ -33,7 +34,10 @@ export async function createVkHandoff(request:Request,env:Env){
   const random=new Uint8Array(32);crypto.getRandomValues(random);const token=bytesToToken(random),tokenHash=await hashToken(token),expiresAt=new Date(Date.now()+HANDOFF_TTL_SECONDS*1000).toISOString();let storedImageKey:string|null=null;
   if(legacySingle&&images[0]){const image=images[0];const imageKey=`vk-handoffs/${tokenHash}.${imageExtension(image.type)}`;await env.IMAGES.put(imageKey,await image.arrayBuffer(),{httpMetadata:{contentType:image.type}});storedImageKey=imageKey}
   else if(images.length){const imageKeys:string[]=[];for(let index=0;index<images.length;index++){const image=images[index],imageKey=`vk-handoffs/${tokenHash}-${index}.${imageExtension(image.type)}`;await env.IMAGES.put(imageKey,await image.arrayBuffer(),{httpMetadata:{contentType:image.type}});imageKeys.push(imageKey)}storedImageKey=JSON.stringify(imageKeys)}
-  await env.DB.prepare('INSERT INTO vk_handoffs(token_hash,user_id,group_id,text,image_key,expires_at) VALUES(?,?,?,?,?,?)').bind(tokenHash,userId,group.groupId,text,storedImageKey,expiresAt).run();return{ok:true,token,expiresAt,vkUrl:`https://vk.com/app${VK_APP_ID}#handoff=${encodeURIComponent(token)}`};
+  await env.DB.prepare('INSERT INTO vk_handoffs(token_hash,user_id,group_id,text,image_key,expires_at) VALUES(?,?,?,?,?,?)').bind(tokenHash,userId,group.groupId,text,storedImageKey,expiresAt).run();
+  const artifactId=crypto.randomUUID(),imageKeys=decodeImageKeys(storedImageKey),replication=replicateVkArtifactToYandex(env,{artifactId,handoffToken:token,version:1,vkGroupId:group.groupId,text,expiresAt,imageKeys}).catch(error=>console.error('Yandex VK replication failed',{artifactId,error:error instanceof Error?error.message:String(error)}));
+  if(ctx)ctx.waitUntil(replication);else void replication;
+  return{ok:true,token,artifactId,expiresAt,vkUrl:`https://vk.com/app${VK_APP_ID}#handoff=${encodeURIComponent(token)}`};
 }
 export async function getVkHandoff(env:Env,token:string,origin:string){assertHandoffToken(token);const tokenHash=await hashToken(token),row=await env.DB.prepare('SELECT group_id AS groupId,text,image_key AS imageKey,expires_at AS expiresAt FROM vk_handoffs WHERE token_hash=?').bind(tokenHash).first<{groupId:number;text:string;imageKey:string|null;expiresAt:string}>();if(!row||Date.parse(row.expiresAt)<=Date.now())throw new AppError('HANDOFF_EXPIRED','Ссылка публикации истекла. Вернитесь в Telegram и откройте VK снова.',410);const imageKeys=decodeImageKeys(row.imageKey);return{groupId:row.groupId,text:row.text,imageUrl:imageKeys.length?`${origin}/api/vk-handoff-image/${encodeURIComponent(token)}`:null,imageCount:imageKeys.length,expiresAt:row.expiresAt}}
 export async function getVkHandoffImage(env:Env,token:string){if(!/^[A-Za-z0-9_-]{40,64}$/.test(token))return null;const tokenHash=await hashToken(token),row=await env.DB.prepare('SELECT image_key AS imageKey,expires_at AS expiresAt FROM vk_handoffs WHERE token_hash=?').bind(tokenHash).first<{imageKey:string|null;expiresAt:string}>();const imageKey=decodeImageKeys(row?.imageKey??null)[0];if(!imageKey||!row||Date.parse(row.expiresAt)<=Date.now())return null;return env.IMAGES.get(imageKey)}
