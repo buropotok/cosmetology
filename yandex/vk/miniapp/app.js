@@ -24,6 +24,16 @@ function log(label, data) {
   console.log(label, data ?? "");
 }
 
+function handoffToken() {
+  const query = new URLSearchParams(location.search).get("handoff");
+  if (query) return query;
+  const hash = new URLSearchParams(location.hash.replace(/^#/, "")).get("handoff");
+  if (hash) return hash;
+  const launch = new URLSearchParams(location.search).get("vk_ref") || "";
+  const match = launch.match(/(?:^|[?&#])handoff=([A-Za-z0-9_-]+)/);
+  return match ? match[1] : "";
+}
+
 async function initVkBridge() {
   if (!window.vkBridge) {
     log("VK Bridge недоступен; продолжаем browser PoC");
@@ -40,17 +50,39 @@ async function initVkBridge() {
   }
 }
 
-async function loadArtifact() {
-  log("→ GET /api/test-artifact");
-  const response = await fetch("/api/test-artifact", {
+async function fetchArtifact(url) {
+  const response = await fetch(url, {
     headers: { Accept: "application/json" },
     cache: "no-store",
   });
   const raw = await response.text();
-  log("← GET /api/test-artifact", { status: response.status, body: raw });
-  if (!response.ok) throw new Error(`Artifact API returned ${response.status}`);
-  artifact = JSON.parse(raw);
+  log(`← GET ${url}`, { status: response.status, body: raw.slice(0, 1200) });
+  let body = null;
+  try { body = raw ? JSON.parse(raw) : null; } catch {}
+  return { response, body, raw };
+}
 
+async function loadArtifact() {
+  const token = handoffToken();
+  const endpoint = token ? `/api/artifacts/${encodeURIComponent(token)}` : "/api/test-artifact";
+  log(`→ GET ${endpoint}`, { mode: token ? "replicated-artifact" : "test-artifact" });
+
+  let result = await fetchArtifact(endpoint);
+  if (token && result.response.status === 409 && result.body?.error?.code === "ARTIFACT_NOT_READY") {
+    statusEl.textContent = "Синхронизируем публикацию с Yandex Cloud…";
+    for (let attempt = 1; attempt <= 15; attempt++) {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      log("Artifact replication wait", { attempt });
+      result = await fetchArtifact(endpoint);
+      if (result.response.status !== 409) break;
+    }
+  }
+
+  if (!result.response.ok) {
+    throw new Error(result.body?.error?.message || `Artifact API returned ${result.response.status}`);
+  }
+
+  artifact = result.body;
   textEl.textContent = artifact.text || "";
   imagesEl.replaceChildren();
 
@@ -64,10 +96,15 @@ async function loadArtifact() {
 
   artifactEl.hidden = false;
   buttonEl.disabled = false;
-  buttonEl.textContent = "Yandex-контур готов";
-  statusEl.textContent = "Публикация и изображения загружены из Yandex Cloud";
+  buttonEl.textContent = token ? "Публикация готова" : "Yandex-контур готов";
+  statusEl.textContent = token
+    ? "Публикация загружена из российского контура"
+    : "Публикация и изображения загружены из Yandex Cloud";
   log("Yandex artifact ready", {
     artifactId: artifact.artifactId,
+    version: artifact.version || 1,
+    status: artifact.status || "ready",
+    vkGroupId: artifact.vkGroupId || null,
     textLength: (artifact.text || "").length,
     imageCount: (artifact.images || []).length,
   });
@@ -79,7 +116,7 @@ buttonEl.addEventListener("click", () => {
 
 async function init() {
   try {
-    log("Mini App init", { href: location.href, appId: VK_APP_ID });
+    log("Mini App init", { href: location.href, appId: VK_APP_ID, hasHandoff: Boolean(handoffToken()) });
     await initVkBridge();
     await loadArtifact();
   } catch (error) {
