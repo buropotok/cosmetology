@@ -39,7 +39,7 @@ jobs:
           test -n "$SECRET_ACCESS_KEY" || (echo "Missing YC_S3_SECRET_ACCESS_KEY secret" && exit 1)
 
       - name: Deploy Yandex Cloud Function
-        uses: yc-actions/yc-sls-function@v5
+        uses: yc-actions/yc-sls-function@v3.1.0
         with:
           yc-sa-id: ${{ vars.YC_DEPLOY_SA_ID }}
           folder-id: ${{ vars.YC_FOLDER_ID }}
