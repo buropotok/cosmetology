@@ -69,7 +69,7 @@ exports.handler = async function handler(event) {
     const path = pathOf(event), method = methodOf(event);
     if (path === "/health") return response(200, { ok: true, service: "cosmetology-social-publisher", region: "ru-central1" });
     if (path === "/api/test-artifact" || path === "/api/test-artifact/image") return getTestArtifact(path);
-    if (path === "/api/replica/init" && method === "POST") return await initReplica(event);
+    if ((path === "/api/replica/artifacts/init" || path === "/api/replica/init") && method === "POST") return await initReplica(event);
     const completeMatch = path.match(/^\/api\/replica\/artifacts\/([^/]+)\/complete$/); if (completeMatch && method === "POST") return await completeReplica(event, completeMatch[1]);
     const imageMatch = path.match(/^\/api\/artifacts\/([^/]+)\/images\/(\d+)$/); if (imageMatch && method === "GET") return await getArtifactImage(imageMatch[1], Number(imageMatch[2]));
     const uploadMatch = path.match(/^\/api\/artifacts\/([^/]+)\/vk-upload$/); if (uploadMatch && method === "POST") return await uploadVkArtifactImage(event, uploadMatch[1]);
