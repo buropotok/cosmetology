@@ -5,7 +5,7 @@ on:
     branches:
       - main
     paths:
-      - "yandex/vk/function/**"
+      - "yandex/vk/**"
       - ".github/workflows/yandex-vk.yml"
   workflow_dispatch:
 
@@ -20,9 +20,15 @@ env:
   YC_FUNCTION_MEMORY: 128Mb
   YC_FUNCTION_TIMEOUT: "10"
   YC_FUNCTION_SOURCE_ROOT: yandex/vk/function
+  YC_GATEWAY_NAME: cosmetology-social-publisher
+  YC_GATEWAY_TEMPLATE: yandex/vk/gateway/openapi.yaml.tpl
+  YC_GATEWAY_SPEC: /tmp/yandex-vk-openapi.yaml
+  YC_BUCKET: cosmetology-publisher-images
+  YC_MINIAPP_SOURCE: yandex/vk/miniapp
+  YC_MINIAPP_PREFIX: miniapp
 
 jobs:
-  deploy-function:
+  deploy-yandex-vk:
     if: ${{ vars.YC_FOLDER_ID != '' && vars.YC_DEPLOY_SA_ID != '' }}
     runs-on: ubuntu-latest
 
@@ -30,172 +36,23 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Diagnostic - workflow context
-        env:
-          YC_FOLDER_ID: ${{ vars.YC_FOLDER_ID }}
-          YC_DEPLOY_SA_ID: ${{ vars.YC_DEPLOY_SA_ID }}
-        run: |
-          echo "repository=$GITHUB_REPOSITORY"
-          echo "ref=$GITHUB_REF"
-          echo "sha=$GITHUB_SHA"
-          echo "event=$GITHUB_EVENT_NAME"
-          echo "actor=$GITHUB_ACTOR"
-          echo "workflow=$GITHUB_WORKFLOW"
-          echo "job=$GITHUB_JOB"
-          echo "folder_id=$YC_FOLDER_ID"
-          echo "deploy_sa_id=$YC_DEPLOY_SA_ID"
-          echo "expected_oidc_issuer=https://token.actions.githubusercontent.com"
-          echo "expected_oidc_audience=https://github.com/buropotok"
-          echo "expected_oidc_subject=repo:buropotok/cosmetology:ref:refs/heads/main"
-
-      - name: Diagnostic - function source
-        run: |
-          echo "source_root=$YC_FUNCTION_SOURCE_ROOT"
-          test -d "$YC_FUNCTION_SOURCE_ROOT" || (echo "ERROR: source root does not exist" && exit 1)
-          find "$YC_FUNCTION_SOURCE_ROOT" -maxdepth 2 -type f -print | sort
-          test -f "$YC_FUNCTION_SOURCE_ROOT/index.js" || (echo "ERROR: index.js missing" && exit 1)
-          test -f "$YC_FUNCTION_SOURCE_ROOT/package.json" || (echo "ERROR: package.json missing" && exit 1)
-          echo "package.json:"
-          cat "$YC_FUNCTION_SOURCE_ROOT/package.json"
-
-      - name: Validate runtime Object Storage credentials
+      - name: Validate deployment inputs
         env:
           ACCESS_KEY_ID: ${{ secrets.YC_S3_ACCESS_KEY_ID }}
           SECRET_ACCESS_KEY: ${{ secrets.YC_S3_SECRET_ACCESS_KEY }}
         run: |
-          if [ -n "$ACCESS_KEY_ID" ]; then echo "YC_S3_ACCESS_KEY_ID=present"; else echo "YC_S3_ACCESS_KEY_ID=missing"; exit 1; fi
-          if [ -n "$SECRET_ACCESS_KEY" ]; then echo "YC_S3_SECRET_ACCESS_KEY=present"; else echo "YC_S3_SECRET_ACCESS_KEY=missing"; exit 1; fi
-
-      - name: Diagnostic - GitHub OIDC claims and Yandex token exchange
-        continue-on-error: true
-        env:
-          YC_DEPLOY_SA_ID: ${{ vars.YC_DEPLOY_SA_ID }}
-          EXPECTED_AUDIENCE: https://github.com/buropotok
-          EXPECTED_SUBJECT: repo:buropotok/cosmetology:ref:refs/heads/main
-        shell: bash
-        run: |
-          node <<'NODE'
-          const requestUrl = process.env.ACTIONS_ID_TOKEN_REQUEST_URL;
-          const requestToken = process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN;
-          const saId = process.env.YC_DEPLOY_SA_ID;
-          const expectedAudience = process.env.EXPECTED_AUDIENCE;
-          const expectedSubject = process.env.EXPECTED_SUBJECT;
-
-          function decodeJwtPayload(token) {
-            const part = token.split('.')[1];
-            if (!part) throw new Error('OIDC token is not a JWT');
-            const normalized = part.replace(/-/g, '+').replace(/_/g, '/');
-            const padded = normalized + '='.repeat((4 - normalized.length % 4) % 4);
-            return JSON.parse(Buffer.from(padded, 'base64').toString('utf8'));
-          }
-
-          async function requestGithubToken(audience) {
-            const url = new URL(requestUrl);
-            if (audience) url.searchParams.set('audience', audience);
-            const response = await fetch(url, {
-              headers: { Authorization: `Bearer ${requestToken}` },
-            });
-            const text = await response.text();
-            if (!response.ok) {
-              console.log(`GitHub OIDC request failed: status=${response.status}`);
-              console.log(text);
-              return null;
-            }
-            const data = JSON.parse(text);
-            return data.value;
-          }
-
-          async function exchangeWithYandex(label, token) {
-            if (!token) return;
-            const body = new URLSearchParams({
-              grant_type: 'urn:ietf:params:oauth:grant-type:token-exchange',
-              requested_token_type: 'urn:ietf:params:oauth:token-type:access_token',
-              audience: saId,
-              subject_token: token,
-              subject_token_type: 'urn:ietf:params:oauth:token-type:id_token',
-            });
-            const response = await fetch('https://auth.yandex.cloud/oauth/token', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-              body: body.toString(),
-            });
-            const text = await response.text();
-            let data;
-            try { data = JSON.parse(text); } catch { data = { raw: text }; }
-            if (data && typeof data === 'object') {
-              delete data.access_token;
-              delete data.refresh_token;
-            }
-            console.log(`${label} Yandex exchange: status=${response.status}`);
-            console.log(JSON.stringify(data));
-          }
-
-          async function main() {
-            if (!requestUrl) {
-              console.log('ACTIONS_ID_TOKEN_REQUEST_URL=missing');
-              process.exitCode = 1;
-              return;
-            }
-            if (!requestToken) {
-              console.log('ACTIONS_ID_TOKEN_REQUEST_TOKEN=missing');
-              process.exitCode = 1;
-              return;
-            }
-
-            console.log('ACTIONS_ID_TOKEN_REQUEST_URL=present');
-            console.log('ACTIONS_ID_TOKEN_REQUEST_TOKEN=present');
-
-            const defaultToken = await requestGithubToken(null);
-            if (defaultToken) {
-              const claims = decodeJwtPayload(defaultToken);
-              const safeClaims = {
-                iss: claims.iss,
-                aud: claims.aud,
-                sub: claims.sub,
-                repository: claims.repository,
-                repository_owner: claims.repository_owner,
-                ref: claims.ref,
-                workflow: claims.workflow,
-                job_workflow_ref: claims.job_workflow_ref,
-                event_name: claims.event_name,
-                actor: claims.actor,
-              };
-              console.log('default OIDC claims=' + JSON.stringify(safeClaims));
-              console.log('default audience matches expected=' + String(claims.aud === expectedAudience));
-              console.log('default subject matches expected=' + String(claims.sub === expectedSubject));
-              await exchangeWithYandex('default-audience', defaultToken);
-            }
-
-            const explicitToken = await requestGithubToken(expectedAudience);
-            if (explicitToken) {
-              const claims = decodeJwtPayload(explicitToken);
-              const safeClaims = {
-                iss: claims.iss,
-                aud: claims.aud,
-                sub: claims.sub,
-                repository: claims.repository,
-                repository_owner: claims.repository_owner,
-                ref: claims.ref,
-                workflow: claims.workflow,
-                job_workflow_ref: claims.job_workflow_ref,
-                event_name: claims.event_name,
-                actor: claims.actor,
-              };
-              console.log('explicit OIDC claims=' + JSON.stringify(safeClaims));
-              console.log('explicit audience matches expected=' + String(claims.aud === expectedAudience));
-              console.log('explicit subject matches expected=' + String(claims.sub === expectedSubject));
-              await exchangeWithYandex('explicit-audience', explicitToken);
-            }
-          }
-
-          main().catch((error) => {
-            console.error('OIDC diagnostic failed:', error?.stack || error);
-            process.exitCode = 1;
-          });
-          NODE
+          set -euo pipefail
+          test -d "$YC_FUNCTION_SOURCE_ROOT"
+          test -f "$YC_FUNCTION_SOURCE_ROOT/index.js"
+          test -f "$YC_FUNCTION_SOURCE_ROOT/package.json"
+          test -d "$YC_MINIAPP_SOURCE"
+          test -f "$YC_MINIAPP_SOURCE/index.html"
+          test -f "$YC_GATEWAY_TEMPLATE"
+          test -n "$ACCESS_KEY_ID" || (echo "Missing YC_S3_ACCESS_KEY_ID secret" && exit 1)
+          test -n "$SECRET_ACCESS_KEY" || (echo "Missing YC_S3_SECRET_ACCESS_KEY secret" && exit 1)
 
       - name: Deploy Yandex Cloud Function
-        id: deploy
+        id: deploy_function
         uses: yc-actions/yc-sls-function@v3.1.0
         with:
           yc-sa-id: ${{ vars.YC_DEPLOY_SA_ID }}
@@ -216,12 +73,94 @@ jobs:
           tags: |
             main
 
-      - name: Diagnostic - deployment result
-        if: always()
+      - name: Upload VK Mini App to Object Storage
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.YC_S3_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.YC_S3_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ru-central1
         run: |
-          echo "deploy_step_outcome=${{ steps.deploy.outcome }}"
-          echo "deploy_step_conclusion=${{ steps.deploy.conclusion }}"
-          echo "function_name=$YC_FUNCTION_NAME"
-          echo "runtime=$YC_FUNCTION_RUNTIME"
-          echo "entrypoint=$YC_FUNCTION_ENTRYPOINT"
-          echo "source_root=$YC_FUNCTION_SOURCE_ROOT"
+          set -euo pipefail
+          aws --endpoint-url=https://storage.yandexcloud.net \
+            s3 sync "$YC_MINIAPP_SOURCE/" "s3://$YC_BUCKET/$YC_MINIAPP_PREFIX/" \
+            --delete
+
+      - name: Get Yandex IAM token via GitHub OIDC
+        env:
+          YC_DEPLOY_SA_ID: ${{ vars.YC_DEPLOY_SA_ID }}
+          OIDC_AUDIENCE: https://github.com/buropotok
+        run: |
+          set -euo pipefail
+          OIDC_RESPONSE=$(curl --fail-with-body -sS \
+            -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${OIDC_AUDIENCE}")
+          OIDC_TOKEN=$(printf '%s' "$OIDC_RESPONSE" | jq -r '.value')
+          test -n "$OIDC_TOKEN" && test "$OIDC_TOKEN" != "null"
+
+          IAM_RESPONSE=$(curl --fail-with-body -sS \
+            -X POST https://auth.yandex.cloud/oauth/token \
+            -H 'Content-Type: application/x-www-form-urlencoded' \
+            --data-urlencode 'grant_type=urn:ietf:params:oauth:grant-type:token-exchange' \
+            --data-urlencode 'requested_token_type=urn:ietf:params:oauth:token-type:access_token' \
+            --data-urlencode "audience=$YC_DEPLOY_SA_ID" \
+            --data-urlencode "subject_token=$OIDC_TOKEN" \
+            --data-urlencode 'subject_token_type=urn:ietf:params:oauth:token-type:id_token')
+          IAM_TOKEN=$(printf '%s' "$IAM_RESPONSE" | jq -r '.access_token')
+          test -n "$IAM_TOKEN" && test "$IAM_TOKEN" != "null"
+          echo "::add-mask::$IAM_TOKEN"
+          echo "YC_IAM_TOKEN=$IAM_TOKEN" >> "$GITHUB_ENV"
+
+      - name: Install Yandex Cloud CLI
+        run: |
+          set -euo pipefail
+          curl -sSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh | bash -s -- -i "$HOME/yandex-cloud" -n
+          echo "$HOME/yandex-cloud/bin" >> "$GITHUB_PATH"
+          "$HOME/yandex-cloud/bin/yc" version
+
+      - name: Render API Gateway specification
+        env:
+          YC_FOLDER_ID: ${{ vars.YC_FOLDER_ID }}
+        run: |
+          set -euo pipefail
+          YC="$HOME/yandex-cloud/bin/yc"
+          "$YC" config set token "$YC_IAM_TOKEN"
+          "$YC" config set folder-id "$YC_FOLDER_ID"
+
+          FUNCTION_ID=$("$YC" serverless function get --name "$YC_FUNCTION_NAME" --format json | jq -r '.id')
+          RUNTIME_SA_ID=$("$YC" iam service-account get --name cf-service-account --format json | jq -r '.id')
+          test -n "$FUNCTION_ID" && test "$FUNCTION_ID" != "null"
+          test -n "$RUNTIME_SA_ID" && test "$RUNTIME_SA_ID" != "null"
+
+          sed \
+            -e "s/__FUNCTION_ID__/$FUNCTION_ID/g" \
+            -e "s/__RUNTIME_SA_ID__/$RUNTIME_SA_ID/g" \
+            "$YC_GATEWAY_TEMPLATE" > "$YC_GATEWAY_SPEC"
+
+          echo "function_id=$FUNCTION_ID"
+          echo "runtime_service_account_id=$RUNTIME_SA_ID"
+
+      - name: Deploy API Gateway specification
+        env:
+          YC_FOLDER_ID: ${{ vars.YC_FOLDER_ID }}
+        run: |
+          set -euo pipefail
+          YC="$HOME/yandex-cloud/bin/yc"
+          "$YC" serverless api-gateway update "$YC_GATEWAY_NAME" \
+            --folder-id "$YC_FOLDER_ID" \
+            --spec "$YC_GATEWAY_SPEC"
+
+      - name: Verify Yandex deployment
+        env:
+          YC_FOLDER_ID: ${{ vars.YC_FOLDER_ID }}
+        run: |
+          set -euo pipefail
+          YC="$HOME/yandex-cloud/bin/yc"
+          echo "Function:"
+          "$YC" serverless function get --name "$YC_FUNCTION_NAME" --folder-id "$YC_FOLDER_ID" --format json | jq '{id,name,status}'
+          echo "API Gateway:"
+          "$YC" serverless api-gateway get "$YC_GATEWAY_NAME" --folder-id "$YC_FOLDER_ID" --format json | jq '{id,name,status,domain}'
+          echo "Object Storage miniapp objects:"
+          AWS_ACCESS_KEY_ID='${{ secrets.YC_S3_ACCESS_KEY_ID }}' \
+          AWS_SECRET_ACCESS_KEY='${{ secrets.YC_S3_SECRET_ACCESS_KEY }}' \
+          AWS_DEFAULT_REGION=ru-central1 \
+          aws --endpoint-url=https://storage.yandexcloud.net \
+            s3 ls "s3://$YC_BUCKET/$YC_MINIAPP_PREFIX/"
