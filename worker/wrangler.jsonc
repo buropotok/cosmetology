@@ -51,6 +51,7 @@
 	"vars": {
 		"ALLOWED_EXTENSION_ORIGIN": "chrome-extension://kffffpnlinmecknhdohnkfhpdjfogjhk",
 		"GOOGLE_OAUTH_CLIENT_ID": "694062327158-dja91uqmc3k4516fr8adl64q1m099ipm.apps.googleusercontent.com",
-		"MINIAPP_URL": "https://cosmetology-social-publisher.buropotok.workers.dev/"
+		"MINIAPP_URL": "https://cosmetology-social-publisher.buropotok.workers.dev/",
+		"YANDEX_VK_BASE_URL": "https://d5d22q6pf4b58f78a8vs.7qsg961h.apigw.yandexcloud.net"
 	}
 }
