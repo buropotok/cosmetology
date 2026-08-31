@@ -17,14 +17,18 @@ type ImageDescriptor = {
   sourceUrl: string;
 };
 
-function enabled(env: Env) {
-  return Boolean(
-    env.YANDEX_VK_BASE_URL &&
-    env.YANDEX_REPLICA_TOKEN &&
-    env.R2_S3_ENDPOINT &&
-    env.R2_ACCESS_KEY_ID &&
-    env.R2_SECRET_ACCESS_KEY,
-  );
+function missingConfig(env: Env) {
+  const required = {
+    YANDEX_VK_BASE_URL: env.YANDEX_VK_BASE_URL,
+    YANDEX_REPLICA_TOKEN: env.YANDEX_REPLICA_TOKEN,
+    R2_S3_ENDPOINT: env.R2_S3_ENDPOINT,
+    R2_ACCESS_KEY_ID: env.R2_ACCESS_KEY_ID,
+    R2_SECRET_ACCESS_KEY: env.R2_SECRET_ACCESS_KEY,
+  };
+
+  return Object.entries(required)
+    .filter(([, value]) => !value)
+    .map(([name]) => name);
 }
 
 function rfc3986(value: string) {
@@ -104,8 +108,9 @@ async function sleep(ms: number) {
 }
 
 export async function replicateVkArtifactToYandex(env: Env, artifact: YandexReplicaArtifact) {
-  if (!enabled(env)) {
-    console.log('Yandex VK replica skipped: replica or R2 S3 credentials missing');
+  const missing = missingConfig(env);
+  if (missing.length) {
+    console.log('Yandex VK replica skipped: missing configuration', { missing });
     return;
   }
 
