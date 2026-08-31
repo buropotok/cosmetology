@@ -5,11 +5,28 @@ buttonEl.addEventListener("click", async (event) => {
   if (!artifact || !currentToken || published) return;
 
   buttonEl.disabled = true;
-  statusEl.textContent = "Тестируем публикацию токеном сообщества…";
+  statusEl.textContent = "Готовим фото и публикацию токеном сообщества…";
 
   try {
     const groupId = Number(artifact.vkGroupId);
-    log("Community server wall.post test", { groupId, attachments: false });
+    const imageCount = (artifact.images || []).length;
+    log("Hybrid photo + community wall.post test", { groupId, imageCount });
+
+    let attachments = [];
+    if (imageCount > 0) {
+      let photoAuth;
+      try {
+        photoAuth = await bridge("VKWebAppGetAuthToken", { app_id: VK_APP_ID, scope: "photos" });
+      } catch (error) {
+        throw new Error(vkError("VKWebAppGetAuthToken (photos)", error));
+      }
+      if (!photoAuth?.access_token) throw new Error("VK не предоставил user token с photos");
+      log("USER PHOTO TOKEN SUCCESS", { scope: photoAuth.scope || null, expires: photoAuth.expires || null });
+      attachments = await prepareSinglePhoto(photoAuth);
+      log("PHOTO ATTACHMENT READY FOR COMMUNITY POST", { attachments });
+    } else {
+      log("PHOTO STEP SKIPPED", { reason: "artifact has no images" });
+    }
 
     let communityAuth;
     let method = "VKWebAppGetCommunityToken";
@@ -40,20 +57,13 @@ buttonEl.addEventListener("click", async (event) => {
 
     const accessToken = communityAuth?.access_token || communityAuth?.accessToken || "";
     if (!accessToken) throw new Error(`${method} не вернул access_token`);
+    log("COMMUNITY TOKEN SUCCESS", { method, groupId, scope: communityAuth?.scope || null, expires: communityAuth?.expires || null, tokenReceived: true });
 
-    log("COMMUNITY TOKEN SUCCESS", {
-      method,
-      groupId,
-      scope: communityAuth?.scope || null,
-      expires: communityAuth?.expires || null,
-      tokenReceived: true
-    });
-
-    log("→ Yandex Function wall.post COMMUNITY TOKEN", { groupId, attachments: false });
+    log("→ Yandex Function wall.post COMMUNITY TOKEN", { groupId, attachments });
     const serverResponse = await fetch(`/api/artifacts/${encodeURIComponent(currentToken)}/vk-wall-post`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ accessToken }),
+      body: JSON.stringify({ accessToken, attachments }),
       cache: "no-store"
     });
     const raw = await serverResponse.text();
@@ -74,13 +84,11 @@ buttonEl.addEventListener("click", async (event) => {
     published = true;
     buttonEl.disabled = true;
     buttonEl.textContent = "Опубликовано";
-    statusEl.textContent = "Публикация размещена токеном сообщества";
-    log("COMMUNITY SERVER WALL POST SUCCESS", { groupId, postId, attachments: false });
+    statusEl.textContent = attachments.length ? "Пост с фото размещён токеном сообщества" : "Текстовый пост размещён токеном сообщества";
+    log("HYBRID COMMUNITY WALL POST SUCCESS", { groupId, postId, attachments });
   } catch (error) {
-    statusEl.textContent = "Публикация токеном сообщества не прошла. Смотрите диагностику.";
-    log("COMMUNITY SERVER WALL POST ERROR", {
-      message: error instanceof Error ? error.message : String(error)
-    });
+    statusEl.textContent = "Гибридная публикация не прошла. Смотрите диагностику.";
+    log("HYBRID COMMUNITY WALL POST ERROR", { message: error instanceof Error ? error.message : String(error) });
     diagnosticsEl.open = true;
   } finally {
     if (!published) buttonEl.disabled = false;
