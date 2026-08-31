@@ -1,7 +1,7 @@
 openapi: 3.0.0
 info:
   title: Cosmo Sofa VK
-  version: 1.2.0
+  version: 1.2.1
 
 x-yc-apigateway:
   variables:
@@ -63,7 +63,7 @@ paths:
         function_id: __FUNCTION_ID__
         tag: ${var.latest}
         service_account_id: __RUNTIME_SA_ID__
-        payload_format_version: "0.1"
+        payload_format_version: "1.0"
 
   /api/artifacts/{handoffToken}:
     get:
@@ -79,7 +79,7 @@ paths:
         function_id: __FUNCTION_ID__
         tag: ${var.latest}
         service_account_id: __RUNTIME_SA_ID__
-        payload_format_version: "0.1"
+        payload_format_version: "1.0"
 
   /api/artifacts/{handoffToken}/vk-upload:
     post:
@@ -95,7 +95,7 @@ paths:
         function_id: __FUNCTION_ID__
         tag: ${var.latest}
         service_account_id: __RUNTIME_SA_ID__
-        payload_format_version: "0.1"
+        payload_format_version: "1.0"
 
   /api/artifacts/{handoffToken}/images/{index}:
     get:
@@ -116,7 +116,7 @@ paths:
         function_id: __FUNCTION_ID__
         tag: ${var.latest}
         service_account_id: __RUNTIME_SA_ID__
-        payload_format_version: "0.1"
+        payload_format_version: "1.0"
 
   /api/test-artifact:
     get:
