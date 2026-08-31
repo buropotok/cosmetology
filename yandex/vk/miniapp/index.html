@@ -25,6 +25,7 @@
     </section>
 
     <button id="post" disabled>Открыть публикацию</button>
+    <button id="test-groups" type="button">Тест: получить мои группы</button>
     <div id="status">Подготавливаем публикацию…</div>
 
     <details class="diagnostics" id="diagnostics">
@@ -33,5 +34,47 @@
     </details>
   </main>
   <script src="/miniapp/app.js?v=20260901-0124"></script>
+  <script>
+    document.getElementById("test-groups").addEventListener("click", async () => {
+      const button = document.getElementById("test-groups");
+      const status = document.getElementById("status");
+      const diagnostics = document.getElementById("diagnostics");
+      const diagnosticLog = document.getElementById("diagnostic-log");
+      button.disabled = true;
+      status.textContent = "Запрашиваем доступ к группам…";
+      try {
+        const auth = await vkBridge.send("VKWebAppGetAuthToken", {
+          app_id: 54742219,
+          scope: "groups"
+        });
+        const result = await vkBridge.send("VKWebAppCallAPIMethod", {
+          method: "groups.get",
+          params: {
+            access_token: auth.access_token,
+            filter: "admin",
+            extended: 1,
+            count: 100,
+            v: "5.199"
+          }
+        });
+        const items = result && result.response && Array.isArray(result.response.items)
+          ? result.response.items
+          : [];
+        const safeItems = items.map(group => ({ id: group.id, name: group.name, screen_name: group.screen_name }));
+        diagnosticLog.textContent += `\n[GROUPS TEST] AUTH OK | scope=${auth.scope || "(not returned)"}`;
+        diagnosticLog.textContent += `\n[GROUPS TEST] groups.get OK | count=${items.length}`;
+        diagnosticLog.textContent += `\n[GROUPS TEST] ${JSON.stringify(safeItems, null, 2)}`;
+        diagnostics.open = true;
+        status.textContent = `Получено групп: ${items.length}`;
+      } catch (error) {
+        const safeError = JSON.stringify(error, (key, value) => /token/i.test(key) ? "***" : value, 2);
+        diagnosticLog.textContent += `\n[GROUPS TEST] ERROR | ${safeError}`;
+        diagnostics.open = true;
+        status.textContent = "Тест групп завершился ошибкой";
+      } finally {
+        button.disabled = false;
+      }
+    });
+  </script>
 </body>
 </html>
