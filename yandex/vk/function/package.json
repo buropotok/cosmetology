@@ -1,8 +1,9 @@
 {
   "name": "cosmetology-yandex-vk-function",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.0.0"
+    "@aws-sdk/client-s3": "^3.0.0",
+    "@aws-sdk/s3-request-presigner": "^3.0.0"
   }
 }
