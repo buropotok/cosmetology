@@ -1,4 +1,4 @@
-const VK_APP_ID = 54742217;
+const VK_APP_ID = 54742219;
 const VK_API_VERSION = "5.199";
 const statusEl = document.getElementById("status");
 const artifactEl = document.getElementById("artifact");
