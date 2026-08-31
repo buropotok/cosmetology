@@ -1,7 +1,7 @@
 openapi: 3.0.0
 info:
   title: Cosmo Sofa VK
-  version: 1.2.1
+  version: 1.2.2
 
 x-yc-apigateway:
   variables:
@@ -84,6 +84,22 @@ paths:
   /api/artifacts/{handoffToken}/vk-upload:
     post:
       summary: Prepare an artifact image for VK publication
+      parameters:
+        - name: handoffToken
+          in: path
+          required: true
+          schema:
+            type: string
+      x-yc-apigateway-integration:
+        type: cloud_functions
+        function_id: __FUNCTION_ID__
+        tag: ${var.latest}
+        service_account_id: __RUNTIME_SA_ID__
+        payload_format_version: "1.0"
+
+  /api/artifacts/{handoffToken}/vk-wall-post:
+    post:
+      summary: Test VK wall.post from Yandex Function
       parameters:
         - name: handoffToken
           in: path
