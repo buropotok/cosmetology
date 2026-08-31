@@ -5,18 +5,11 @@ buttonEl.addEventListener("click", async (event) => {
   if (!artifact || !currentToken || published) return;
 
   buttonEl.disabled = true;
-  statusEl.textContent = "Проверяем получение токена сообщества…";
+  statusEl.textContent = "Тестируем публикацию токеном сообщества…";
 
   try {
     const groupId = Number(artifact.vkGroupId);
-    log("Community token test", { groupId });
-
-    if (typeof vkBridge.supports === "function") {
-      log("Community token Bridge support", {
-        getCommunityToken: vkBridge.supports("VKWebAppGetCommunityToken"),
-        getCommunityAuthToken: vkBridge.supports("VKWebAppGetCommunityAuthToken")
-      });
-    }
+    log("Community server wall.post test", { groupId, attachments: false });
 
     let communityAuth;
     let method = "VKWebAppGetCommunityToken";
@@ -46,10 +39,7 @@ buttonEl.addEventListener("click", async (event) => {
     }
 
     const accessToken = communityAuth?.access_token || communityAuth?.accessToken || "";
-    if (!accessToken) {
-      log("COMMUNITY TOKEN RESPONSE WITHOUT TOKEN", { method, response: communityAuth });
-      throw new Error(`${method} ответил, но не вернул access_token`);
-    }
+    if (!accessToken) throw new Error(`${method} не вернул access_token`);
 
     log("COMMUNITY TOKEN SUCCESS", {
       method,
@@ -59,16 +49,40 @@ buttonEl.addEventListener("click", async (event) => {
       tokenReceived: true
     });
 
-    statusEl.textContent = "Токен сообщества получен внутри Mini App. Смотрите диагностику.";
-    buttonEl.textContent = "Токен сообщества получен";
-    diagnosticsEl.open = true;
+    log("→ Yandex Function wall.post COMMUNITY TOKEN", { groupId, attachments: false });
+    const serverResponse = await fetch(`/api/artifacts/${encodeURIComponent(currentToken)}/vk-wall-post`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ accessToken }),
+      cache: "no-store"
+    });
+    const raw = await serverResponse.text();
+    let result = null;
+    try { result = raw ? JSON.parse(raw) : null; } catch {}
+    log("← Yandex Function wall.post COMMUNITY TOKEN", { status: serverResponse.status, body: result || raw });
+
+    if (!serverResponse.ok) throw new Error(result?.error?.message || `Yandex Function HTTP ${serverResponse.status}`);
+    if (!result?.ok) {
+      const code = result?.vkError?.error_code ?? "?";
+      const message = result?.vkError?.error_msg || "VK API rejected wall.post";
+      throw new Error(`VK API community token: ${code} ${message}`);
+    }
+
+    const postId = result?.response?.post_id;
+    if (!postId) throw new Error("Community-token wall.post не вернул post_id");
+
+    published = true;
+    buttonEl.disabled = true;
+    buttonEl.textContent = "Опубликовано";
+    statusEl.textContent = "Публикация размещена токеном сообщества";
+    log("COMMUNITY SERVER WALL POST SUCCESS", { groupId, postId, attachments: false });
   } catch (error) {
-    statusEl.textContent = "Токен сообщества получить не удалось. Смотрите диагностику.";
-    log("COMMUNITY TOKEN ERROR", {
+    statusEl.textContent = "Публикация токеном сообщества не прошла. Смотрите диагностику.";
+    log("COMMUNITY SERVER WALL POST ERROR", {
       message: error instanceof Error ? error.message : String(error)
     });
     diagnosticsEl.open = true;
   } finally {
-    buttonEl.disabled = false;
+    if (!published) buttonEl.disabled = false;
   }
 }, true);
