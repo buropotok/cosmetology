@@ -10,83 +10,142 @@ export type YandexReplicaArtifact = {
   imageKeys: string[];
 };
 
-type InitResponse = {
-  artifactId: string;
-  uploads: Array<{ index: number; url: string }>;
+type ImageDescriptor = {
+  index: number;
+  contentType: string;
+  size: number;
+  sourceUrl: string;
 };
 
 function enabled(env: Env) {
-  return Boolean(env.YANDEX_VK_BASE_URL && env.YANDEX_REPLICA_TOKEN);
+  return Boolean(
+    env.YANDEX_VK_BASE_URL &&
+    env.YANDEX_REPLICA_TOKEN &&
+    env.R2_S3_ENDPOINT &&
+    env.R2_ACCESS_KEY_ID &&
+    env.R2_SECRET_ACCESS_KEY,
+  );
 }
 
-async function objectDescriptor(env: Env, key: string, index: number) {
-  const object = await env.IMAGES.get(key);
+function rfc3986(value: string) {
+  return encodeURIComponent(value).replace(/[!'()*]/g, char => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
+}
+
+function hex(bytes: ArrayBuffer) {
+  return Array.from(new Uint8Array(bytes), byte => byte.toString(16).padStart(2, '0')).join('');
+}
+
+async function sha256(value: string) {
+  return hex(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value)));
+}
+
+async function hmac(key: string | ArrayBuffer, value: string) {
+  const rawKey = typeof key === 'string' ? new TextEncoder().encode(key) : key;
+  const cryptoKey = await crypto.subtle.importKey('raw', rawKey, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  return crypto.subtle.sign('HMAC', cryptoKey, new TextEncoder().encode(value));
+}
+
+async function presignR2Get(env: Env, key: string, expiresSeconds = 15 * 60) {
+  const endpoint = new URL(env.R2_S3_ENDPOINT!);
+  if (endpoint.protocol !== 'https:') throw new Error('R2_S3_ENDPOINT must use HTTPS');
+
+  const now = new Date();
+  const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, '');
+  const dateStamp = amzDate.slice(0, 8);
+  const region = 'auto';
+  const service = 's3';
+  const scope = `${dateStamp}/${region}/${service}/aws4_request`;
+  const bucket = 'cosmetology-publisher-images';
+  const canonicalUri = `/${rfc3986(bucket)}/${key.split('/').map(rfc3986).join('/')}`;
+
+  const query = new URLSearchParams();
+  query.set('X-Amz-Algorithm', 'AWS4-HMAC-SHA256');
+  query.set('X-Amz-Credential', `${env.R2_ACCESS_KEY_ID}/${scope}`);
+  query.set('X-Amz-Date', amzDate);
+  query.set('X-Amz-Expires', String(expiresSeconds));
+  query.set('X-Amz-SignedHeaders', 'host');
+  const canonicalQuery = Array.from(query.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([name, value]) => `${rfc3986(name)}=${rfc3986(value)}`)
+    .join('&');
+
+  const canonicalRequest = [
+    'GET',
+    canonicalUri,
+    canonicalQuery,
+    `host:${endpoint.host}\n`,
+    'host',
+    'UNSIGNED-PAYLOAD',
+  ].join('\n');
+  const stringToSign = ['AWS4-HMAC-SHA256', amzDate, scope, await sha256(canonicalRequest)].join('\n');
+
+  const dateKey = await hmac(`AWS4${env.R2_SECRET_ACCESS_KEY}`, dateStamp);
+  const regionKey = await hmac(dateKey, region);
+  const serviceKey = await hmac(regionKey, service);
+  const signingKey = await hmac(serviceKey, 'aws4_request');
+  const signature = hex(await hmac(signingKey, stringToSign));
+
+  return `${endpoint.origin}${canonicalUri}?${canonicalQuery}&X-Amz-Signature=${signature}`;
+}
+
+async function objectDescriptor(env: Env, key: string, index: number): Promise<ImageDescriptor> {
+  const object = await env.IMAGES.head(key);
   if (!object) throw new Error(`Replica source image missing: ${key}`);
   return {
     index,
     contentType: object.httpMetadata?.contentType || 'application/octet-stream',
     size: object.size,
-    object,
+    sourceUrl: await presignR2Get(env, key),
   };
+}
+
+async function sleep(ms: number) {
+  await new Promise(resolve => setTimeout(resolve, ms));
 }
 
 export async function replicateVkArtifactToYandex(env: Env, artifact: YandexReplicaArtifact) {
   if (!enabled(env)) {
-    console.log('Yandex VK replica skipped: YANDEX_VK_BASE_URL or YANDEX_REPLICA_TOKEN missing');
+    console.log('Yandex VK replica skipped: replica or R2 S3 credentials missing');
     return;
   }
 
   const base = env.YANDEX_VK_BASE_URL!.replace(/\/+$/, '');
   const images = await Promise.all(artifact.imageKeys.map((key, index) => objectDescriptor(env, key, index)));
-  const headers = {
-    authorization: `Bearer ${env.YANDEX_REPLICA_TOKEN}`,
-    'content-type': 'application/json',
-  };
-
-  const initResponse = await fetch(`${base}/api/replica/artifacts/init`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      artifactId: artifact.artifactId,
-      handoffToken: artifact.handoffToken,
-      version: artifact.version,
-      vkGroupId: artifact.vkGroupId,
-      text: artifact.text,
-      expiresAt: artifact.expiresAt,
-      images: images.map(({ index, contentType, size }) => ({ index, contentType, size })),
-    }),
+  const body = JSON.stringify({
+    artifactId: artifact.artifactId,
+    handoffToken: artifact.handoffToken,
+    version: artifact.version,
+    vkGroupId: artifact.vkGroupId,
+    text: artifact.text,
+    expiresAt: artifact.expiresAt,
+    images,
   });
 
-  const initRaw = await initResponse.text();
-  if (!initResponse.ok) throw new Error(`Yandex replica init failed ${initResponse.status}: ${initRaw.slice(0, 1000)}`);
-  const init = JSON.parse(initRaw) as InitResponse;
-
-  for (const upload of init.uploads || []) {
-    const source = images[upload.index];
-    if (!source) throw new Error(`Yandex replica returned invalid image index ${upload.index}`);
-    const blob = await source.object.blob();
-    const uploadResponse = await fetch(upload.url, {
-      method: 'PUT',
-      headers: { 'content-type': source.contentType },
-      body: blob,
-    });
-    if (!uploadResponse.ok) {
-      const raw = await uploadResponse.text();
-      throw new Error(`Yandex replica image ${upload.index} failed ${uploadResponse.status}: ${raw.slice(0, 500)}`);
+  let lastError = '';
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const response = await fetch(`${base}/api/replica/artifacts/init`, {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${env.YANDEX_REPLICA_TOKEN}`,
+          'content-type': 'application/json',
+        },
+        body,
+      });
+      const raw = await response.text();
+      if (!response.ok) throw new Error(`Yandex replica init failed ${response.status}: ${raw.slice(0, 1000)}`);
+      console.log('Yandex VK artifact replicated by pull', {
+        artifactId: artifact.artifactId,
+        imageCount: images.length,
+        version: artifact.version,
+        attempt,
+      });
+      return;
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error);
+      if (attempt < 3) await sleep(500 * 2 ** (attempt - 1));
     }
   }
 
-  const completeResponse = await fetch(`${base}/api/replica/artifacts/${encodeURIComponent(artifact.artifactId)}/complete`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({ handoffToken: artifact.handoffToken, version: artifact.version }),
-  });
-  const completeRaw = await completeResponse.text();
-  if (!completeResponse.ok) throw new Error(`Yandex replica complete failed ${completeResponse.status}: ${completeRaw.slice(0, 1000)}`);
-
-  console.log('Yandex VK artifact replicated', {
-    artifactId: artifact.artifactId,
-    imageCount: images.length,
-    version: artifact.version,
-  });
+  throw new Error(`Yandex VK pull replication failed after retries: ${lastError}`);
 }
