@@ -7,7 +7,7 @@ const HANDOFF_TTL_SECONDS = 15 * 60;
 const IMAGE_MAX_BYTES = 10 * 1024 * 1024;
 const IMAGE_MAX_COUNT = 10;
 const TEXT_MAX_LENGTH = 4096;
-const VK_APP_ID = '54742217';
+const VK_APP_ID = '54742219';
 
 function initDataFrom(request: Request) {
   return request.headers.get('authorization')?.match(/^tma\s+(.+)$/i)?.[1] ?? '';
