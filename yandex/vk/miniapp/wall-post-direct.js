@@ -5,16 +5,12 @@ buttonEl.addEventListener("click", async (event) => {
   if (!artifact || !currentToken || published) return;
 
   buttonEl.disabled = true;
-  statusEl.textContent = "Публикуем через VK API…";
+  statusEl.textContent = "Тестируем wall.post без фотографии…";
 
   try {
-    const attachments = await prepareNativePhotoAttachments();
-    const firstAttachment = attachments.length ? attachments[0] : "";
-
     log("Direct wall.post: requesting wall permission", {
       groupId: artifact.vkGroupId,
-      hasAttachment: Boolean(firstAttachment),
-      attachmentCountPrepared: attachments.length
+      attachments: false
     });
 
     let wallAuth;
@@ -38,17 +34,14 @@ buttonEl.addEventListener("click", async (event) => {
       message: artifact.text || ""
     };
 
-    if (firstAttachment) params.attachments = firstAttachment;
-
-    log("→ VK API wall.post DIRECT", {
+    log("→ VK API wall.post DIRECT NO ATTACHMENTS", {
       owner_id: params.owner_id,
       from_group: params.from_group,
-      message: params.message,
-      attachments: firstAttachment || null
+      message: params.message
     });
 
     const result = await callVkApi("wall.post", params);
-    log("← VK API wall.post DIRECT", result);
+    log("← VK API wall.post DIRECT NO ATTACHMENTS", result);
 
     if (!result?.post_id) {
       throw new Error("wall.post не вернул post_id");
@@ -57,11 +50,11 @@ buttonEl.addEventListener("click", async (event) => {
     published = true;
     buttonEl.disabled = true;
     buttonEl.textContent = "Опубликовано";
-    statusEl.textContent = "Публикация размещена во ВКонтакте через VK API";
+    statusEl.textContent = "Текстовая публикация размещена через VK API";
     log("DIRECT WALL POST SUCCESS", {
       groupId: artifact.vkGroupId,
       postId: result.post_id,
-      usedAttachment: firstAttachment || null
+      attachments: false
     });
   } catch (error) {
     statusEl.textContent = "Не удалось разместить публикацию через VK API.";
