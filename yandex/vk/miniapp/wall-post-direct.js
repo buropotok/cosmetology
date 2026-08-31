@@ -5,10 +5,10 @@ buttonEl.addEventListener("click", async (event) => {
   if (!artifact || !currentToken || published) return;
 
   buttonEl.disabled = true;
-  statusEl.textContent = "Тестируем wall.post без фотографии…";
+  statusEl.textContent = "Тестируем wall.post через Yandex Function…";
 
   try {
-    log("Direct wall.post: requesting wall permission", {
+    log("Server wall.post: requesting wall permission", {
       groupId: artifact.vkGroupId,
       attachments: false
     });
@@ -27,38 +27,46 @@ buttonEl.addEventListener("click", async (event) => {
       throw new Error("VK не предоставил access_token с правом wall");
     }
 
-    const params = {
-      access_token: wallAuth.access_token,
-      owner_id: -artifact.vkGroupId,
-      from_group: 1,
-      message: artifact.text || ""
-    };
-
-    log("→ VK API wall.post DIRECT NO ATTACHMENTS", {
-      owner_id: params.owner_id,
-      from_group: params.from_group,
-      message: params.message
+    log("→ Yandex Function wall.post", {
+      groupId: artifact.vkGroupId,
+      attachments: false
     });
 
-    const result = await callVkApi("wall.post", params);
-    log("← VK API wall.post DIRECT NO ATTACHMENTS", result);
+    const serverResponse = await fetch(`/api/artifacts/${encodeURIComponent(currentToken)}/vk-wall-post`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ accessToken: wallAuth.access_token }),
+      cache: "no-store"
+    });
+    const raw = await serverResponse.text();
+    let result = null;
+    try { result = raw ? JSON.parse(raw) : null; } catch {}
+    log("← Yandex Function wall.post", { status: serverResponse.status, body: result || raw });
 
-    if (!result?.post_id) {
-      throw new Error("wall.post не вернул post_id");
+    if (!serverResponse.ok) {
+      throw new Error(result?.error?.message || `Yandex Function HTTP ${serverResponse.status}`);
     }
+    if (!result?.ok) {
+      const code = result?.vkError?.error_code ?? "?";
+      const message = result?.vkError?.error_msg || "VK API rejected wall.post";
+      throw new Error(`VK API server-side: ${code} ${message}`);
+    }
+
+    const postId = result?.response?.post_id;
+    if (!postId) throw new Error("Server-side wall.post не вернул post_id");
 
     published = true;
     buttonEl.disabled = true;
     buttonEl.textContent = "Опубликовано";
-    statusEl.textContent = "Текстовая публикация размещена через VK API";
-    log("DIRECT WALL POST SUCCESS", {
+    statusEl.textContent = "Текстовая публикация размещена через Yandex Function";
+    log("SERVER WALL POST SUCCESS", {
       groupId: artifact.vkGroupId,
-      postId: result.post_id,
+      postId,
       attachments: false
     });
   } catch (error) {
-    statusEl.textContent = "Не удалось разместить публикацию через VK API.";
-    log("DIRECT WALL POST ERROR", {
+    statusEl.textContent = "Серверный wall.post не прошёл. Смотрите диагностику.";
+    log("SERVER WALL POST ERROR", {
       message: error instanceof Error ? error.message : String(error)
     });
     diagnosticsEl.open = true;
