@@ -9,7 +9,7 @@ const VK_TEST_IMAGE_KEY = 'posts/2026/08/10.png';
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
 
 export default {
-  async fetch(req: Request, env: Env) {
+  async fetch(req: Request, env: Env, ctx: ExecutionContext) {
     const url = new URL(req.url);
 
     try {
@@ -37,7 +37,7 @@ export default {
       }
 
       if (req.method === 'POST' && url.pathname === '/api/miniapp/vk-handoff') {
-        return json(await createVkHandoff(req, env), 201);
+        return json(await createVkHandoff(req, env, ctx), 201);
       }
 
       const handoffMatch = url.pathname.match(/^\/api\/vk-handoff\/([A-Za-z0-9_-]+)$/);
