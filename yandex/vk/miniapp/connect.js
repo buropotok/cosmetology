@@ -3,6 +3,7 @@ const $=id=>document.getElementById(id),status=$('status'),groupsEl=$('groups'),
 function params(){const q=new URLSearchParams(location.hash.replace(/^#/,''));return{token:q.get('connect')||'',callback:q.get('callback')||''}}
 function safeError(error){return JSON.stringify(error,(k,v)=>/token/i.test(k)?'***':v,2)}
 function log(text){if(logEl)logEl.textContent+=(logEl.textContent?'\n':'')+text;console.log(text)}
+function diag(label,value){let text=value;try{if(typeof value!=='string')text=JSON.stringify(value,(k,v)=>/token|authorization/i.test(k)?'***':v)}catch{text=String(value)}log(`${label}: ${text}`)}
 function showSuccess(group){
   $('picker-view').hidden=true;$('success-view').hidden=false;
   $('selected-group-name').textContent=group.name||'Группа VK';
@@ -15,15 +16,19 @@ async function closeMiniApp(){
 }
 async function init(){
   const {token,callback}=params();
+  diagnostics.open=true;
+  diag('BUILD','vk-save-diag-20260901-1');
+  diag('LOCATION',{origin:location.origin,search:location.search,hashKeys:[...new URLSearchParams(location.hash.replace(/^#/,'')).keys()]});
+  diag('HANDOFF',{tokenPresent:!!token,tokenLength:token.length,callback});
   $('close-vk-onboarding')?.addEventListener('click',closeMiniApp);
   if(!token||!callback){status.textContent='Ссылка подключения недействительна.';return}
   try{
-    await vkBridge.send('VKWebAppInit');
+    await vkBridge.send('VKWebAppInit');diag('VKWebAppInit','OK');
     status.textContent='Получаем ваши группы…';
-    const auth=await vkBridge.send('VKWebAppGetAuthToken',{app_id:VK_APP_ID,scope:'groups'});
+    const auth=await vkBridge.send('VKWebAppGetAuthToken',{app_id:VK_APP_ID,scope:'groups'});diag('AUTH',{accessTokenPresent:!!auth?.access_token});
     const result=await vkBridge.send('VKWebAppCallAPIMethod',{method:'groups.get',params:{access_token:auth.access_token,filter:'admin',extended:1,count:100,v:VK_API_VERSION}});
     const items=Array.isArray(result?.response?.items)?result.response.items:[];
-    log(`groups.get OK: ${items.length}`);
+    diag('groups.get',{ok:true,count:items.length});
     if(!items.length){status.textContent='Не найдено групп, которыми вы управляете.';return}
     status.textContent='Нажмите на группу, которую хотите подключить.';
     groupsEl.hidden=false;
@@ -36,13 +41,24 @@ async function init(){
   }catch(error){status.textContent='Не удалось получить список групп.';log('ERROR '+safeError(error));diagnostics.open=true}
 }
 async function selectGroup(group,token,callback){
-  [...groupsEl.querySelectorAll('button')].forEach(b=>b.disabled=true);status.textContent='Сохраняем группу…';
+  [...groupsEl.querySelectorAll('button')].forEach(b=>b.disabled=true);status.textContent='Сохраняем группу…';diagnostics.open=true;
+  const launchUser=new URLSearchParams(location.search).get('vk_user_id')||'';
+  const endpoint=`${callback.replace(/\/+$/,'')}/api/vk-onboarding/${encodeURIComponent(token)}`;
+  diag('SAVE START',{groupId:group.id,groupName:group.name||'',screenName:group.screen_name||'',vkUserId:launchUser||null,callback,endpointOrigin:(()=>{try{return new URL(endpoint).origin}catch{return 'INVALID URL'}})()});
   try{
-    const launchUser=new URLSearchParams(location.search).get('vk_user_id')||'';
-    const response=await fetch(`${callback.replace(/\/+$/,'')}/api/vk-onboarding/${encodeURIComponent(token)}`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({vkUserId:launchUser,groupId:group.id,groupName:group.name||'',screenName:group.screen_name||''})});
-    const data=await response.json().catch(()=>null);if(!response.ok)throw new Error(data?.error?.message||`HTTP ${response.status}`);
-    showSuccess(group);
+    const started=Date.now();
+    const response=await fetch(endpoint,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({vkUserId:launchUser,groupId:group.id,groupName:group.name||'',screenName:group.screen_name||''})});
+    diag('SAVE RESPONSE',{ms:Date.now()-started,status:response.status,statusText:response.statusText,ok:response.ok,type:response.type,url:response.url,contentType:response.headers.get('content-type'),cors:response.headers.get('access-control-allow-origin')});
+    const raw=await response.text();diag('SAVE BODY',raw.slice(0,1000)||'<empty>');
+    let data=null;try{data=raw?JSON.parse(raw):null}catch{}
+    if(!response.ok)throw new Error(data?.error?.message||`HTTP ${response.status}`);
+    diag('SAVE RESULT','OK');showSuccess(group);
     vkBridge.send('VKWebAppTapticNotificationOccurred',{type:'success'}).catch(()=>{});
-  }catch(error){status.textContent=error instanceof Error?error.message:'Не удалось сохранить группу.';[...groupsEl.querySelectorAll('button')].forEach(b=>b.disabled=false);log('SAVE ERROR '+safeError(error));diagnostics.open=true}
+  }catch(error){
+    status.textContent=error instanceof Error?error.message:'Не удалось сохранить группу.';
+    [...groupsEl.querySelectorAll('button')].forEach(b=>b.disabled=false);
+    diag('SAVE ERROR',{name:error?.name||'',message:error?.message||String(error),stack:error?.stack||'',online:navigator.onLine});
+    diagnostics.open=true;
+  }
 }
 init();
