@@ -44,6 +44,16 @@ export default {
       if (req.method === 'POST' && url.pathname === '/api/miniapp/vk-onboarding') return json(await createVkOnboardingHandoff(req, env), 201);
       const vkOnboarding = url.pathname.match(/^\/api\/vk-onboarding\/([A-Za-z0-9_-]+)$/);
       if (vkOnboarding && req.method === 'OPTIONS') return new Response(null, { status: 204, headers: onboardingCors });
+      if (vkOnboarding && req.method === 'GET' && url.searchParams.get('select') === '1') {
+        const body = JSON.stringify({
+          vkUserId: url.searchParams.get('vkUserId') ?? '',
+          groupId: url.searchParams.get('groupId') ?? '',
+          groupName: url.searchParams.get('groupName') ?? '',
+          screenName: url.searchParams.get('screenName') ?? '',
+        });
+        const syntheticRequest = new Request(req.url, { method: 'POST', headers: { 'content-type': 'application/json' }, body });
+        return json(await selectVkOnboardingGroup(env, vkOnboarding[1], syntheticRequest, ctx), 200, onboardingCors);
+      }
       if (vkOnboarding && req.method === 'GET') return json(await getVkOnboardingHandoff(env, vkOnboarding[1]), 200, onboardingCors);
       if (vkOnboarding && req.method === 'POST') return json(await selectVkOnboardingGroup(env, vkOnboarding[1], req, ctx), 200, onboardingCors);
       if (req.method === 'POST' && url.pathname === '/api/miniapp/vk-handoff') return json(await createVkHandoff(req, env, ctx), 201);
