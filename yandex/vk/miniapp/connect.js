@@ -3,6 +3,11 @@ const $=id=>document.getElementById(id),status=$('status'),groupsEl=$('groups'),
 function params(){const q=new URLSearchParams(location.hash.replace(/^#/,''));return{token:q.get('connect')||'',callback:q.get('callback')||''}}
 function safeError(error){return JSON.stringify(error,(k,v)=>/token/i.test(k)?'***':v,2)}
 function log(text){if(logEl)logEl.textContent+=(logEl.textContent?'\n':'')+text;console.log(text)}
+function showSuccess(group){
+  $('picker-view').hidden=true;$('success-view').hidden=false;
+  $('selected-group-name').textContent=group.name||'Группа VK';
+  $('selected-group-url').textContent=group.screen_name?`vk.com/${group.screen_name}`:`ID ${group.id}`;
+}
 async function init(){
   const {token,callback}=params();
   if(!token||!callback){status.textContent='Ссылка подключения недействительна.';return}
@@ -20,18 +25,18 @@ async function init(){
       const b=document.createElement('button');b.type='button';b.className='group-button';
       const photo=group.photo_100||group.photo_50||'';
       b.innerHTML=`${photo?`<img src="${photo}" alt="">`:''}<span><strong>${group.name||'Группа VK'}</strong><small>${group.screen_name?`vk.com/${group.screen_name}`:`ID ${group.id}`}</small></span>`;
-      b.addEventListener('click',()=>selectGroup(b,group,token,callback));groupsEl.appendChild(b);
+      b.addEventListener('click',()=>selectGroup(group,token,callback));groupsEl.appendChild(b);
     }
   }catch(error){status.textContent='Не удалось получить список групп.';log('ERROR '+safeError(error));diagnostics.open=true}
 }
-async function selectGroup(button,group,token,callback){
+async function selectGroup(group,token,callback){
   [...groupsEl.querySelectorAll('button')].forEach(b=>b.disabled=true);status.textContent='Сохраняем группу…';
   try{
     const launchUser=new URLSearchParams(location.search).get('vk_user_id')||'';
     const response=await fetch(`${callback.replace(/\/+$/,'')}/api/vk-onboarding/${encodeURIComponent(token)}`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({vkUserId:launchUser,groupId:group.id,groupName:group.name||'',screenName:group.screen_name||''})});
     const data=await response.json().catch(()=>null);if(!response.ok)throw new Error(data?.error?.message||`HTTP ${response.status}`);
-    groupsEl.hidden=true;$('title').textContent='Группа подключена';$('subtitle').textContent=group.name||'ВКонтакте';status.textContent='Можно вернуться в Telegram.';
-    $('success').hidden=false;vkBridge.send('VKWebAppTapticNotificationOccurred',{type:'success'}).catch(()=>{});
+    showSuccess(group);
+    vkBridge.send('VKWebAppTapticNotificationOccurred',{type:'success'}).catch(()=>{});
   }catch(error){status.textContent=error instanceof Error?error.message:'Не удалось сохранить группу.';[...groupsEl.querySelectorAll('button')].forEach(b=>b.disabled=false);log('SAVE ERROR '+safeError(error));diagnostics.open=true}
 }
 init();
