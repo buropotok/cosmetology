@@ -3,12 +3,23 @@ import { vkMiniAppHtml } from './vk-miniapp';
 import { createVkHandoff, getVkHandoff, getVkHandoffImage, uploadVkHandoffImage } from './services/vk-handoff';
 import { createVkOnboardingHandoff, getVkOnboardingHandoff, selectVkOnboardingGroup } from './services/vk-onboarding';
 import { getMiniAppDraft, saveMiniAppDraft, getMiniAppDraftImage } from './services/miniapp-drafts';
+import { validateTelegramMiniAppInitData } from './services/telegram-miniapp-auth';
+import { resolveOrCreateTelegramIdentity } from './services/telegram-identity';
+import { sendTelegramText } from './services/telegram';
 import { adminHtml, listAdminUsers, resetAdminOnboarding } from './admin';
 import { AppError, type Env } from './types';
 
 const VK_TEST_IMAGE_KEY = 'posts/2026/08/10.png';
 const json = (body: unknown, status = 200, extra: HeadersInit = {}) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', ...extra } });
 const onboardingCors = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'content-type', 'access-control-allow-methods': 'GET, POST, OPTIONS' };
+const vkLinkBackup = String.raw`
+;(()=>{
+ const tg=window.Telegram?.WebApp;
+ document.addEventListener('click',event=>{
+   if(!event.target.closest?.('#publish-vk')||!tg?.initData)return;
+   fetch('/api/miniapp/vk-link',{method:'POST',headers:{Authorization:'tma '+tg.initData},body:'',keepalive:true}).catch(()=>{});
+ },true);
+})();`;
 const vkSettingsOverride = String.raw`
 ;(()=>{
  const tg=window.Telegram?.WebApp,$=s=>document.querySelector(s);
@@ -20,18 +31,31 @@ const vkSettingsOverride = String.raw`
  prepare();
 })();`;
 
+async function sendVkLinkBackup(req: Request, env: Env) {
+  const initData = req.headers.get('authorization')?.match(/^tma\s+(.+)$/i)?.[1] ?? '';
+  const validated = await validateTelegramMiniAppInitData(initData, env.TELEGRAM_BOT_TOKEN);
+  const account = await resolveOrCreateTelegramIdentity(env, String(validated.user.id));
+  const group = await env.DB.prepare('SELECT group_id AS groupId FROM user_vk_group WHERE user_id=?').bind(account.userId).first<{ groupId: number }>();
+  const groupId = Number(group?.groupId);
+  if (!Number.isSafeInteger(groupId) || groupId <= 0) throw new AppError('VK_GROUP_NOT_CONNECTED', 'Группа VK не подключена', 409);
+  const vkUrl = `https://m.vk.ru/new_post/-${groupId}?redirect_url=${encodeURIComponent(`https://m.vk.ru/club${groupId}`)}&creation_entry_point=group_wall_button&screen=group`;
+  await sendTelegramText(env, String(validated.user.id), `Резервная ссылка на публикацию VK:\n${vkUrl}`);
+  return { ok: true };
+}
+
 export default {
   async fetch(req: Request, env: Env, ctx: ExecutionContext) {
     const url = new URL(req.url);
     try {
       if (req.method === 'GET' && url.pathname === '/app.js') {
         const asset = await env.ASSETS.fetch(req); const source = await asset.text();
-        return new Response(`${source}\nimport('/drafts.js').catch(error=>console.warn('Draft client load failed',error));`, { headers: { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-store' } });
+        return new Response(`${source}\nimport('/drafts.js').catch(error=>console.warn('Draft client load failed',error));\n${vkLinkBackup}`, { headers: { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-store' } });
       }
       if (req.method === 'GET' && url.pathname === '/settings.js') {
         const asset = await env.ASSETS.fetch(req); const source = await asset.text();
         return new Response(`${source}\n${vkSettingsOverride}`, { headers: { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-store' } });
       }
+      if (req.method === 'POST' && url.pathname === '/api/miniapp/vk-link') return json(await sendVkLinkBackup(req, env));
       if (req.method === 'GET' && url.pathname === '/api/miniapp/draft') return json(await getMiniAppDraft(req, env));
       if (req.method === 'POST' && url.pathname === '/api/miniapp/draft') return json(await saveMiniAppDraft(req, env));
       const draftImage = url.pathname.match(/^\/api\/miniapp\/draft\/image\/(.+)$/);
