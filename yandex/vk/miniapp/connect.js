@@ -8,8 +8,14 @@ function showSuccess(group){
   $('selected-group-name').textContent=group.name||'Группа VK';
   $('selected-group-url').textContent=group.screen_name?`vk.com/${group.screen_name}`:`ID ${group.id}`;
 }
+async function closeMiniApp(){
+  const button=$('close-vk-onboarding');if(button){button.disabled=true;button.textContent='Закрываем…'}
+  try{await vkBridge.send('VKWebAppClose',{status:'success'})}
+  catch(error){log('CLOSE ERROR '+safeError(error));try{history.go(-1)}catch{}if(button){button.disabled=false;button.textContent='Закрыть'}}
+}
 async function init(){
   const {token,callback}=params();
+  $('close-vk-onboarding')?.addEventListener('click',closeMiniApp);
   if(!token||!callback){status.textContent='Ссылка подключения недействительна.';return}
   try{
     await vkBridge.send('VKWebAppInit');
