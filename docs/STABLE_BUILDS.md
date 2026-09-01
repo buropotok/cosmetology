@@ -8,6 +8,18 @@ This file is the canonical history of manually verified stable Cosmo Sofa builds
 - Keep the exact Git commit SHA so the working tree can be restored deterministically.
 - New development continues on `main`; this file records recovery points and does not imply that later commits are stable.
 
+## 2026-09-01 — Legacy PoC markup removed from composer
+
+**Commit:** `201d2ff00b028d465134516d2b66701709f421e7`
+
+Verified state:
+
+- Verified on the real target device/runtime after Stage 2 legacy PoC removal.
+- Legacy account status block, manual VK URL onboarding block, and managed-bot PoC controls are physically removed from `miniapp/index.html`.
+- Modern composer remains operational with the required foundational DOM controls retained for `app.js` and `composer-mockup.js`.
+- Telegram/VK composer flow, photo controls, settings, and current application UI remain operational in the verified build.
+- This is the current rollback point before Stage 3 dead legacy JS/CSS cleanup.
+
 ## 2026-09-01 — Settings editors + verified VK onboarding
 
 **Commit:** `6050a76a55fa2770cd0dc65d78444933335f4e67`
@@ -21,7 +33,7 @@ Verified state:
 - Settings display the connected VK group title.
 - Settings edit (pencil) actions open their screens immediately and refresh state in the background instead of blocking navigation on `/api/miniapp/me`.
 
-Use this commit as the current rollback point before the legacy PoC removal/refactoring work.
+Use this commit as the rollback point before the legacy PoC removal/refactoring work.
 
 ## 2026-09-01 — VK onboarding transport baseline
 
