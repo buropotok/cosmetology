@@ -5,7 +5,6 @@ import { createVkOnboardingHandoff, getVkOnboardingHandoff, selectVkOnboardingGr
 import { getMiniAppDraft, saveMiniAppDraft, getMiniAppDraftImage } from './services/miniapp-drafts';
 import { validateTelegramMiniAppInitData } from './services/telegram-miniapp-auth';
 import { resolveOrCreateTelegramIdentity } from './services/telegram-identity';
-import { sendTelegramText } from './services/telegram';
 import { adminHtml, listAdminUsers, resetAdminOnboarding } from './admin';
 import { AppError, type Env } from './types';
 
@@ -22,10 +21,11 @@ const vkLinkBackup = String.raw`
    const overlay=document.createElement('div');overlay.id='vk-publish-modal';overlay.style.cssText='position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.42);display:flex;align-items:flex-end;justify-content:center;padding:16px;box-sizing:border-box';
    const card=document.createElement('div');card.style.cssText='width:min(100%,520px);background:var(--tg-theme-bg-color,#fff);color:var(--tg-theme-text-color,#111);border-radius:20px;padding:20px;box-sizing:border-box;box-shadow:0 12px 40px rgba(0,0,0,.25)';
    const title=document.createElement('strong');title.textContent='Публикация в VK';title.style.cssText='display:block;font-size:20px;margin-bottom:10px';
-   const note=document.createElement('p');note.textContent='Если VK попросит отключить VPN: отключите VPN, вернитесь в Telegram в чат Cosmo Sofa и нажмите резервную ссылку на публикацию в VK.';note.style.cssText='margin:0 0 18px;line-height:1.45';
+   const note=document.createElement('p');note.textContent='Если VK попросит отключить VPN: отключите VPN, вернитесь в Telegram — эта форма останется открытой — и нажмите «Резервная ссылка».';note.style.cssText='margin:0 0 18px;line-height:1.45';
    const link=document.createElement('a');link.href=vkUrl;link.target='_blank';link.rel='noopener noreferrer';link.textContent='Продолжить в VK';link.style.cssText='display:block;text-align:center;text-decoration:none;background:var(--tg-theme-button-color,#2481cc);color:var(--tg-theme-button-text-color,#fff);padding:13px 16px;border-radius:12px;font-weight:600';
-   const cancel=document.createElement('button');cancel.type='button';cancel.textContent='Отмена';cancel.style.cssText='width:100%;margin-top:10px;padding:12px;border:0;background:transparent;color:var(--tg-theme-link-color,#2481cc);font:inherit';cancel.addEventListener('click',()=>overlay.remove());
-   card.append(title,note,link,cancel);overlay.append(card);overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.remove()});document.body.append(overlay);
+   const backup=document.createElement('a');backup.href=vkUrl;backup.target='_blank';backup.rel='noopener noreferrer';backup.textContent='Резервная ссылка';backup.style.cssText='display:block;text-align:center;text-decoration:none;margin-top:10px;border:1px solid var(--tg-theme-button-color,#2481cc);color:var(--tg-theme-link-color,#2481cc);padding:12px 16px;border-radius:12px;font-weight:600';
+   const cancel=document.createElement('button');cancel.type='button';cancel.textContent='Отмена';cancel.style.cssText='width:100%;margin-top:8px;padding:12px;border:0;background:transparent;color:var(--tg-theme-link-color,#2481cc);font:inherit';cancel.addEventListener('click',()=>overlay.remove());
+   card.append(title,note,link,backup,cancel);overlay.append(card);overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.remove()});document.body.append(overlay);
  }
  document.addEventListener('click',async event=>{
    if(!event.target.closest?.('#publish-vk')||!tg?.initData)return;
@@ -60,7 +60,20 @@ async function sendVkLinkBackup(req: Request, env: Env) {
   const groupId = Number(group?.groupId);
   if (!Number.isSafeInteger(groupId) || groupId <= 0) throw new AppError('VK_GROUP_NOT_CONNECTED', 'Группа VK не подключена', 409);
   const vkUrl = `https://m.vk.ru/new_post/-${groupId}?redirect_url=${encodeURIComponent(`https://m.vk.ru/club${groupId}`)}&creation_entry_point=group_wall_button&screen=group`;
-  await sendTelegramText(env, String(validated.user.id), `Резервная ссылка на публикацию VK:\n${vkUrl}`);
+  const chatId = String(validated.user.id);
+  const previous = await env.DB.prepare('SELECT message_id AS messageId FROM vk_backup_messages WHERE user_id=?').bind(account.userId).first<{ messageId: number }>();
+  if (previous?.messageId) {
+    const deleteBody = new FormData(); deleteBody.set('chat_id', chatId); deleteBody.set('message_id', String(previous.messageId));
+    await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/deleteMessage`, { method: 'POST', body: deleteBody }).catch(() => null);
+  }
+  const sendBody = new FormData();
+  sendBody.set('chat_id', chatId);
+  sendBody.set('text', 'Публикация в VK\nЕсли переход прервался, используйте резервную ссылку.');
+  sendBody.set('reply_markup', JSON.stringify({ inline_keyboard: [[{ text: 'Резервная ссылка', url: vkUrl }]] }));
+  const sentResponse = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, { method: 'POST', body: sendBody });
+  const sent = await sentResponse.json<any>().catch(() => null);
+  if (!sentResponse.ok || !sent?.ok || !sent?.result?.message_id) throw new AppError('TELEGRAM_ERROR', 'Не удалось отправить резервную ссылку', 502);
+  await env.DB.prepare('INSERT INTO vk_backup_messages(user_id,telegram_chat_id,message_id,updated_at) VALUES(?,?,?,CURRENT_TIMESTAMP) ON CONFLICT(user_id) DO UPDATE SET telegram_chat_id=excluded.telegram_chat_id,message_id=excluded.message_id,updated_at=CURRENT_TIMESTAMP').bind(account.userId, chatId, sent.result.message_id).run();
   return { ok: true, vkUrl };
 }
 
@@ -90,12 +103,7 @@ export default {
       const vkOnboarding = url.pathname.match(/^\/api\/vk-onboarding\/([A-Za-z0-9_-]+)$/);
       if (vkOnboarding && req.method === 'OPTIONS') return new Response(null, { status: 204, headers: onboardingCors });
       if (vkOnboarding && req.method === 'GET' && url.searchParams.get('select') === '1') {
-        const body = JSON.stringify({
-          vkUserId: url.searchParams.get('vkUserId') ?? '',
-          groupId: url.searchParams.get('groupId') ?? '',
-          groupName: url.searchParams.get('groupName') ?? '',
-          screenName: url.searchParams.get('screenName') ?? '',
-        });
+        const body = JSON.stringify({ vkUserId: url.searchParams.get('vkUserId') ?? '', groupId: url.searchParams.get('groupId') ?? '', groupName: url.searchParams.get('groupName') ?? '', screenName: url.searchParams.get('screenName') ?? '' });
         const syntheticRequest = new Request(req.url, { method: 'POST', headers: { 'content-type': 'application/json' }, body });
         return json(await selectVkOnboardingGroup(env, vkOnboarding[1], syntheticRequest, ctx), 200, onboardingCors);
       }
