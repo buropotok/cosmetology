@@ -107,7 +107,7 @@ export default {
       const handoffUploadMatch = url.pathname.match(/^\/api\/vk-handoff-upload\/([A-Za-z0-9_-]+)$/);
       if (req.method === 'POST' && handoffUploadMatch) return json(await uploadVkHandoffImage(env, handoffUploadMatch[1], req));
       const handoffImageMatch = url.pathname.match(/^\/api\/vk-handoff-image\/([A-Za-z0-9_-]+)$/);
-      if (req.method === 'GET' && handoffImageMatch) { const object = await env.IMAGES.get(decodeURIComponent(handoffImageMatch[1])); if (!object) return new Response('Not found', { status: 404 }); const headers = new Headers(); object.writeHttpMetadata(headers); headers.set('etag', object.httpEtag); headers.set('cache-control', 'public, max-age=300'); headers.set('x-content-type-options', 'nosniff'); return new Response(object.body, { headers }); }
+      if (req.method === 'GET' && handoffImageMatch) { const object = await getVkHandoffImage(env, handoffImageMatch[1]); if (!object) return new Response('Not found', { status: 404 }); const headers = new Headers(); object.writeHttpMetadata(headers); headers.set('etag', object.httpEtag); headers.set('cache-control', 'public, max-age=300'); headers.set('x-content-type-options', 'nosniff'); return new Response(object.body, { headers }); }
       if (req.method === 'GET' && url.pathname === '/vk-test-image') { const object = await env.IMAGES.get(VK_TEST_IMAGE_KEY); if (!object) return new Response('Not found', { status: 404 }); const headers = new Headers(); object.writeHttpMetadata(headers); headers.set('etag', object.httpEtag); headers.set('cache-control', 'public, max-age=300'); headers.set('x-content-type-options', 'nosniff'); return new Response(object.body, { headers }); }
       return worker.fetch(req, env);
     } catch (error) {
