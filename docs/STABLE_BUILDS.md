@@ -8,6 +8,23 @@ This file is the canonical history of manually verified stable Cosmo Sofa builds
 - Keep the exact Git commit SHA so the working tree can be restored deterministically.
 - New development continues on `main`; this file records recovery points and does not imply that later commits are stable.
 
+## 2026-09-02 — Stable VK VPN handoff flow
+
+**Commit:** `6f7b86b33715c340fe9fa697f6edd44d2bdb2909`
+
+Verified state:
+
+- Verified on the real target device/runtime by the user: the Telegram → VK publication handoff works correctly.
+- Before opening VK, the Telegram Mini App shows a deterministic two-step instruction instead of trying to detect VPN state:
+  1. `Отключите VPN`
+  2. `Вернитесь сюда и нажмите "Продолжить".`
+- If VPN is already disabled, the user can simply press `Продолжить` without changing anything.
+- The experimental `SHOW IMAGE` VK Bridge probe has been removed; VK onboarding is back on the `vk-save-get-20260901-1` baseline.
+- Do not add Telegram reachability / ping heuristics for VPN detection: Telegram availability does not reliably indicate VPN state because Telegram may work through a proxy or other network path.
+- Future optional UX improvement: immediately before opening the native VK new-post interface, show a compact readiness hint such as `Текст скопирован` / `Изображения сохранены`, followed by an instruction to paste the text and add the saved images in VK. This is documentation only; do not change the currently verified publication mechanics solely to add this hint.
+
+Use this commit as the current rollback point for the verified Telegram → VK handoff UX.
+
 ## 2026-09-01 — Legacy PoC JS/CSS cleanup
 
 **Commit:** `c7a17828ad13a190659c7715cdf097808b2f8af4`
