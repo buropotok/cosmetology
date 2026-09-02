@@ -13,6 +13,10 @@ document.head.append(style);
 function setMain(screen){
  if(!['home','ai','composer'].includes(screen))return;
  document.body.dataset.cosmoMain=screen;
+ const home=document.querySelector('#home-screen'),ai=document.querySelector('#ai-screen'),composer=document.querySelector('#composer-screen');
+ if(home)home.hidden=screen!=='home';
+ if(ai)ai.hidden=screen!=='ai';
+ if(composer)composer.hidden=screen!=='composer';
  window.scrollTo({top:0,left:0,behavior:'instant'});
 }
 
