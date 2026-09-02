@@ -17,3 +17,4 @@ const selector=lastPlatform==='vk'?'.composer-tab[data-platform="vk"],.composer-
 restore();
 window.CosmoSofaDraft={save:saveNow};
 })();
+import('/navigation.js').catch(error=>console.warn('Navigation shell load failed',error));
