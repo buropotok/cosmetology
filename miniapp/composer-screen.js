@@ -10,6 +10,7 @@ style.textContent=`
 #composer-screen.approved-composer .composer-bottom{display:grid!important;gap:10px!important}
 #composer-screen.approved-composer .composer-bottom>button{display:flex!important;align-items:center!important;justify-content:center!important;gap:9px!important;width:100%!important}
 .composer-action-icon{width:22px;height:22px;flex:0 0 22px;display:block}
+.composer-before-after{margin-top:10px;background:#fff!important;color:#2481cc!important;border:1px solid rgba(36,129,204,.24)!important}
 .cosmo-flow-settings{position:absolute;right:0;width:40px;height:40px;border:0;background:transparent;color:#2481cc;padding:8px;display:grid;place-items:center}
 .cosmo-flow-settings svg{width:24px;height:24px}
 .cosmo-ai-prompt button{display:grid!important;place-items:center!important;line-height:1!important;padding:0!important}
@@ -27,6 +28,12 @@ window.addEventListener('click',event=>{if(!settingsReturn||!event.target.closes
 
 const preview=document.querySelector('.composer-telegram-preview'),publish=document.querySelector('#publish'),publishVk=document.querySelector('#publish-vk');
 if(publish)publish.hidden=false;if(publishVk)publishVk.hidden=false;if(preview)preview.hidden=false;
+const bottom=publishVk?.parentElement;
+if(bottom&&!bottom.querySelector('.composer-before-after')){
+ const beforeAfter=document.createElement('button');beforeAfter.type='button';beforeAfter.className='composer-before-after';beforeAfter.textContent='До / После';
+ beforeAfter.addEventListener('click',()=>{window.location.href='/before-after.html'});
+ bottom.append(beforeAfter);
+}
 const icons={
  preview:'<svg class="composer-action-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5C21.27 7.61 17 4.5 12 4.5Zm0 12.5a5 5 0 1 1 0-10 5 5 0 0 1 0 10Zm0-8a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z"/></svg>',
  tg:'<svg class="composer-action-icon" viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="24" fill="#2AABEE"/><path fill="#fff" d="M36.4 14.4 31.9 35c-.34 1.45-1.23 1.8-2.49 1.12l-6.85-5.05-3.3 3.18c-.37.37-.67.67-1.38.67l.49-6.98 12.7-11.48c.55-.49-.12-.77-.86-.28l-15.7 9.88-6.76-2.11c-1.47-.46-1.5-1.47.31-2.18l26.43-10.18c1.22-.45 2.3.28 1.91 2.85Z"/></svg>',
