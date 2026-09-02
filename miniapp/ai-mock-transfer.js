@@ -17,4 +17,6 @@ document.addEventListener('click',async event=>{
  try{const file=await mockPngFile();if(!file)return;const manager=window.CosmoComposerImages;if(manager?.replaceFiles){manager.replaceFiles([file]);return}const input=document.querySelector('#image');if(!input||typeof DataTransfer==='undefined')return;const dt=new DataTransfer();dt.items.add(file);input.files=dt.files;input.dispatchEvent(new Event('change',{bubbles:true}))}catch(error){console.warn('Mock AI PNG transfer failed',error)}
 });
 })();
-import('/composer-rich-text.js').catch(error=>console.warn('Rich text editor load failed',error));
+const RICH_LOADER_VERSION='2026-09-03.1';
+window.CosmoDiagnostics?.log?.('rich-loader-start',{version:RICH_LOADER_VERSION,module:'/composer-rich-text.js'});
+import(`/composer-rich-text.js?v=${encodeURIComponent(RICH_LOADER_VERSION)}`).then(()=>window.CosmoDiagnostics?.log?.('rich-loader-ok',{version:RICH_LOADER_VERSION,apiReady:!!window.CosmoRichEditor})).catch(error=>{window.CosmoDiagnostics?.log?.('rich-loader-error',{version:RICH_LOADER_VERSION,error:error?.message||String(error)});console.warn('Rich text editor load failed',error)});
