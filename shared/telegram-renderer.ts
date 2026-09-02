@@ -1,3 +1,4 @@
+import {bold as tgBold, escapeText as tgEscapeText} from 'tg-rich-messages';
 import type {InlineMark, PostBlock, PostButton, PostDocument, TextRun} from './post-document';
 import {safeLink} from './post-document';
 
@@ -7,8 +8,13 @@ export interface TelegramRender {blocks: TelegramBlock[]; html: string; plainTex
 const escape = (text:string) => text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 const tags: Record<string,[string,string]> = {bold:['<b>','</b>'],italic:['<i>','</i>'],underline:['<u>','</u>'],strikethrough:['<s>','</s>'],spoiler:['<tg-spoiler>','</tg-spoiler>']};
 function renderRun(run: TextRun) {
-  let html=escape(run.text);
-  for(const mark of [...(run.marks??[])].reverse()) {
+  const marks=run.marks??[];
+  // First vertical slice: delegate pure Bold runs to tg-rich-messages while
+  // retaining the existing renderer for all other marks until their toolbar
+  // slices are migrated independently.
+  if(marks.length>0&&marks.every(mark=>mark.type==='bold'))return tgBold(run.text).render();
+  let html=tgEscapeText(run.text);
+  for(const mark of [...marks].reverse()) {
     if(mark.type==='link'){const href=safeLink(mark.href);if(href)html=`<a href="${escape(href)}">${html}</a>`;}
     else {const [open,close]=tags[mark.type];html=open+html+close;}
   }
