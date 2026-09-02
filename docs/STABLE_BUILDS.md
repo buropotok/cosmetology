@@ -8,6 +8,27 @@ This file is the canonical history of manually verified stable Cosmo Sofa builds
 - Keep the exact Git commit SHA so the working tree can be restored deterministically.
 - New development continues on `main`; this file records recovery points and does not imply that later commits are stable.
 
+## 2026-09-02 — Stable VK multi-image save + VPN handoff flow
+
+**Commit:** `6b80b74821f1c938dd419f40a73fa9a263ebccd4`
+
+Verified state:
+
+- Verified on the real Android target device/runtime by the user: the complete Telegram Mini App → VK preparation flow works exactly as intended.
+- On `Опубликовать в ВКонтакте`, publication text is copied to the clipboard when present.
+- All selected images are saved sequentially through the official `Telegram.WebApp.downloadFile()` API.
+- Draft image URLs are short-lived HMAC-signed HTTPS download URLs, so Telegram/Android DownloadManager can fetch them without the Mini App `Authorization: tma ...` header.
+- The images were verified to appear in the Android Gallery on the real device.
+- Telegram provides the native image-download UI/progress itself. Do not add a custom intermediate photo-saving modal or loader on top of it.
+- Only after all image download requests have been accepted does Cosmo Sofa show the VK readiness/VPN modal.
+- The readiness modal confirms prepared materials (`Текст скопирован` when applicable and `Изображения сохранены: N`) and then shows:
+  1. `Отключите VPN`
+  2. `Вернитесь сюда и нажмите "Продолжить".`
+- `Продолжить` opens the existing native VK publication handoff.
+- If an image download is cancelled or cannot be started, the flow stops before the VPN/VK step.
+
+Use this commit as the current rollback point for the verified Telegram → VK publication flow.
+
 ## 2026-09-02 — Stable VK VPN handoff flow
 
 **Commit:** `6f7b86b33715c340fe9fa697f6edd44d2bdb2909`
