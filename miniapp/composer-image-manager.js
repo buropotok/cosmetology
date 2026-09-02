@@ -23,13 +23,23 @@ function showLimit(){
  status.className='error';
 }
 
-input.addEventListener('change',()=>{
- if(internalChange)return;
- const incoming=Array.from(input.files||[]);
- const total=files.length+incoming.length;
- files=[...files,...incoming].slice(0,10);
+function addFiles(incoming){
+ const next=Array.from(incoming||[]);
+ const total=files.length+next.length;
+ files=[...files,...next].slice(0,10);
  notifyChange();
  if(total>10)showLimit();
+}
+
+window.CosmoComposerImages={
+ addFiles,
+ replaceFiles(incoming){files=Array.from(incoming||[]).slice(0,10);notifyChange()},
+ getFiles(){return files.slice()}
+};
+
+input.addEventListener('change',()=>{
+ if(internalChange)return;
+ addFiles(input.files||[]);
 });
 
 removeAll?.addEventListener('click',()=>{files=[]});
