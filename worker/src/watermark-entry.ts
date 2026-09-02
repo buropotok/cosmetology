@@ -1,0 +1,5 @@
+import app from './entry';
+import { AppError, type Env } from './types';
+import { getWatermark, listWatermarks, uploadWatermark } from './services/watermarks';
+const json=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store'}});
+export default{async fetch(req:Request,env:Env,ctx:ExecutionContext){const url=new URL(req.url);try{if(req.method==='GET'&&url.pathname==='/api/miniapp/watermarks')return json(await listWatermarks(req,env));if(req.method==='POST'&&url.pathname==='/api/miniapp/watermarks')return json(await uploadWatermark(req,env),201);const match=url.pathname.match(/^\/api\/miniapp\/watermarks\/([^/]+)$/);if(req.method==='GET'&&match)return getWatermark(req,env,decodeURIComponent(match[1]));return app.fetch(req,env,ctx)}catch(e){const err=e instanceof AppError?e:new AppError('INTERNAL_ERROR','Внутренняя ошибка сервера');if(!(e instanceof AppError))console.error(e);return json({error:{code:err.code,message:err.message}},err.status)}}};

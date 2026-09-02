@@ -1,58 +1,11 @@
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
 	"name": "cosmetology-social-publisher",
-	"main": "src/entry.ts",
+	"main": "src/watermark-entry.ts",
 	"compatibility_date": "2026-08-17",
-	"assets": {
-		"directory": "../miniapp",
-		"binding": "ASSETS",
-		"run_worker_first": ["/api/*", "/history.txt", "/vk-test", "/vk-test/", "/vk-test-image", "/app.js"]
-	},
-	"observability": {
-		"enabled": false,
-		"head_sampling_rate": 1,
-		"logs": {
-			"enabled": true,
-			"head_sampling_rate": 1,
-			"persist": true,
-			"invocation_logs": true
-		},
-		"traces": {
-			"enabled": false,
-			"persist": true,
-			"head_sampling_rate": 1
-		}
-	},
-	"d1_databases": [
-		{
-			"binding": "DB",
-			"database_name": "cosmetology-publisher",
-			"database_id": "377cf613-7559-4aa6-8ff8-ad1d4fce7910",
-			"migrations_dir": "migrations"
-		},
-		{
-			"binding": "cosmetology_publisher",
-			"database_name": "cosmetology-publisher",
-			"database_id": "377cf613-7559-4aa6-8ff8-ad1d4fce7910",
-			"remote": true
-		}
-	],
-	"r2_buckets": [
-		{
-			"binding": "IMAGES",
-			"bucket_name": "cosmetology-publisher-images"
-		},
-		{
-			"bucket_name": "cosmetology-publisher-images",
-			"binding": "cosmetology_publisher_images",
-			"remote": true
-		}
-	],
-	"vars": {
-		"ALLOWED_EXTENSION_ORIGIN": "chrome-extension://kffffpnlinmecknhdohnkfhpdjfogjhk",
-		"GOOGLE_OAUTH_CLIENT_ID": "694062327158-dja91uqmc3k4516fr8adl64q1m099ipm.apps.googleusercontent.com",
-		"MINIAPP_URL": "https://cosmetology-social-publisher.buropotok.workers.dev/",
-		"R2_S3_ENDPOINT": "https://32a28b6229b2584dd5f879fb024b8266.r2.cloudflarestorage.com",
-		"YANDEX_VK_BASE_URL": "https://d5d22q6pf4b58f78a8vs.7qsg961h.apigw.yandexcloud.net"
-	}
+	"assets": {"directory": "../miniapp","binding": "ASSETS","run_worker_first": ["/api/*", "/history.txt", "/vk-test", "/vk-test/", "/vk-test-image", "/app.js"]},
+	"observability": {"enabled": false,"head_sampling_rate": 1,"logs": {"enabled": true,"head_sampling_rate": 1,"persist": true,"invocation_logs": true},"traces": {"enabled": false,"persist": true,"head_sampling_rate": 1}},
+	"d1_databases": [{"binding": "DB","database_name": "cosmetology-publisher","database_id": "377cf613-7559-4aa6-8ff8-ad1d4fce7910","migrations_dir": "migrations"},{"binding": "cosmetology_publisher","database_name": "cosmetology-publisher","database_id": "377cf613-7559-4aa6-8ff8-ad1d4fce7910","remote": true}],
+	"r2_buckets": [{"binding": "IMAGES","bucket_name": "cosmetology-publisher-images"},{"bucket_name": "cosmetology-publisher-images","binding": "cosmetology_publisher_images","remote": true}],
+	"vars": {"ALLOWED_EXTENSION_ORIGIN": "chrome-extension://kffffpnlinmecknhdohnkfhpdjfogjhk","GOOGLE_OAUTH_CLIENT_ID": "694062327158-dja91uqmc3k4516fr8adl64q1m099ipm.apps.googleusercontent.com","MINIAPP_URL": "https://cosmetology-social-publisher.buropotok.workers.dev/","R2_S3_ENDPOINT": "https://32a28b6229b2584dd5f879fb024b8266.r2.cloudflarestorage.com","YANDEX_VK_BASE_URL": "https://d5d22q6pf4b58f78a8vs.7qsg961h.apigw.yandexcloud.net"}
 }
