@@ -8,6 +8,23 @@ This file is the canonical history of manually verified stable Cosmo Sofa builds
 - Keep the exact Git commit SHA so the working tree can be restored deterministically.
 - New development continues on `main`; this file records recovery points and does not imply that later commits are stable.
 
+## 2026-09-03 — Stable Publisher draft entry and navigation UX
+
+**Commit:** `d762e9b66f9584cf07100f2641c136bb32fc193f`
+
+Verified state:
+
+- Verified by the user on the real Android Telegram Mini App runtime after the draft-entry UX and navigation fixes.
+- `Продолжить работу` is shown on the first screen only when a non-empty draft exists.
+- The second screen provides `Ручное создание публикации`; it clears the existing draft before opening screen 3 / Publisher with empty text and no images.
+- While a draft is restoring, image input is disabled and the preview area shows a `Загрузка черновика` loader, preventing user-selected images from racing with stale restore data.
+- Screen ownership/navigation is synchronized so manual publication reliably renders Publisher instead of leaving only the Diagnostics section visible.
+- Programmatic active-photo selection during draft restore no longer produces a false user change / redundant draft save.
+- Diagnostics are sanitized: Telegram init data, signed query strings, and full publication text are not written to the diagnostic log.
+- The existing generation-guarded restore and single-flight draft writer semantics remain intact.
+
+Use this commit as the rollback point for the verified Publisher draft-entry/navigation flow.
+
 ## 2026-09-02 — Stable Mini App draft writer
 
 **Commit:** `032a11cb324088ca6a7eec2bb15bbd8c62ed4cc6`
