@@ -3,10 +3,7 @@ const composer=document.querySelector('#composer-screen');
 if(!composer)return;
 const style=document.createElement('style');
 style.textContent=`
-#composer-screen.approved-composer .composer-assistant{display:none!important}
-#composer-screen.approved-composer .composer-ai-photo{display:none!important}
 #composer-screen.approved-composer .composer-image-actions{grid-template-columns:1fr!important}
-#composer-screen.approved-composer .composer-tabs{display:none!important}
 #composer-screen.approved-composer .composer-bottom{display:grid!important;gap:10px!important}
 #composer-screen.approved-composer .composer-bottom>button{display:flex!important;align-items:center!important;justify-content:center!important;gap:9px!important;width:100%!important}
 .composer-action-icon{width:22px;height:22px;flex:0 0 22px;display:block}
@@ -24,7 +21,15 @@ for(const screen of [document.querySelector('#home-screen'),document.querySelect
  const button=document.createElement('button');button.type='button';button.className='cosmo-flow-settings';button.setAttribute('aria-label','Настройки');button.innerHTML=gearSvg;nav.append(button);
  button.addEventListener('click',()=>{settingsReturn=screen;screen.hidden=true;document.querySelector('#open-settings')?.click()});
 }
-window.addEventListener('click',event=>{if(!settingsReturn||!event.target.closest?.('#close-settings'))return;const target=settingsReturn;settingsReturn=null;setTimeout(()=>{composer.hidden=true;target.hidden=false;window.scrollTo({top:0,behavior:'instant'})},0)},true);
+window.addEventListener('click',event=>{
+ if(!settingsReturn||!event.target.closest?.('#close-settings'))return;
+ event.preventDefault();event.stopImmediatePropagation();
+ const target=settingsReturn;settingsReturn=null;
+ const settings=document.querySelector('#settings-screen');if(settings)settings.hidden=true;
+ composer.hidden=true;
+ const home=document.querySelector('#home-screen'),ai=document.querySelector('#ai-screen');if(home)home.hidden=true;if(ai)ai.hidden=true;
+ target.hidden=false;window.scrollTo({top:0,behavior:'instant'});window.Telegram?.WebApp?.HapticFeedback?.selectionChanged?.();
+},true);
 
 const preview=document.querySelector('.composer-telegram-preview'),publish=document.querySelector('#publish'),publishVk=document.querySelector('#publish-vk');
 if(publish)publish.hidden=false;if(publishVk)publishVk.hidden=false;if(preview)preview.hidden=false;
