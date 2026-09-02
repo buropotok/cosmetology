@@ -8,6 +8,25 @@ This file is the canonical history of manually verified stable Cosmo Sofa builds
 - Keep the exact Git commit SHA so the working tree can be restored deterministically.
 - New development continues on `main`; this file records recovery points and does not imply that later commits are stable.
 
+## 2026-09-02 — Stable Mini App draft writer
+
+**Commit:** `032a11cb324088ca6a7eec2bb15bbd8c62ed4cc6`
+
+Verified state:
+
+- Verified on the real Android Telegram Mini App runtime by the user after repeated draft restore/save/publish cycles.
+- Draft autosave uses a single-flight writer: at most one `POST /api/miniapp/draft` is in flight at a time.
+- Changes are tracked by monotonic revisions; changes made during an in-flight save are coalesced and persisted by a follow-up save instead of starting a parallel request.
+- Image dirty state is revision-aware, so completion of an older request cannot incorrectly acknowledge newer image changes.
+- Already-current revisions do not generate redundant draft POSTs (`draft-save-current`).
+- Duplicate image change notifications are guarded by the current FileList signature before advancing the image revision.
+- Async draft restore is generation-guarded and can be cancelled when entering a new composition, preventing stale restored images from arriving later and overwriting the current screen-3 state.
+- `visibilitychange` / API save requests do not create extra POSTs when the current revision is already persisted.
+- Diagnostics confirmed successful draft restore, draft save, publication, visibility transitions, and subsequent draft reads without request errors.
+- Known performance characteristic, not a correctness failure: draft saves containing images can take several seconds because image binaries are uploaded with the draft. Future optimization may move images to independent uploads referenced by IDs; do not change the stable writer semantics solely to optimize this path without a real-device regression test.
+
+Use this commit as the rollback point for the verified Mini App draft lifecycle.
+
 ## 2026-09-02 — Stable VK multi-image save + VPN handoff flow
 
 **Commit:** `6b80b74821f1c938dd419f40a73fa9a263ebccd4`
