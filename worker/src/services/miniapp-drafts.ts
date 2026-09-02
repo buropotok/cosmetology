@@ -52,10 +52,15 @@ export async function saveMiniAppDraft(request: Request, env: Env) {
 
 export async function getMiniAppDraftImage(request: Request, env: Env, key: string) {
   const account = await accountFor(request, env);
-  const owned = await env.DB.prepare('SELECT 1 AS ok FROM miniapp_draft_images WHERE user_id=? AND r2_key=? LIMIT 1').bind(account.userId,key).first<{ok:number}>();
+  const owned = await env.DB.prepare('SELECT file_name AS fileName, content_type AS contentType FROM miniapp_draft_images WHERE user_id=? AND r2_key=? LIMIT 1').bind(account.userId,key).first<{fileName:string|null;contentType:string|null}>();
   if (!owned) throw new AppError('NOT_FOUND','Изображение не найдено',404);
   const object = await env.IMAGES.get(key);
   if (!object) throw new AppError('NOT_FOUND','Изображение не найдено',404);
   const headers = new Headers({'cache-control':'private, max-age=3600'}); object.writeHttpMetadata(headers); headers.set('etag',object.httpEtag);
+  if (owned.contentType) headers.set('content-type',owned.contentType);
+  const safeFileName=(owned.fileName||'cosmo-sofa.jpg').replace(/["\\\r\n]/g,'_');
+  headers.set('content-disposition',`attachment; filename="${safeFileName}"`);
+  headers.set('access-control-allow-origin','https://web.telegram.org');
+  headers.set('x-content-type-options','nosniff');
   return new Response(object.body,{headers});
 }
