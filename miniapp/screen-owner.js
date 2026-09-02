@@ -18,10 +18,10 @@ function setMain(screen){
 
 setMain('home');
 document.addEventListener('click',event=>{
- const target=event.target.closest?.('#flow-new,#flow-continue,#flow-ai-back,#flow-edit,#flow-composer-back');
+ const target=event.target.closest?.('#flow-new,#flow-continue,#flow-ai-back,#flow-edit,#flow-manual,#flow-composer-back');
  if(!target)return;
  if(target.id==='flow-new')setMain('ai');
- else if(target.id==='flow-continue'||target.id==='flow-edit')setMain('composer');
+ else if(target.id==='flow-continue'||target.id==='flow-edit'||target.id==='flow-manual')setMain('composer');
  else if(target.id==='flow-ai-back'||target.id==='flow-composer-back')setMain('home');
 },true);
 
