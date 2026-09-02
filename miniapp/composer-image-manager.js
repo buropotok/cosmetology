@@ -37,9 +37,15 @@ window.CosmoComposerImages={
  getFiles(){return files.slice()}
 };
 
-input.addEventListener('change',()=>{
+input.addEventListener('change',event=>{
  if(internalChange)return;
- addFiles(input.files||[]);
+ const incoming=Array.from(input.files||[]).slice(0,10);
+ // A native picker change adds newly selected files to our managed set.
+ // Programmatic changes (draft restore / other app code) already contain the
+ // complete desired FileList and must replace it, otherwise restored files
+ // are appended to the manager's existing state and appear as duplicates.
+ if(event.isTrusted)addFiles(incoming);
+ else{files=incoming;internalChange=true;try{input.dispatchEvent(new Event('change',{bubbles:true}))}finally{internalChange=false}}
 });
 
 removeAll?.addEventListener('click',()=>{files=[]});
