@@ -11,6 +11,9 @@ async function mockPngFile(){
 }
 document.addEventListener('click',async event=>{
  if(!event.target.closest?.('#flow-edit'))return;
- try{const file=await mockPngFile();if(!file)return;const input=document.querySelector('#image');if(!input||typeof DataTransfer==='undefined')return;const dt=new DataTransfer();dt.items.add(file);input.files=dt.files;input.dispatchEvent(new Event('change',{bubbles:true}))}catch(error){console.warn('Mock AI PNG transfer failed',error)}
+ // Entering screen 3 starts a new composition. Any in-flight async draft
+ // image restore belongs to the previous state and must not arrive later.
+ window.CosmoSofaDraft?.cancelRestore?.();
+ try{const file=await mockPngFile();if(!file)return;const manager=window.CosmoComposerImages;if(manager?.replaceFiles){manager.replaceFiles([file]);return}const input=document.querySelector('#image');if(!input||typeof DataTransfer==='undefined')return;const dt=new DataTransfer();dt.items.add(file);input.files=dt.files;input.dispatchEvent(new Event('change',{bubbles:true}))}catch(error){console.warn('Mock AI PNG transfer failed',error)}
 });
 })();
