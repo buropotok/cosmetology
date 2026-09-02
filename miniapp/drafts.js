@@ -17,4 +17,4 @@ const selector=lastPlatform==='vk'?'.composer-tab[data-platform="vk"],.composer-
 restore();
 window.CosmoSofaDraft={save:saveNow};
 })();
-import('/navigation.js').then(()=>Promise.all([import('/ai-mock-transfer.js'),import('/composer-screen.js')])).catch(error=>console.warn('Navigation shell load failed',error));
+import('/navigation.js').then(()=>Promise.all([import('/ai-mock-transfer.js'),import('/composer-screen.js'),import('/screen-owner.js')])).catch(error=>console.warn('Navigation shell load failed',error));
