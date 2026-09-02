@@ -57,3 +57,4 @@
   toolbar.querySelectorAll('.composer-tool-panel').forEach(panel=>panel.addEventListener('click',e=>e.stopPropagation()));
   document.addEventListener('click',()=>toolbar.querySelectorAll('.composer-tool-menu.open').forEach(x=>x.classList.remove('open')));
 })();
+import('/navigation.js').then(()=>import('/composer-screen.js')).catch(error=>console.error('Screen setup failed',error));
