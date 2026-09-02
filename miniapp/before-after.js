@@ -1,6 +1,6 @@
 (()=>{
-const photos={before:null,after:null};let layout='horizontal',pending='before',editing=null,editSnapshot=null;
-const $=id=>document.getElementById(id),slots=$('slots'),file=$('file'),editor=$('editor'),stage=$('stage'),editImage=$('editImage'),rotation=$('rotation');
+const photos={before:null,after:null};let layout='horizontal',pending='before',editing=null,editSnapshot=null,cropHeight=null;
+const $=id=>document.getElementById(id),slots=$('slots'),file=$('file'),editor=$('editor'),stage=$('stage'),editImage=$('editImage'),rotation=$('rotation'),cropHandle=$('cropHandle');
 function transformFor(p){return `translate(calc(-50% + ${p.x}px),calc(-50% + ${p.y}px)) scale(${p.scale}) rotate(${p.rotation}deg)`}
 function render(){slots.dataset.layout=layout;document.querySelectorAll('[data-layout]').forEach(b=>b.classList.toggle('selected',b.dataset.layout===layout));['before','after'].forEach(s=>{const el=document.querySelector(`[data-slot=${s}]`),img=el.querySelector('img'),p=photos[s];el.classList.toggle('loaded',!!p);if(p){img.src=p.url;img.style.width=`${p.img.naturalWidth}px`;img.style.height=`${p.img.naturalHeight}px`;img.style.transform=transformFor(p)}});$('finish').disabled=!(photos.before||photos.after)}
 document.querySelectorAll('[data-layout]').forEach(b=>b.onclick=()=>{layout=b.dataset.layout;requestAnimationFrame(()=>{refitForComposite();render()})});
@@ -21,5 +21,10 @@ function beginGesture(){if(!editing)return;const a=[...pointers.values()],p=phot
 stage.onpointerdown=e=>{stage.setPointerCapture(e.pointerId);pointers.set(e.pointerId,point(e));beginGesture()};
 stage.onpointermove=e=>{if(!editing||!pointers.has(e.pointerId))return;pointers.set(e.pointerId,point(e));const a=[...pointers.values()],p=photos[editing];if(a.length===1){if(!gesture||gesture.type!=='pan')beginGesture();const g=gesture;p.x=g.x+a[0].x-g.start.x;p.y=g.y+a[0].y-g.start.y}else if(a.length>=2){if(!gesture||gesture.type!=='pinch')beginGesture();const d=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y);p.scale=Math.max(.1,Math.min(10,gesture.scale*d/Math.max(1,gesture.distance)))}transform()};
 function end(e){pointers.delete(e.pointerId);beginGesture()}stage.onpointerup=end;stage.onpointercancel=end;
+let cropGesture=null;
+function startCrop(e){e.preventDefault();e.stopPropagation();const r=slots.getBoundingClientRect();cropGesture={startY:e.clientY,startHeight:r.height};cropHandle.setPointerCapture?.(e.pointerId)}
+function moveCrop(e){if(!cropGesture)return;e.preventDefault();const minHeight=180,maxHeight=Math.max(minHeight,window.innerHeight-120);const next=Math.max(minHeight,Math.min(maxHeight,cropGesture.startHeight+(e.clientY-cropGesture.startY)));cropHeight=next;slots.style.height=`${next}px`;requestAnimationFrame(()=>{refitForComposite();render()})}
+function endCrop(e){if(!cropGesture)return;cropGesture=null;cropHandle.releasePointerCapture?.(e.pointerId)}
+cropHandle.onpointerdown=startCrop;cropHandle.onpointermove=moveCrop;cropHandle.onpointerup=endCrop;cropHandle.onpointercancel=endCrop;
 $('finish').onclick=()=>history.back();$('back').onclick=()=>history.back();window.addEventListener('beforeunload',()=>['before','after'].forEach(s=>photos[s]&&URL.revokeObjectURL(photos[s].url)));render();
 })();
