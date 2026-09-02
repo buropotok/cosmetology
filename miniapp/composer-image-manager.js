@@ -1,7 +1,8 @@
 (()=>{
 const input=document.querySelector('#image'),previews=document.querySelector('#previews'),removeAll=document.querySelector('#remove-image'),status=document.querySelector('#status');
 if(!input||!previews)return;
-let files=Array.from(input.files||[]).slice(0,10),internalChange=false;
+let files=Array.from(input.files||[]).slice(0,10),internalChange=false,wideCheckGeneration=0;
+const VK_MAX_ASPECT=16/9;
 
 function syncInput(){
  if(typeof DataTransfer==='undefined')return false;
@@ -15,12 +16,42 @@ function notifyChange(){
  if(!syncInput())return;
  internalChange=true;
  try{input.dispatchEvent(new Event('change',{bubbles:true}))}finally{internalChange=false}
+ void updateVkAspectWarning();
 }
 
 function showLimit(){
  if(!status)return;
  status.textContent='Можно выбрать не больше 10 фотографий. Будут использованы первые 10.';
  status.className='error';
+}
+
+function readImageSize(file){
+ return new Promise(resolve=>{
+  const url=URL.createObjectURL(file),img=new Image();
+  const done=value=>{URL.revokeObjectURL(url);resolve(value)};
+  img.onload=()=>done({width:img.naturalWidth,height:img.naturalHeight});
+  img.onerror=()=>done(null);
+  img.src=url;
+ });
+}
+
+function formatIndexes(indexes){
+ if(indexes.length===1)return `Изображение №${indexes[0]}`;
+ if(indexes.length===2)return `Изображения №${indexes[0]} и №${indexes[1]}`;
+ return `Изображения ${indexes.slice(0,-1).map(n=>`№${n}`).join(', ')} и №${indexes[indexes.length-1]}`;
+}
+
+async function updateVkAspectWarning(){
+ const generation=++wideCheckGeneration;
+ const current=files.slice();
+ const sizes=await Promise.all(current.map(readImageSize));
+ if(generation!==wideCheckGeneration)return;
+ const wide=[];
+ sizes.forEach((size,index)=>{if(size?.height>0&&size.width/size.height>VK_MAX_ASPECT+0.001)wide.push(index+1)});
+ let warning=document.querySelector('#vk-aspect-warning');
+ if(!wide.length){warning?.remove();return}
+ if(!warning){warning=document.createElement('p');warning.id='vk-aspect-warning';warning.setAttribute('role','status');warning.style.cssText='margin:8px 0 0;padding:10px 12px;border-radius:10px;background:rgba(255,149,0,.14);color:#b35a00;font-size:14px;line-height:1.35';previews.parentElement?.append(warning)}
+ warning.textContent=`${formatIndexes(wide)} шире 16:9. ВКонтакте обрежет ${wide.length===1?'его':'их'} по краям.`;
 }
 
 function addFiles(incoming){
@@ -45,10 +76,10 @@ input.addEventListener('change',event=>{
  // complete desired FileList and must replace it, otherwise restored files
  // are appended to the manager's existing state and appear as duplicates.
  if(event.isTrusted)addFiles(incoming);
- else{files=incoming;internalChange=true;try{input.dispatchEvent(new Event('change',{bubbles:true}))}finally{internalChange=false}}
+ else{files=incoming;internalChange=true;try{input.dispatchEvent(new Event('change',{bubbles:true}))}finally{internalChange=false}void updateVkAspectWarning()}
 });
 
-removeAll?.addEventListener('click',()=>{files=[]});
+removeAll?.addEventListener('click',()=>{files=[];void updateVkAspectWarning()});
 
 function decorate(){
  const images=[...previews.querySelectorAll('img')];
@@ -80,5 +111,6 @@ function decorate(){
 }
 
 decorate();
+void updateVkAspectWarning();
 new MutationObserver(decorate).observe(previews,{childList:true});
 })();
