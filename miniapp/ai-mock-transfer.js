@@ -15,7 +15,7 @@ document.addEventListener('click',async event=>{
  try{const file=await mockPngFile();if(!file)return;const manager=window.CosmoComposerImages;if(manager?.replaceFiles){manager.replaceFiles([file]);return}const input=document.querySelector('#image');if(!input||typeof DataTransfer==='undefined')return;const dt=new DataTransfer();dt.items.add(file);input.files=dt.files;input.dispatchEvent(new Event('change',{bubbles:true}))}catch(error){console.warn('Mock AI PNG transfer failed',error)}
 });
 })();
-const RICH_LOADER_VERSION='2026-09-03.5';
+const RICH_LOADER_VERSION='2026-09-03.6';
 window.CosmoDiagnostics?.log?.('rich-loader-start',{version:RICH_LOADER_VERSION,module:'/composer-tiptap.js'});
 import(`/composer-tiptap.js?v=${encodeURIComponent(RICH_LOADER_VERSION)}`)
  .then(()=>import(`/composer-tiptap-draft-bridge.js?v=${encodeURIComponent(RICH_LOADER_VERSION)}`))
