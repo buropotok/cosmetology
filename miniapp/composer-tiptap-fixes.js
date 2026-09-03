@@ -3,35 +3,34 @@
   if(!host)return;
 
   const log=(kind,data={})=>window.CosmoDiagnostics?.log?.(kind,data);
-  const getSummary=target=>{
+  const getDetails=target=>{
     const element=target instanceof Element?target:target?.parentElement;
-    const summary=element?.closest?.('summary');
-    return summary&&host.contains(summary)?summary:null;
+    const details=element?.closest?.('details');
+    return details instanceof HTMLDetailsElement&&host.contains(details)?details:null;
   };
-  const isArrowHit=(event,summary)=>{
+  const isArrowHit=(event,details)=>{
+    const summary=details.querySelector(':scope > summary');
+    if(!(summary instanceof HTMLElement))return false;
     const rect=summary.getBoundingClientRect();
-    const style=getComputedStyle(summary);
-    const direction=style.direction;
-    const markerWidth=28;
+    const direction=getComputedStyle(summary).direction;
+    const markerWidth=32;
     return direction==='rtl'
-      ? event.clientX>=rect.right-markerWidth&&event.clientX<=rect.right
-      : event.clientX>=rect.left&&event.clientX<=rect.left+markerWidth;
+      ? event.clientX>=rect.right&&event.clientX<=rect.right+markerWidth
+      : event.clientX>=rect.left-markerWidth&&event.clientX<=rect.left;
   };
 
-  log('details-toggle-fix-ready',{detailsCount:host.querySelectorAll('details').length});
+  log('details-toggle-fix-ready',{detailsCount:host.querySelectorAll('details').length,mode:'outside-summary-marker'});
 
   host.addEventListener('click',event=>{
-    const summary=getSummary(event.target);
-    if(!summary||!isArrowHit(event,summary))return;
-    const details=summary.parentElement;
-    if(!(details instanceof HTMLDetailsElement))return;
+    const details=getDetails(event.target);
+    if(!details||!isArrowHit(event,details))return;
 
-    // ProseMirror/contenteditable WebViews may suppress the native <summary>
-    // default action. Toggle only for the disclosure-marker hit area; clicks
-    // on the editable summary text remain untouched.
+    // In Telegram WebView the native disclosure marker can hit DETAILS rather
+    // than SUMMARY. Toggle only in the marker strip immediately beside the
+    // summary; the editable summary text and all other editor content remain untouched.
     event.preventDefault();
     details.open=!details.open;
-    log('details-arrow-toggle',{open:details.open,clientX:event.clientX,clientY:event.clientY});
+    log('details-arrow-toggle',{open:details.open,clientX:event.clientX,clientY:event.clientY,targetTag:event.target instanceof Element?event.target.tagName:null});
   },true);
 
   host.addEventListener('toggle',event=>{
