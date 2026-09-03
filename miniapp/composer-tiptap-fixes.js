@@ -13,28 +13,42 @@
       padding:6px 8px;
       border:1px solid #d7d9de;
       border-radius:8px;
+      display:grid;
+      grid-template-columns:32px minmax(0,1fr);
+      column-gap:6px;
+      align-items:start;
     }
     .composer-tiptap-editor .cosmo-details-toggle{
+      grid-column:1;
+      grid-row:1;
       display:inline-flex;
       align-items:center;
       justify-content:center;
-      min-height:32px;
-      margin:0 0 6px;
-      padding:4px 10px;
+      width:32px;
+      height:32px;
+      padding:0;
       border:1px solid #c9cdd3;
       border-radius:8px;
       background:#f5f6f7;
       color:inherit;
       font:inherit;
-      font-size:13px;
+      font-size:16px;
+      line-height:1;
       cursor:pointer;
       touch-action:manipulation;
       user-select:none;
       -webkit-user-select:none;
     }
+    .composer-tiptap-editor .cosmo-details-content{
+      grid-column:2;
+      grid-row:1;
+      min-width:0;
+      padding-top:5px;
+    }
     .composer-tiptap-editor .cosmo-details-content>summary{
       display:block;
       margin:0;
+      min-height:22px;
       font-weight:600;
       cursor:text;
       list-style:none;
@@ -54,7 +68,8 @@
     button.className='cosmo-details-toggle';
     button.contentEditable='false';
     button.setAttribute('aria-expanded','false');
-    button.textContent='Развернуть';
+    button.setAttribute('aria-label','Развернуть');
+    button.textContent='›';
 
     const contentDOM=document.createElement('div');
     contentDOM.className='cosmo-details-content';
@@ -65,7 +80,8 @@
     const render=()=>{
       dom.classList.toggle('is-open',open);
       button.setAttribute('aria-expanded',String(open));
-      button.textContent=open?'Свернуть':'Развернуть';
+      button.setAttribute('aria-label',open?'Свернуть':'Развернуть');
+      button.textContent=open?'⌄':'›';
     };
     render();
 
