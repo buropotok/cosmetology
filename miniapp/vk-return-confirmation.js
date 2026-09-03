@@ -13,3 +13,4 @@ document.addEventListener('visibilitychange',()=>{if(!awaitingVkReturn)return;if
 window.addEventListener('focus',()=>{if(awaitingVkReturn&&wasHiddenAfterVk)setTimeout(showPublishedQuestion,120)});
 const nativeFetch=window.fetch.bind(window);window.fetch=async(input,init={})=>{const url=typeof input==='string'?input:input?.url||'',method=(init.method||(typeof input!=='string'&&input?.method)||'GET').toUpperCase();const response=await nativeFetch(input,init);if(method==='POST'&&String(url).includes('/api/miniapp/publish')&&response.ok){telegramPublished=true;queueMicrotask(clearCompletedDraft)}return response};
 })();
+import('/onboarding-policy.js').catch(error=>console.warn('Onboarding policy load failed',error));
