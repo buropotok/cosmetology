@@ -11,35 +11,6 @@ import { AppError, type Env } from './types';
 const VK_TEST_IMAGE_KEY = 'posts/2026/08/10.png';
 const json = (body: unknown, status = 200, extra: HeadersInit = {}) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', ...extra } });
 const onboardingCors = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'content-type', 'access-control-allow-methods': 'GET, POST, OPTIONS' };
-const vkLinkBackup = String.raw`
-;(()=>{
- const tg=window.Telegram?.WebApp;
- const status=document.querySelector('#status'),button=document.querySelector('#publish-vk'),text=document.querySelector('#text'),image=document.querySelector('#image');
- const setStatus=(message,kind='')=>{if(status){status.textContent=message;status.className=kind}};
- function showModal(vkUrl){
-   document.querySelector('#vk-publish-modal')?.remove();
-   const overlay=document.createElement('div');overlay.id='vk-publish-modal';overlay.style.cssText='position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.42);display:flex;align-items:flex-end;justify-content:center;padding:16px;box-sizing:border-box';
-   const card=document.createElement('div');card.style.cssText='width:min(100%,520px);background:var(--tg-theme-bg-color,#fff);color:var(--tg-theme-text-color,#111);border-radius:20px;padding:20px;box-sizing:border-box;box-shadow:0 12px 40px rgba(0,0,0,.25)';
-   const title=document.createElement('strong');title.textContent='Публикация в VK';title.style.cssText='display:block;font-size:20px;margin-bottom:10px';
-   const note=document.createElement('p');note.style.cssText='margin:0 0 18px;line-height:1.55;white-space:pre-line';note.textContent='1. Отключите VPN\n2. Вернитесь сюда и нажмите "Продолжить".';
-   const link=document.createElement('a');link.href=vkUrl;link.target='_blank';link.rel='noopener noreferrer';link.textContent='Продолжить';link.style.cssText='display:block;text-align:center;text-decoration:none;background:var(--tg-theme-button-color,#2481cc);color:var(--tg-theme-button-text-color,#fff);padding:13px 16px;border-radius:12px;font-weight:600';
-   const cancel=document.createElement('button');cancel.type='button';cancel.textContent='Отмена';cancel.style.cssText='width:100%;margin-top:8px;padding:12px;border:0;background:transparent;color:var(--tg-theme-link-color,#2481cc);font:inherit';cancel.addEventListener('click',()=>overlay.remove());
-   card.append(title,note,link,cancel);overlay.append(card);overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.remove()});document.body.append(overlay);
- }
- document.addEventListener('click',async event=>{
-   if(!event.target.closest?.('#publish-vk')||!tg?.initData)return;
-   event.preventDefault();event.stopImmediatePropagation();
-   const hasText=Boolean(text?.value?.trim()),hasImages=Boolean(image?.files?.length);if(!hasText&&!hasImages){setStatus('Добавьте текст или изображение.','error');return}
-   if(button){button.disabled=true;button.textContent='Подготавливаем…'}
-   try{
-     const response=await fetch('/api/miniapp/vk-link',{method:'POST',headers:{Authorization:'tma '+tg.initData},body:''});
-     const result=await response.json().catch(()=>null);if(!response.ok||!result?.vkUrl)throw new Error(result?.error?.message||'Не удалось подготовить публикацию VK.');
-     if(hasText){try{await navigator.clipboard.writeText(text.value)}catch{setStatus('Не удалось скопировать текст. Скопируйте его вручную перед публикацией.','error')}}
-     showModal(result.vkUrl);
-   }catch(error){setStatus(error instanceof Error?error.message:'Не удалось подготовить публикацию VK.','error')}
-   finally{if(button){button.disabled=false;button.textContent='Открыть в VK'}}
- },true);
-})();`;
 
 async function sendVkLinkBackup(req: Request, env: Env) {
   const initData = req.headers.get('authorization')?.match(/^tma\s+(.+)$/i)?.[1] ?? '';
@@ -67,7 +38,7 @@ async function sendVkLinkBackup(req: Request, env: Env) {
 export default { async fetch(req: Request, env: Env, ctx: ExecutionContext) {
   const url = new URL(req.url);
   try {
-    if (req.method === 'GET' && url.pathname === '/app.js') { const asset=await env.ASSETS.fetch(req);const source=await asset.text();return new Response(`${source}\nimport('/drafts.js').catch(error=>console.warn('Draft client load failed',error));\n${vkLinkBackup}`,{headers:{'content-type':'text/javascript; charset=utf-8','cache-control':'no-store'}}); }
+    if (req.method === 'GET' && url.pathname === '/app.js') { const asset=await env.ASSETS.fetch(req);const source=await asset.text();return new Response(`${source}\nimport('/drafts.js').catch(error=>console.warn('Draft client load failed',error));`,{headers:{'content-type':'text/javascript; charset=utf-8','cache-control':'no-store'}}); }
     if (req.method === 'GET' && url.pathname === '/settings.js') { const asset=await env.ASSETS.fetch(req);const source=await asset.text();return new Response(`${source}\nimport('/vk-onboarding.js').catch(error=>console.warn('VK onboarding state load failed',error));`,{headers:{'content-type':'text/javascript; charset=utf-8','cache-control':'no-store'}}); }
     if (req.method === 'POST' && url.pathname === '/api/miniapp/vk-link') return json(await sendVkLinkBackup(req,env));
     if (req.method === 'GET' && url.pathname === '/api/miniapp/draft') return json(await getMiniAppDraft(req,env));
