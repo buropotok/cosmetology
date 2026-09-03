@@ -4,7 +4,7 @@ import { resolveOrCreateTelegramIdentity } from './telegram-identity';
 import { replicateVkArtifactToYandex } from './yandex-vk-replica';
 
 const TTL_SECONDS = 15 * 60;
-const VK_APP_ID = '54742219';
+const VK_APP_ID = '54742217';
 
 function initDataFrom(request: Request) { return request.headers.get('authorization')?.match(/^tma\s+(.+)$/i)?.[1] ?? ''; }
 function bytesToToken(bytes: Uint8Array) { let binary=''; for(const byte of bytes) binary+=String.fromCharCode(byte); return btoa(binary).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/g,''); }
