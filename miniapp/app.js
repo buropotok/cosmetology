@@ -1,3 +1,4 @@
+// deploy-marker: vk-download-diagnostics-2026-09-04-02
 const webApp=window.Telegram?.WebApp;webApp?.ready();webApp?.expand();
 const form=document.querySelector('#publish-form'),imageInput=document.querySelector('#image'),previewWrap=document.querySelector('#preview-wrap'),previews=document.querySelector('#previews'),removeImage=document.querySelector('#remove-image'),text=document.querySelector('#text'),publish=document.querySelector('#publish'),status=document.querySelector('#status'),publishVk=document.querySelector('#publish-vk'),composerScreen=document.querySelector('#composer-screen'),settingsScreen=document.querySelector('#settings-screen'),openSettings=document.querySelector('#open-settings'),closeSettings=document.querySelector('#close-settings');
 let previewUrls=[],activePhotoIndex=0;const user=webApp?.initDataUnsafe?.user;if(user?.first_name)document.querySelector('#greeting').textContent=`Здравствуйте, ${user.first_name}`;
