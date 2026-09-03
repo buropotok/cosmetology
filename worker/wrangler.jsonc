@@ -3,7 +3,7 @@
 	"name": "cosmetology-social-publisher",
 	"main": "src/watermark-entry.ts",
 	"compatibility_date": "2026-08-17",
-	"assets": {"directory": "../miniapp","binding": "ASSETS","run_worker_first": ["/api/*", "/history.txt", "/vk-test", "/vk-test/", "/vk-test-image", "/app.js"]},
+	"assets": {"directory": "../miniapp","binding": "ASSETS","run_worker_first": ["/api/*", "/history.txt", "/vk-test", "/vk-test/", "/vk-test-image", "/app.js", "/settings.js"]},
 	"observability": {"enabled": false,"head_sampling_rate": 1,"logs": {"enabled": true,"head_sampling_rate": 1,"persist": true,"invocation_logs": true},"traces": {"enabled": false,"persist": true,"head_sampling_rate": 1}},
 	"d1_databases": [{"binding": "DB","database_name": "cosmetology-publisher","database_id": "377cf613-7559-4aa6-8ff8-ad1d4fce7910","migrations_dir": "migrations"},{"binding": "cosmetology_publisher","database_name": "cosmetology-publisher","database_id": "377cf613-7559-4aa6-8ff8-ad1d4fce7910","remote": true}],
 	"r2_buckets": [{"binding": "IMAGES","bucket_name": "cosmetology-publisher-images"},{"bucket_name": "cosmetology-publisher-images","binding": "cosmetology_publisher_images","remote": true}],
