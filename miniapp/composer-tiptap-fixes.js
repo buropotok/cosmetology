@@ -1,41 +1,95 @@
 (()=>{
+  const api=window.CosmoRichEditor;
+  const editor=api?.editor;
   const host=document.querySelector('.composer-tiptap-editor');
-  if(!host)return;
+  if(!editor?.view||!host)return;
 
   const log=(kind,data={})=>window.CosmoDiagnostics?.log?.(kind,data);
-  const getDetails=target=>{
-    const element=target instanceof Element?target:target?.parentElement;
-    const details=element?.closest?.('details');
-    return details instanceof HTMLDetailsElement&&host.contains(details)?details:null;
+
+  const style=document.createElement('style');
+  style.textContent=`
+    .composer-tiptap-editor .cosmo-details-node{
+      margin:8px 0;
+      padding:6px 8px;
+      border:1px solid #d7d9de;
+      border-radius:8px;
+    }
+    .composer-tiptap-editor .cosmo-details-toggle{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      min-height:32px;
+      margin:0 0 6px;
+      padding:4px 10px;
+      border:1px solid #c9cdd3;
+      border-radius:8px;
+      background:#f5f6f7;
+      color:inherit;
+      font:inherit;
+      font-size:13px;
+      cursor:pointer;
+      touch-action:manipulation;
+      user-select:none;
+      -webkit-user-select:none;
+    }
+    .composer-tiptap-editor .cosmo-details-content>summary{
+      display:block;
+      margin:0;
+      font-weight:600;
+      cursor:text;
+      list-style:none;
+    }
+    .composer-tiptap-editor .cosmo-details-content>summary::-webkit-details-marker{display:none}
+    .composer-tiptap-editor .cosmo-details-node:not(.is-open) [data-cosmo-details-body]{display:none}
+    .composer-tiptap-editor .cosmo-details-node.is-open [data-cosmo-details-body]{display:block}
+  `;
+  document.head.append(style);
+
+  const detailsNodeView=()=>{
+    const dom=document.createElement('div');
+    dom.className='cosmo-details-node';
+
+    const button=document.createElement('button');
+    button.type='button';
+    button.className='cosmo-details-toggle';
+    button.contentEditable='false';
+    button.setAttribute('aria-expanded','false');
+    button.textContent='Развернуть';
+
+    const contentDOM=document.createElement('div');
+    contentDOM.className='cosmo-details-content';
+
+    dom.append(button,contentDOM);
+
+    let open=false;
+    const render=()=>{
+      dom.classList.toggle('is-open',open);
+      button.setAttribute('aria-expanded',String(open));
+      button.textContent=open?'Свернуть':'Развернуть';
+    };
+    render();
+
+    button.addEventListener('pointerdown',event=>{
+      event.preventDefault();
+      event.stopPropagation();
+    });
+    button.addEventListener('click',event=>{
+      event.preventDefault();
+      event.stopPropagation();
+      open=!open;
+      render();
+      log('details-button-toggle',{open});
+    });
+
+    return{
+      dom,
+      contentDOM,
+      stopEvent:event=>event.target===button||button.contains(event.target),
+      ignoreMutation:mutation=>(mutation.type==='attributes'&&(mutation.target===dom||mutation.target===button))||button.contains(mutation.target),
+    };
   };
-  const isArrowHit=(event,details)=>{
-    const summary=details.querySelector(':scope > summary');
-    if(!(summary instanceof HTMLElement))return false;
-    const rect=summary.getBoundingClientRect();
-    const direction=getComputedStyle(summary).direction;
-    const markerWidth=32;
-    return direction==='rtl'
-      ? event.clientX>=rect.right&&event.clientX<=rect.right+markerWidth
-      : event.clientX>=rect.left-markerWidth&&event.clientX<=rect.left;
-  };
 
-  log('details-toggle-fix-ready',{detailsCount:host.querySelectorAll('details').length,mode:'outside-summary-marker'});
-
-  host.addEventListener('click',event=>{
-    const details=getDetails(event.target);
-    if(!details||!isArrowHit(event,details))return;
-
-    // In Telegram WebView the native disclosure marker can hit DETAILS rather
-    // than SUMMARY. Toggle only in the marker strip immediately beside the
-    // summary; the editable summary text and all other editor content remain untouched.
-    event.preventDefault();
-    details.open=!details.open;
-    log('details-arrow-toggle',{open:details.open,clientX:event.clientX,clientY:event.clientY,targetTag:event.target instanceof Element?event.target.tagName:null});
-  },true);
-
-  host.addEventListener('toggle',event=>{
-    const details=event.target;
-    if(!(details instanceof HTMLDetailsElement)||!host.contains(details))return;
-    log('details-toggle',{open:details.open});
-  },true);
+  const current=editor.view.props.nodeViews||{};
+  editor.view.setProps({nodeViews:{...current,details:detailsNodeView}});
+  log('details-nodeview-ready',{detailsCount:editor.state.doc.content.content.filter(node=>node.type.name==='details').length});
 })();
