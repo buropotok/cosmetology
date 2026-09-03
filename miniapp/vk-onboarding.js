@@ -33,3 +33,4 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden&&waiting)s
 window.addEventListener('focus',()=>{if(waiting)setTimeout(refresh,400)});
 void refresh();
 })();
+import('/onboarding-ux.js').catch(error=>console.warn('Onboarding UX load failed',error));
