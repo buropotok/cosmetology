@@ -1,5 +1,5 @@
-import {bold as tgBold, details as tgDetails, doc as tgDoc, list as tgList, paragraph as tgParagraph, escapeText as tgEscapeText} from 'tg-rich-messages';
-import type {InlineMark, PostBlock, PostButton, PostDocument, TextRun} from './post-document';
+import {bold as tgBold, escapeText as tgEscapeText} from 'tg-rich-messages';
+import type {InlineMark, PostBlock, PostButton, PostDocument, PostListItem, TextRun} from './post-document';
 import {safeLink} from './post-document';
 
 export interface TelegramSegment {text: string; marks: InlineMark[]}
@@ -11,14 +11,17 @@ function renderRun(run: TextRun) {const marks=run.marks??[];if(marks.length>0&&m
 function segments(content:TextRun[], heading=false):TelegramSegment[]{return content.map(run=>({text:run.text,marks:[...(heading?[{type:'bold'} as InlineMark]:[]),...(run.marks??[])]}))}
 function blockHtml(block:TelegramBlock){const title=block.title?.map(s=>renderRun({text:s.text,marks:s.marks})).join(''),inner=(title?`<b>${title}</b>\n\n`:'')+block.segments.map(s=>renderRun({text:s.text,marks:s.marks})).join('');if(block.kind==='quote')return `<blockquote>${inner}</blockquote>`;if(block.kind==='expandable_quote')return `<blockquote expandable>${inner}</blockquote>`;return escape(block.prefix??'')+inner;}
 const inlineHtml=(content:TextRun[])=>content.map(renderRun).join('');
+const normalizeItem=(item:TextRun[]|PostListItem):PostListItem=>Array.isArray(item)?{content:item}:item;
+function richListHtml(type:'bullet_list'|'ordered_list',items:Array<TextRun[]|PostListItem>,depth=0):string{const tag=type==='ordered_list'?'ol':'ul';return `<${tag}>${items.map(raw=>{const item=normalizeItem(raw),children=depth<1&&item.children?.length?richListHtml(type,item.children,depth+1):'';return `<li>${inlineHtml(item.content)}${children}</li>`}).join('')}</${tag}>`}
+function flattenList(type:'bullet_list'|'ordered_list',items:Array<TextRun[]|PostListItem>,blocks:TelegramBlock[],depth=0){items.forEach((raw,index)=>{const item=normalizeItem(raw),prefix=type==='bullet_list'?'• ':`${index+1}. `;blocks.push({kind:'list_item',source:type,prefix:(depth?'  ':'')+prefix,segments:segments(item.content)});if(item.children?.length)flattenList(type,item.children,blocks,depth+1)})}
 export function renderTelegram(document:PostDocument):TelegramRender{
-  const blocks:TelegramBlock[]=[],richBlocks:any[]=[];let needsRichMessage=false;
+  const blocks:TelegramBlock[]=[],richHtml:string[]=[];let needsRichMessage=false;
   for(const block of document.blocks){
-    if('items'in block){needsRichMessage=true;block.items.forEach((item,index)=>blocks.push({kind:'list_item',source:block.type,prefix:block.type==='bullet_list'?'• ':`${index+1}. `,segments:segments(item)}));richBlocks.push(tgList(block.items.map(item=>tgParagraph(item.map(run=>run.marks?.some(mark=>mark.type==='bold')?tgBold(run.text):run.text))),{ordered:block.type==='ordered_list'}));}
-    else if(block.type==='details'){needsRichMessage=true;blocks.push({kind:'expandable_quote',source:block.type,segments:segments(block.content),title:segments(block.title?.length?block.title:[{text:'Подробнее'}])});const title=(block.title?.length?block.title:[{text:'Подробнее'}]).map(run=>run.text).join('');richBlocks.push(tgDetails(title,tgParagraph(block.content.map(run=>run.marks?.some(mark=>mark.type==='bold')?tgBold(run.text):run.text))));}
-    else{blocks.push({kind:block.type==='quote'?'quote':'text',source:block.type,segments:segments(block.content,block.type==='heading')});richBlocks.push(tgParagraph(block.content.map(run=>run.marks?.some(mark=>mark.type==='bold')?tgBold(run.text):run.text)));}
+    if('items'in block){needsRichMessage=true;flattenList(block.type,block.items,blocks);richHtml.push(richListHtml(block.type,block.items));}
+    else if(block.type==='details'){needsRichMessage=true;blocks.push({kind:'expandable_quote',source:block.type,segments:segments(block.content),title:segments(block.title?.length?block.title:[{text:'Подробнее'}])});const title=inlineHtml(block.title?.length?block.title:[{text:'Подробнее'}]);richHtml.push(`<details><summary>${title}</summary><p>${inlineHtml(block.content)}</p></details>`);}
+    else{blocks.push({kind:block.type==='quote'?'quote':'text',source:block.type,segments:segments(block.content,block.type==='heading')});const tag=block.type==='heading'?'h1':block.type==='quote'?'blockquote':'p';richHtml.push(`<${tag}>${inlineHtml(block.content)}</${tag}>`);}
   }
-  return {blocks,html:blocks.map(blockHtml).join('\n'),plainText:blocks.map(b=>(b.prefix??'')+(b.title?.map(s=>s.text).join('')?b.title.map(s=>s.text).join('')+'\n\n':'')+b.segments.map(s=>s.text).join('')).join('\n'),buttons:document.buttons??[],...(needsRichMessage?{richMessageHtml:tgDoc(...richBlocks).validate().toHTML()}:{})};
+  return {blocks,html:blocks.map(blockHtml).join('\n'),plainText:blocks.map(b=>(b.prefix??'')+(b.title?.map(s=>s.text).join('')?b.title.map(s=>s.text).join('')+'\n\n':'')+b.segments.map(s=>s.text).join('')).join('\n'),buttons:document.buttons??[],...(needsRichMessage?{richMessageHtml:richHtml.join('')}:{})};
 }
 
 export type TelegramPublicationPlan = | {type:'text'; messages:[TelegramRender]} | {type:'photo_with_caption'; messages:[TelegramRender]} | {type:'photo_then_text'; messages:[null,TelegramRender]; reason:'caption_too_long'};
