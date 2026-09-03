@@ -50,7 +50,7 @@ type IncomingWebhookRow = { telegram_bot_id: string; secret_hash: string };
 type PrivateOwnerRow={user_id:string};
 function startPayload(text: unknown) { if (typeof text !== 'string') return null; return text.match(/^\/start(?:@[A-Za-z0-9_]+)?\s+([A-Za-z0-9_-]{16,64})$/)?.[1] ?? null; }
 function isPlainStart(text:unknown){return typeof text==='string'&&/^\/start(?:@[A-Za-z0-9_]+)?\s*$/.test(text)}
-async function sendManagedBotReturn(token:string,chatId:string){const body=new FormData();body.set('chat_id',chatId);body.set('text','Персональный бот готов. Вернитесь в уже открытое приложение Cosmo Sofa кнопкой «Назад» в Telegram.');const r=await fetch(`https://api.telegram.org/bot${token}/sendMessage`,{method:'POST',body});if(!r.ok)console.error({event:'managed_bot_return_message_failed',status:r.status})}
+async function sendManagedBotReturn(token:string,chatId:string){const body=new FormData();body.set('chat_id',chatId);body.set('text','ВЕРНИТЕСЬ В ПРОГРАММУ COSMO SOFA. ВЫ ВСЕГДА МОЖЕТЕ ЭТО СДЕЛАТЬ НАЖАВ НА КНОПКУ ВНИЗУ ЭКРАНА.');const r=await fetch(`https://api.telegram.org/bot${token}/sendMessage`,{method:'POST',body});if(!r.ok)console.error({event:'managed_bot_return_message_failed',status:r.status})}
 export async function managedBotWebhook(request: Request, env: Env, webhookId: string) {
   const route = await env.DB.prepare(`SELECT telegram_bot_id,secret_hash FROM telegram_managed_bot_webhooks WHERE webhook_id=? AND status='active'`).bind(webhookId).first<IncomingWebhookRow>();
   if (!route) throw new AppError('MANAGED_BOT_WEBHOOK_UNAUTHORIZED', 'Webhook не авторизован', 401);
