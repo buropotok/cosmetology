@@ -75,8 +75,8 @@ export default {
         return new Response(`${source}\nimport('/drafts.js').catch(error=>console.warn('Draft client load failed',error));\n${vkLinkBackup}`, { headers: { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-store' } });
       }
       if (req.method === 'GET' && url.pathname === '/settings.js') {
-        const asset = await env.ASSETS.fetch(req);
-        return new Response(await asset.text(), { headers: { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-store' } });
+        const asset = await env.ASSETS.fetch(req); const source = await asset.text();
+        return new Response(`${source}\nimport('/vk-onboarding.js').catch(error=>console.warn('VK onboarding state load failed',error));`, { headers: { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-store' } });
       }
       if (req.method === 'POST' && url.pathname === '/api/miniapp/vk-link') return json(await sendVkLinkBackup(req, env));
       if (req.method === 'GET' && url.pathname === '/api/miniapp/draft') return json(await getMiniAppDraft(req, env));
