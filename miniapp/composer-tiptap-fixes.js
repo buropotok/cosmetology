@@ -2,51 +2,66 @@
   const host=document.querySelector('.composer-tiptap-editor');
   if(!host)return;
 
+  // Visual arrow only: do not inject nodes into ProseMirror-owned DOM.
+  // This keeps the editor document, selection mapping, lists and serialization untouched.
   const style=document.createElement('style');
   style.textContent=`
-    .composer-tiptap-editor details>summary{list-style:none;display:flex;align-items:flex-start;gap:4px;cursor:text}
+    .composer-tiptap-editor details>summary{
+      list-style:none;
+      position:relative;
+      padding-left:26px;
+      cursor:text;
+    }
     .composer-tiptap-editor details>summary::-webkit-details-marker{display:none}
-    .composer-tiptap-editor .cosmo-details-arrow{display:inline-flex;align-items:center;justify-content:center;flex:0 0 24px;width:24px;height:24px;margin:-2px 0 -2px -4px;border:0;background:transparent;padding:0;color:#70757d;font:600 16px/1 sans-serif;cursor:pointer;user-select:none;-webkit-user-select:none;touch-action:manipulation}
-    .composer-tiptap-editor details:not([open])>.cosmo-details-body,.composer-tiptap-editor details:not([open])>[data-cosmo-details-body]{display:none}
+    .composer-tiptap-editor details>summary::before{
+      content:'▸';
+      position:absolute;
+      left:2px;
+      top:0;
+      width:22px;
+      line-height:1.4;
+      text-align:center;
+      color:#70757d;
+      font-weight:600;
+      cursor:pointer;
+      user-select:none;
+      -webkit-user-select:none;
+    }
+    .composer-tiptap-editor details[open]>summary::before{content:'▾'}
   `;
   document.head.append(style);
 
-  function decorate(details){
-    if(!(details instanceof HTMLDetailsElement)||details.dataset.cosmoArrowReady==='1')return;
-    const summary=details.querySelector(':scope > summary');
-    if(!summary)return;
-    details.dataset.cosmoArrowReady='1';
-    const arrow=document.createElement('span');
-    arrow.className='cosmo-details-arrow';
-    arrow.setAttribute('contenteditable','false');
-    arrow.setAttribute('role','button');
-    arrow.setAttribute('aria-label','Раскрыть или свернуть');
-    arrow.textContent=details.open?'▾':'▸';
-    summary.prepend(arrow);
-  }
+  const getSummary=target=>{
+    const element=target instanceof Element?target:target?.parentElement;
+    const summary=element?.closest?.('summary');
+    return summary&&host.contains(summary)?summary:null;
+  };
+  const isArrowHit=(event,summary)=>{
+    const rect=summary.getBoundingClientRect();
+    return event.clientX>=rect.left&&event.clientX<=rect.left+26;
+  };
 
-  function decorateAll(){host.querySelectorAll('details').forEach(decorate)}
-  decorateAll();
-  new MutationObserver(decorateAll).observe(host,{childList:true,subtree:true});
-
-  // Only the arrow controls open/closed state. The summary text remains
-  // fully editable and clicking it only moves the caret.
+  // Prevent caret placement only when the explicit arrow area is pressed.
   host.addEventListener('pointerdown',event=>{
-    const arrow=event.target.closest?.('.cosmo-details-arrow');
-    if(!arrow||!host.contains(arrow))return;
+    const summary=getSummary(event.target);
+    if(!summary||!isArrowHit(event,summary))return;
     event.preventDefault();
     event.stopPropagation();
   },true);
 
   host.addEventListener('click',event=>{
-    const arrow=event.target.closest?.('.cosmo-details-arrow');
-    if(!arrow||!host.contains(arrow))return;
-    const details=arrow.closest('details');
-    if(!details)return;
+    const summary=getSummary(event.target);
+    if(!summary)return;
+
+    // Disable native <details> toggling for the whole summary. Text clicks stay
+    // editable because caret placement already happened during pointerdown.
     event.preventDefault();
+    if(!isArrowHit(event,summary))return;
+
     event.stopPropagation();
-    details.toggleAttribute('open');
-    arrow.textContent=details.open?'▾':'▸';
+    const details=summary.parentElement;
+    if(!(details instanceof HTMLDetailsElement))return;
+    details.open=!details.open;
     window.CosmoDiagnostics?.log?.('tiptap-details-arrow-toggle',{open:details.open});
   },true);
 })();
