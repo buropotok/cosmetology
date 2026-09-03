@@ -21,7 +21,7 @@ const vkLinkBackup = String.raw`
    const overlay=document.createElement('div');overlay.id='vk-publish-modal';overlay.style.cssText='position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.42);display:flex;align-items:flex-end;justify-content:center;padding:16px;box-sizing:border-box';
    const card=document.createElement('div');card.style.cssText='width:min(100%,520px);background:var(--tg-theme-bg-color,#fff);color:var(--tg-theme-text-color,#111);border-radius:20px;padding:20px;box-sizing:border-box;box-shadow:0 12px 40px rgba(0,0,0,.25)';
    const title=document.createElement('strong');title.textContent='Публикация в VK';title.style.cssText='display:block;font-size:20px;margin-bottom:10px';
-   const note=document.createElement('p');note.style.cssText='margin:0 0 18px;line-height:1.55;white-space:pre-line';note.textContent='1. Отключите VPN\\n2. Вернитесь сюда и нажмите "Продолжить".';
+   const note=document.createElement('p');note.style.cssText='margin:0 0 18px;line-height:1.55;white-space:pre-line';note.textContent='1. Отключите VPN\n2. Вернитесь сюда и нажмите "Продолжить".';
    const link=document.createElement('a');link.href=vkUrl;link.target='_blank';link.rel='noopener noreferrer';link.textContent='Продолжить';link.style.cssText='display:block;text-align:center;text-decoration:none;background:var(--tg-theme-button-color,#2481cc);color:var(--tg-theme-button-text-color,#fff);padding:13px 16px;border-radius:12px;font-weight:600';
    const cancel=document.createElement('button');cancel.type='button';cancel.textContent='Отмена';cancel.style.cssText='width:100%;margin-top:8px;padding:12px;border:0;background:transparent;color:var(--tg-theme-link-color,#2481cc);font:inherit';cancel.addEventListener('click',()=>overlay.remove());
    card.append(title,note,link,cancel);overlay.append(card);overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.remove()});document.body.append(overlay);
@@ -57,7 +57,7 @@ async function sendVkLinkBackup(req: Request, env: Env) {
   }
   const sendBody = new FormData();
   sendBody.set('chat_id', chatId);
-  sendBody.set('text', 'Публикация в VK\\nЕсли переход прервался, используйте резервную ссылку.');
+  sendBody.set('text', 'Публикация в VK\nЕсли переход прервался, используйте резервную ссылку.');
   sendBody.set('reply_markup', JSON.stringify({ inline_keyboard: [[{ text: 'Резервная ссылка', url: vkUrl }]] }));
   const sentResponse = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, { method: 'POST', body: sendBody });
   const sent: any = await sentResponse.json().catch(() => null);
@@ -72,7 +72,7 @@ export default {
     try {
       if (req.method === 'GET' && url.pathname === '/app.js') {
         const asset = await env.ASSETS.fetch(req); const source = await asset.text();
-        return new Response(`${source}\\nimport('/drafts.js').catch(error=>console.warn('Draft client load failed',error));\\n${vkLinkBackup}`, { headers: { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-store' } });
+        return new Response(`${source}\nimport('/drafts.js').catch(error=>console.warn('Draft client load failed',error));\n${vkLinkBackup}`, { headers: { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-store' } });
       }
       if (req.method === 'GET' && url.pathname === '/settings.js') {
         const asset = await env.ASSETS.fetch(req);
@@ -81,15 +81,15 @@ export default {
       if (req.method === 'POST' && url.pathname === '/api/miniapp/vk-link') return json(await sendVkLinkBackup(req, env));
       if (req.method === 'GET' && url.pathname === '/api/miniapp/draft') return json(await getMiniAppDraft(req, env));
       if (req.method === 'POST' && url.pathname === '/api/miniapp/draft') return json(await saveMiniAppDraft(req, env));
-      const draftImage = url.pathname.match(/^\\/api\\/miniapp\\/draft\\/image\\/(.+)$/);
+      const draftImage = url.pathname.match(/^\/api\/miniapp\/draft\/image\/(.+)$/);
       if (req.method === 'GET' && draftImage) return getMiniAppDraftImage(req, env, decodeURIComponent(draftImage[1]));
       if (req.method === 'GET' && (url.pathname === '/admin' || url.pathname === '/admin/')) return new Response(adminHtml(), { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' } });
       if (req.method === 'GET' && url.pathname === '/api/admin/users') return json(await listAdminUsers(req, env));
-      const adminReset = url.pathname.match(/^\\/api\\/admin\\/users\\/([^/]+)\\/reset-onboarding$/);
+      const adminReset = url.pathname.match(/^\/api\/admin\/users\/([^/]+)\/reset-onboarding$/);
       if (req.method === 'POST' && adminReset) return json(await resetAdminOnboarding(req, env, decodeURIComponent(adminReset[1])));
       if (req.method === 'GET' && (url.pathname === '/vk-test' || url.pathname === '/vk-test/')) return new Response(vkMiniAppHtml, { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' } });
       if (req.method === 'POST' && url.pathname === '/api/miniapp/vk-onboarding') return json(await createVkOnboardingHandoff(req, env), 201);
-      const vkOnboarding = url.pathname.match(/^\\/api\\/vk-onboarding\\/([A-Za-z0-9_-]+)$/);
+      const vkOnboarding = url.pathname.match(/^\/api\/vk-onboarding\/([A-Za-z0-9_-]+)$/);
       if (vkOnboarding && req.method === 'OPTIONS') return new Response(null, { status: 204, headers: onboardingCors });
       if (vkOnboarding && req.method === 'GET' && url.searchParams.get('select') === '1') {
         const body = JSON.stringify({ vkUserId: url.searchParams.get('vkUserId') ?? '', groupId: url.searchParams.get('groupId') ?? '', groupName: url.searchParams.get('groupName') ?? '', screenName: url.searchParams.get('screenName') ?? '' });
@@ -99,11 +99,11 @@ export default {
       if (vkOnboarding && req.method === 'GET') return json(await getVkOnboardingHandoff(env, vkOnboarding[1]), 200, onboardingCors);
       if (vkOnboarding && req.method === 'POST') return json(await selectVkOnboardingGroup(env, vkOnboarding[1], req, ctx), 200, onboardingCors);
       if (req.method === 'POST' && url.pathname === '/api/miniapp/vk-handoff') return json(await createVkHandoff(req, env, ctx), 201);
-      const handoffMatch = url.pathname.match(/^\\/api\\/vk-handoff\\/([A-Za-z0-9_-]+)$/);
+      const handoffMatch = url.pathname.match(/^\/api\/vk-handoff\/([A-Za-z0-9_-]+)$/);
       if (req.method === 'GET' && handoffMatch) return json(await getVkHandoff(env, handoffMatch[1], url.origin));
-      const handoffUploadMatch = url.pathname.match(/^\\/api\\/vk-handoff-upload\\/([A-Za-z0-9_-]+)$/);
+      const handoffUploadMatch = url.pathname.match(/^\/api\/vk-handoff-upload\/([A-Za-z0-9_-]+)$/);
       if (req.method === 'POST' && handoffUploadMatch) return json(await uploadVkHandoffImage(env, handoffUploadMatch[1], req));
-      const handoffImageMatch = url.pathname.match(/^\\/api\\/vk-handoff-image\\/([A-Za-z0-9_-]+)$/);
+      const handoffImageMatch = url.pathname.match(/^\/api\/vk-handoff-image\/([A-Za-z0-9_-]+)$/);
       if (req.method === 'GET' && handoffImageMatch) { const object = await getVkHandoffImage(env, handoffImageMatch[1]); if (!object) return new Response('Not found', { status: 404 }); const headers = new Headers(); object.writeHttpMetadata(headers); headers.set('etag', object.httpEtag); headers.set('cache-control', 'public, max-age=300'); headers.set('x-content-type-options', 'nosniff'); return new Response(object.body, { headers }); }
       if (req.method === 'GET' && url.pathname === '/vk-test-image') { const object = await env.IMAGES.get(VK_TEST_IMAGE_KEY); if (!object) return new Response('Not found', { status: 404 }); const headers = new Headers(); object.writeHttpMetadata(headers); headers.set('etag', object.httpEtag); headers.set('cache-control', 'public, max-age=300'); headers.set('x-content-type-options', 'nosniff'); return new Response(object.body, { headers }); }
       return worker.fetch(req, env);
