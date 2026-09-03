@@ -43,10 +43,7 @@
     if(!webApp?.initData){status.textContent='Откройте Mini App внутри Telegram.';status.className='error';return}
     const images=Array.from(imageInput.files||[]).slice(0,10);
     if(!text.value.trim()&&!images.length){status.textContent='Добавьте текст или изображение.';status.className='error';return}
-    telegramPreview.disabled=true;telegramPreview.textContent='Проверяем…';
-    const guard=window.CosmoSofaAccount?.requireTelegramPreview;
-    if(typeof guard==='function'){const state=await guard();if(!state){telegramPreview.disabled=false;telegramPreview.textContent='Предпросмотр в Telegram';return}}
-    telegramPreview.textContent='Отправляем предпросмотр…';status.textContent='Отправляем в личный чат с персональным ботом…';status.className='';
+    telegramPreview.disabled=true;telegramPreview.textContent='Отправляем предпросмотр…';status.textContent='Отправляем в личный чат с персональным ботом…';status.className='';
     const body=new FormData();body.set('text',text.value);images.forEach(file=>body.append('images',file,file.name));
     try{const response=await fetch('/api/miniapp/preview',{method:'POST',headers:{Authorization:`tma ${webApp.initData}`},body});const result=await response.json().catch(()=>null);if(!response.ok)throw new Error(result?.error?.message||'Не удалось отправить предпросмотр.');status.textContent='Предпросмотр отправлен в личный чат с персональным ботом.';status.className='success';webApp.HapticFeedback?.notificationOccurred('success')}
     catch(error){status.textContent=error instanceof Error?error.message:'Не удалось отправить предпросмотр.';status.className='error';webApp.HapticFeedback?.notificationOccurred('error')}
