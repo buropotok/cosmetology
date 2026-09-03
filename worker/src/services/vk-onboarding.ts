@@ -41,7 +41,8 @@ export async function selectVkOnboardingGroup(env:Env,token:string,request:Reque
     env.DB.prepare("DELETE FROM user_onboarding_skip WHERE user_id=? AND step='vk_group'").bind(row.userId),
   ]);
   const artifactId=crypto.randomUUID();
-  const replication=replicateVkArtifactToYandex(env,{artifactId,handoffToken:token,version:1,vkGroupId:groupId,text:JSON.stringify({kind:'vk_group_connection',vkUserId,groupId,groupName,screenName:canonicalScreen}),expiresAt:row.expiresAt,imageKeys:[]}).catch(error=>console.error('Yandex VK onboarding replica failed',{artifactId,error:error instanceof Error?error.message:String(error)}));
-  if(ctx)ctx.waitUntil(replication);else void replication;
+  if(ctx){
+    ctx.waitUntil(replicateVkArtifactToYandex(env,{artifactId,handoffToken:token,version:1,vkGroupId:groupId,text:JSON.stringify({kind:'vk_group_connection',vkUserId,groupId,groupName,screenName:canonicalScreen}),expiresAt:row.expiresAt,imageKeys:[]}).catch(error=>console.error('Yandex VK onboarding replica failed',{artifactId,error:error instanceof Error?error.message:String(error)})));
+  }
   return {ok:true,vkGroup:{connected:true,groupId,groupName,screenName:canonicalScreen,groupUrl},artifactId};
 }
