@@ -9,6 +9,15 @@
     if(logs.length>300)logs.shift();
     render();
   }
+  function syncTestButton(){
+    const source=document.querySelector('#publish-vk');
+    const test=document.querySelector('#publish-vk-test');
+    if(!source||!test||!source.querySelector('.composer-action-icon'))return false;
+    test.className=source.className;
+    test.innerHTML=source.innerHTML;
+    source.insertAdjacentElement('afterend',test);
+    return true;
+  }
   function mount(){
     if(document.querySelector('#vk-diagnostics'))return;
     const box=document.createElement('section');
@@ -23,6 +32,9 @@
     log('vk-diagnostics-ready',{build:window.COSMO_BUILD_ID||null,path:location.pathname});
   }
   window.CosmoVkDiagnostics={log};
+  const syncObserver=new MutationObserver(()=>{if(syncTestButton())syncObserver.disconnect()});
+  if(document.documentElement)syncObserver.observe(document.documentElement,{subtree:true,childList:true});
+  syncTestButton();
   document.addEventListener('click',event=>{
     if(event.target.closest?.('#publish-vk'))log('vk-button-click',{build:window.COSMO_BUILD_ID||null});
   },true);
