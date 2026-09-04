@@ -1,4 +1,4 @@
-const BUILD_ID='BUILD-20260904-043245';
+const BUILD_ID='BUILD-20260904-VK-CLICK-TEST';
 window.COSMO_BUILD_ID=BUILD_ID;
 function mountBuildId(){
   if(document.querySelector('#cosmo-build-id'))return;
