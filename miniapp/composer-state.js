@@ -35,7 +35,7 @@ function create({
       }
       getImageManager()?.replaceFiles?.(Array.isArray(snapshot.images)?snapshot.images:[]);
       platform=snapshot.platform==='vk'?'vk':'telegram';
-      activePhotoIndex=Math.max(Number(snapshot.activePhotoIndex)||0,0);
+      activePhotoIndex=Math.min(Math.max(Number(snapshot.activePhotoIndex)||0,0),Math.max(currentImages().length-1,0));
       imageSignature=signature(currentImages());version++;
       window.dispatchEvent(new CustomEvent('cosmo-composer-restore',{detail:getSnapshot()}));
     },

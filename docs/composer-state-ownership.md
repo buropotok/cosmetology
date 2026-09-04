@@ -16,7 +16,7 @@
 | --- | --- | --- |
 | Rich content | `CosmoRichEditor` (textarea is compatibility fallback) | `ComposerState.getSnapshot()` delegates to the editor |
 | Images | `CosmoComposerImages` (`FileList` remains its compatibility boundary) | `ComposerState.getSnapshot()` delegates to the manager |
-| Active photo | `ComposerState` | explicit `setActivePhotoIndex()` |
+| Active photo | `ComposerState` | explicit `setActivePhotoIndex()`; Composer only renders `getSnapshot().activePhotoIndex` |
 | Platform | `ComposerState` | explicit `setPlatform()` |
 | Revisions | `DraftStore` | one `ComposerState.subscribe()` subscription |
 
