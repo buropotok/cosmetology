@@ -45,7 +45,7 @@
     if(!text.value.trim()&&!images.length){status.textContent='Добавьте текст или изображение.';status.className='error';return}
     telegramPreview.disabled=true;telegramPreview.textContent='Отправляем предпросмотр…';status.textContent='Отправляем в личный чат с персональным ботом…';status.className='';
     const body=new FormData();body.set('text',text.value);images.forEach(file=>body.append('images',file,file.name));
-    try{const response=await fetch('/api/miniapp/preview',{method:'POST',headers:{Authorization:`tma ${webApp.initData}`},body});const result=await response.json().catch(()=>null);if(!response.ok)throw new Error(result?.error?.message||'Не удалось отправить предпросмотр.');status.textContent='Предпросмотр отправлен в личный чат с персональным ботом.';status.className='success';webApp.HapticFeedback?.notificationOccurred('success')}
+    try{const {response,result}=await window.CosmoComposerActions.preview({method:'POST',headers:{Authorization:`tma ${webApp.initData}`},body});if(!response.ok)throw new Error(result?.error?.message||'Не удалось отправить предпросмотр.');status.textContent='Предпросмотр отправлен в личный чат с персональным ботом.';status.className='success';webApp.HapticFeedback?.notificationOccurred('success')}
     catch(error){status.textContent=error instanceof Error?error.message:'Не удалось отправить предпросмотр.';status.className='error';webApp.HapticFeedback?.notificationOccurred('error')}
     finally{telegramPreview.disabled=false;telegramPreview.textContent='Предпросмотр в Telegram'}
   });
@@ -54,4 +54,3 @@
   toolbar.querySelectorAll('.composer-tool-panel').forEach(panel=>panel.addEventListener('click',e=>e.stopPropagation()));
   document.addEventListener('click',()=>toolbar.querySelectorAll('.composer-tool-menu.open').forEach(x=>x.classList.remove('open')));
 })();
-import('/navigation.js').then(()=>import('/composer-screen.js')).catch(error=>console.error('Screen setup failed',error));

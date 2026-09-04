@@ -1,0 +1,7 @@
+(()=>{
+const root=document.querySelector('#onboarding-root');if(!root)return;
+const telegram=window.CosmoTelegramGateway.create(),api=window.CosmoOnboardingApi.create({getInitData:()=>telegram.getInitData()}),controller=window.CosmoOnboardingController.create({api,telegram}),view=window.CosmoOnboardingView.create({root,controller,telegram});
+let active=null;
+function openOnboarding(options={}){if(active)return active;const returnTo=options.returnTo||window.CosmoRouter.current||'home';window.CosmoRouter.show('onboarding');active=controller.start(options).then(result=>{window.CosmoRouter.show(returnTo);window.dispatchEvent(new CustomEvent('cosmo-onboarding-result',{detail:result}));return result}).catch(error=>{window.CosmoRouter.show(returnTo);telegram.showAlert(error instanceof Error?error.message:'Не удалось открыть onboarding.');return controller.result('cancelled')}).finally(()=>{active=null});return active}
+const router=Object.freeze({openOnboarding,get active(){return active},controller,view});window.CosmoOnboardingRouter=router;window.CosmoOnboardingControllerInstance=controller;window.CosmoRouter.setOnboardingHandler(openOnboarding);window.CosmoOnboarding=Object.freeze({openBot:()=>window.CosmoRouter.openOnboarding({mode:'edit',initialStep:'telegram_bot'}),openTelegramGroup:()=>window.CosmoRouter.openOnboarding({mode:'edit',initialStep:'telegram_group'}),openPreview:()=>window.CosmoRouter.openOnboarding({mode:'edit',initialStep:'telegram_preview'}),openVkGroup:()=>window.CosmoRouter.openOnboarding({mode:'edit',initialStep:'vk_group'})});
+})();
