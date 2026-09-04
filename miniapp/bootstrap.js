@@ -6,6 +6,7 @@ async function start(){
   await import('/composer-state.js');
   await import('/draft-store.js');
   await import('/drafts.js');
+  await import('/composer-actions.js');
   await Promise.all([import('/ai-mock-transfer.js'),import('/build-id.js'),import('/vk-return-confirmation.js')]);
   return Object.freeze({ready:true});
 }
