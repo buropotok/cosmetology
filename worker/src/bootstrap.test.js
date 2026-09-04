@@ -20,6 +20,14 @@ describe('Mini App bootstrap',()=>{
     expect(miniappFile('drafts.js')).not.toContain("import('/navigation.js')");
   });
 
+  it('loads VK diagnostics once from bootstrap before dependent runtime code',()=>{
+    const app=miniappFile('app.js'),bootstrap=miniappFile('bootstrap.js');
+    expect(app).not.toContain('vk-diagnostics.js');
+    expect(app).not.toMatch(/createElement\(['"]script['"]\)/);
+    expect(bootstrap.match(/vk-diagnostics\.js/g)).toHaveLength(1);
+    expect(bootstrap.indexOf('vk-diagnostics.js')).toBeLessThan(bootstrap.indexOf('navigation.js'));
+  });
+
   it('does not replace global fetch when draft diagnostics are enabled',async()=>{
     const nativeFetch=vi.fn(async()=>new Response('{}',{status:200})),log=vi.fn(),now=vi.fn().mockReturnValueOnce(10).mockReturnValueOnce(14);
     window.fetch=nativeFetch;const client=window.CosmoDiagnosticsFetch.create({fetchImpl:nativeFetch,log,now});const original=window.fetch;

@@ -1,5 +1,6 @@
 const BOOTSTRAP_KEY='__CosmoMiniAppBootstrap';
 async function start(){
+  await import('/vk-diagnostics.js');
   await import('/navigation.js');
   await Promise.all([import('/composer-screen.js'),import('/composer-editor-stability.js'),import('/composer-image-manager.js'),import('/before-after-bridge.js')]);
   await import('/diagnostics-fetch.js');
