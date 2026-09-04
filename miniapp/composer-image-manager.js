@@ -79,7 +79,7 @@ input.addEventListener('change',event=>{
  else{files=incoming;internalChange=true;try{input.dispatchEvent(new Event('change',{bubbles:true}))}finally{internalChange=false}void updateVkAspectWarning()}
 });
 
-removeAll?.addEventListener('click',()=>{files=[];void updateVkAspectWarning()});
+removeAll?.addEventListener('click',()=>{files=[];notifyChange()});
 
 function decorate(){
  const images=[...previews.querySelectorAll('img')];
