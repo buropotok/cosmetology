@@ -33,4 +33,4 @@ if(generation!==restoreGeneration)return;const selector=lastPlatform==='vk'?'.co
 window.CosmoSofaDraft={save:()=>saveNow('api-save'),cancelRestore,clear:clearDraft,getState:()=>({revision,savedRevision,imageRevision,imagesDirty,saveInFlight,saveRequested,restoring,hasDraft})};
 restore();
 })();
-import('/navigation.js').then(()=>Promise.all([import('/ai-mock-transfer.js'),import('/composer-screen.js'),import('/screen-owner.js'),import('/composer-image-manager.js')])).catch(error=>console.warn('Navigation shell load failed',error));
+import('/navigation.js').then(()=>Promise.all([import('/ai-mock-transfer.js'),import('/composer-screen.js'),import('/composer-image-manager.js')])).catch(error=>console.warn('Navigation shell load failed',error));
