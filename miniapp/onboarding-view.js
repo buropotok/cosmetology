@@ -7,6 +7,7 @@ const vkLogo='<div class="onboarding-logo"><svg viewBox="0 0 64 64" aria-hidden=
 const progress=index=>`<div class="onboarding-progress">${[0,1,2,3,4].map(item=>`<span${item===index?' class="active"':''}></span>`).join('')}</div>`;
 const header='<header class="settings-header"><button class="back-button" data-onboarding-back type="button" aria-label="Назад"><span>Назад</span></button><h1>Настройки</h1><span class="header-spacer"></span></header>';
 const shell=(step,index,content)=>`<section class="screen settings-screen onboarding-step-screen" data-onboarding-step="${step}" hidden>${header}${progress(index)}${content}</section>`;
+
 class OnboardingView{
   constructor({root,controller,telegram}){if(!root||!controller)throw new TypeError('OnboardingView requires root and controller');this.root=root;this.controller=controller;this.telegram=telegram;this.renderMarkup();this.bind();this.unsubscribe=controller.subscribe(state=>this.render(state));this.resume=()=>{if(controller.getState().status==='waiting_external_return')controller.resume().catch(()=>{})};document.addEventListener('visibilitychange',this.resume);window.addEventListener('focus',this.resume)}
   renderMarkup(){this.root.innerHTML=[
