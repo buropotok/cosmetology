@@ -5,6 +5,17 @@ beforeAll(async()=>{
   await import('../../miniapp/onboarding-api.js');
   await import('../../miniapp/telegram-gateway.js');
   await import('../../miniapp/onboarding-controller.js');
+  await import('../../miniapp/onboarding-view.js');
+});
+
+describe('OnboardingView',()=>{
+  it('mounts every onboarding step under one root and renders only controller state',()=>{
+    document.body.innerHTML='<div id="onboarding-root"></div>';vi.stubGlobal('scrollTo',vi.fn());
+    const listeners=[];const controller={subscribe:vi.fn(listener=>{listeners.push(listener);return()=>{}}),getState:()=>({step:'telegram_group'}),back:vi.fn(),next:vi.fn()};
+    const view=window.CosmoOnboardingView.create({root:document.querySelector('#onboarding-root'),controller,telegram:{showAlert:vi.fn()}});
+    listeners[0]({step:'telegram_group',status:'ready',account:{managedBot:{displayName:'My Bot',username:'my_bot',destination:{connected:true,chatTitle:'Clinic'}}}});
+    const screens=[...document.querySelectorAll('[data-onboarding-step]')];expect(screens).toHaveLength(4);expect(screens.every(screen=>screen.parentElement?.id==='onboarding-root')).toBe(true);expect(screens.filter(screen=>!screen.hidden).map(screen=>screen.dataset.onboardingStep)).toEqual(['telegram_group']);expect(document.querySelector('[data-group-title]').textContent).toBe('Clinic');view.dispose();vi.unstubAllGlobals();
+  });
 });
 
 describe('OnboardingController',()=>{
@@ -32,8 +43,15 @@ describe('OnboardingController',()=>{
 
   it('persists skipped steps before refreshing state',async()=>{
     const account={onboardingSkips:['vk_group']};const api={accountState:null,skipStep:vi.fn(async()=>({ok:true})),getAccountState:vi.fn(async()=>account)};
-    const controller=window.CosmoOnboardingController.create({api,telegram:{}});await controller.skip('vk_group');
-    expect(api.skipStep).toHaveBeenCalledWith('vk_group');expect(controller.getState()).toMatchObject({status:'ready',account});
+    const controller=window.CosmoOnboardingController.create({api,telegram:{}});await controller.open('vk_group');await controller.skip('vk_group');
+    expect(api.skipStep).toHaveBeenCalledWith('vk_group');expect(controller.getState()).toMatchObject({status:'idle',account});
+  });
+
+  it('resolves a run with an explicit result instead of navigating application screens',async()=>{
+    const account={managedBot:null,previewReady:false,vkGroup:{connected:false},onboardingSkips:[]};
+    const controller=window.CosmoOnboardingController.create({api:{accountState:null,getAccountState:vi.fn(async()=>account)},telegram:{}});
+    const resultPromise=controller.start({mode:'initial'});await vi.waitFor(()=>expect(controller.getState().step).toBe('telegram_bot'));controller.finish('cancelled','user_back');
+    await expect(resultPromise).resolves.toMatchObject({status:'cancelled',reason:'user_back',accountState:account});expect(controller.getState()).toMatchObject({status:'idle',step:null,mode:null});
   });
 });
 
