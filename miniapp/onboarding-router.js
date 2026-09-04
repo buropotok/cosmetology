@@ -1,0 +1,10 @@
+(()=>{
+const root=document.querySelector('#onboarding-root');if(!root)return;
+const telegram=window.CosmoTelegramGateway.create(),api=window.CosmoOnboardingApi.create({getInitData:()=>telegram.getInitData()}),controller=window.CosmoOnboardingController.create({api,telegram}),view=window.CosmoOnboardingView.create({root,controller,telegram});
+const screenIds=['home-screen','ai-screen','composer-screen','settings-screen'];let active=null,snapshot=null;
+function capture(){return Object.fromEntries(screenIds.map(id=>{const element=document.getElementById(id);return[id,element?!element.hidden:false]}))}
+function showRoot(){snapshot=capture();for(const id of screenIds){const element=document.getElementById(id);if(element)element.hidden=true}root.hidden=false}
+function restore(returnTo){root.hidden=true;if(returnTo==='settings'){const settings=document.getElementById('settings-screen');if(settings)settings.hidden=false}else for(const [id,visible] of Object.entries(snapshot||{})){const element=document.getElementById(id);if(element)element.hidden=!visible}window.scrollTo({top:0,behavior:'instant'})}
+function openOnboarding(options={}){if(active)return active;showRoot();const returnTo=options.returnTo||'previous';active=controller.start(options).then(result=>{restore(returnTo);window.dispatchEvent(new CustomEvent('cosmo-onboarding-result',{detail:result}));return result}).catch(error=>{restore(returnTo);telegram.showAlert(error instanceof Error?error.message:'Не удалось открыть onboarding.');return controller.result('cancelled')}).finally(()=>{active=null;snapshot=null});return active}
+const router=Object.freeze({openOnboarding,get active(){return active},controller,view});window.CosmoRouter=router;window.CosmoOnboardingControllerInstance=controller;window.CosmoOnboarding=Object.freeze({openBot:()=>openOnboarding({mode:'edit',initialStep:'telegram_bot'}),openTelegramGroup:()=>openOnboarding({mode:'edit',initialStep:'telegram_group'}),openPreview:()=>openOnboarding({mode:'edit',initialStep:'telegram_preview'}),openVkGroup:()=>openOnboarding({mode:'edit',initialStep:'vk_group'})});
+})();
