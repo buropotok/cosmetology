@@ -2,6 +2,7 @@
   const tg=window.Telegram?.WebApp;
   let state=null;
   let refreshPromise=null;
+  let resumeTimer=null;
   const subscribers=new Set();
 
   function headers(){
@@ -35,12 +36,28 @@
     finally{refreshPromise=null}
   }
 
+  function refreshOnResume(){
+    clearTimeout(resumeTimer);
+    resumeTimer=setTimeout(()=>{
+      refresh().catch(error=>console.warn('AccountState resume refresh failed',error));
+    },120);
+  }
+
   function subscribe(subscriber,{immediate=true}={}){
     if(typeof subscriber!=='function')return()=>{};
     subscribers.add(subscriber);
     if(immediate&&state!==null)subscriber(state);
     return()=>subscribers.delete(subscriber);
   }
+
+  tg?.onEvent?.('activated',refreshOnResume);
+  document.addEventListener('visibilitychange',()=>{
+    if(document.visibilityState==='visible')refreshOnResume();
+  });
+  window.addEventListener('focus',refreshOnResume);
+  window.addEventListener('pageshow',event=>{
+    if(event.persisted)refreshOnResume();
+  });
 
   window.CosmoAccountState=Object.freeze({
     refresh,
