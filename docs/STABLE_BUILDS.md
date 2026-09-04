@@ -8,6 +8,22 @@ This file is the canonical history of manually verified stable Cosmo Sofa builds
 - Keep the exact Git commit SHA so the working tree can be restored deterministically.
 - New development continues on `main`; this file records recovery points and does not imply that later commits are stable.
 
+## 2026-09-04 — Stable VK clipboard + single-image preparation baseline
+
+**Commit:** `ac182fc5b2dad66b6a71dce3d2146b4859fd4710`
+
+Verified state:
+
+- Verified by the user in the real Telegram Mini App UI after the isolated VK publication rebuild.
+- The active VK action uses the canonical `#publish-vk` DOM identity, so it inherits the existing approved VK button styling and icon path rather than maintaining a second visual implementation.
+- The obsolete duplicate VK button is removed/replaced in the DOM; there is only one active `#publish-vk` action.
+- The active VK action keeps the proven isolated test behavior: publication text is copied to the clipboard when present and one saved draft image is requested through the official `Telegram.WebApp.downloadFile()` API.
+- The image is obtained from the existing server draft endpoint and its signed HTTPS download URL; no client-side blob reconstruction or legacy image-save mechanism is used.
+- This checkpoint intentionally represents the incremental one-image VK preparation path. Do not infer the older multi-image/VPN handoff behavior from this entry.
+- Do not modify the rich-text editor/list behavior when restoring or extending this checkpoint. VK preparation must remain isolated from editor internals.
+
+Use this commit as the rollback point for the verified single-image VK preparation/button baseline.
+
 ## 2026-09-03 — Stable Publisher draft entry and navigation UX
 
 **Commit:** `d762e9b66f9584cf07100f2641c136bb32fc193f`
