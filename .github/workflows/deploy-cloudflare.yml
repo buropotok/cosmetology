@@ -37,11 +37,17 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: worker/package-lock.json
 
-      - name: Install dependencies
-        run: npm ci --prefer-offline --no-audit --no-fund
+      - name: Install dependencies and generate lockfile
+        run: npm install --no-audit --no-fund
+
+      - name: Upload generated lockfile
+        uses: actions/upload-artifact@v4
+        with:
+          name: worker-package-lock
+          path: worker/package-lock.json
+          if-no-files-found: error
+          retention-days: 1
 
       - name: Apply D1 migrations
         run: npm run db:migrate
