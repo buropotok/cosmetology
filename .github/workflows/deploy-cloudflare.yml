@@ -45,7 +45,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: worker-package-lock
-          path: worker/package-lock.json
+          path: ${{ github.workspace }}/worker/package-lock.json
           if-no-files-found: error
           retention-days: 1
 
