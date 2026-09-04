@@ -38,7 +38,7 @@
   bottom.append(telegramPreview,publish,publishVk);if(status)bottom.after(status);
   publish.type='submit';publish.setAttribute('form','publish-form');publish.hidden=false;publishVk.hidden=false;
 
-  telegramPreview.addEventListener('click',async()=>{
+  telegramPreview.addEventListener('click',async()=>{await window.CosmoSofaDraft?.flush?.('preview');
     const webApp=window.Telegram?.WebApp;
     if(!webApp?.initData){status.textContent='Откройте Mini App внутри Telegram.';status.className='error';return}
     const images=Array.from(imageInput.files||[]).slice(0,10);
