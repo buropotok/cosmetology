@@ -1,4 +1,4 @@
-const BUILD_ID='2026.09.04-01';
+const BUILD_ID='BUILD-20260904-042808';
 window.COSMO_BUILD_ID=BUILD_ID;
 function mountBuildId(){
   if(document.querySelector('#cosmo-build-id'))return;
