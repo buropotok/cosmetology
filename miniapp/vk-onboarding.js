@@ -1,12 +1,11 @@
 (()=>{
-const tg=window.Telegram?.WebApp,$=s=>document.querySelector(s);
+const tg=window.Telegram?.WebApp,$=s=>document.querySelector(s),telegram=window.CosmoTelegramGateway.create({webApp:tg}),api=window.CosmoOnboardingApi.create({getInitData:()=>telegram.getInitData()});
 const screen=$('#vk-group-screen');
 if(!screen||!tg)return;
 const button=$('#open-vk-onboarding');
 if(!button)return;
 let waiting=false;
-function headers(){return{Authorization:`tma ${tg.initData||''}`}}
-function notify(message){tg.showAlert?tg.showAlert(message):alert(message)}
+function notify(message){telegram.showAlert(message)}
 function render(v){
   const ready=!!v?.connected;
   const url=ready?(v.screenName?`vk.com/${v.screenName}`:v.groupUrl||''):'';
@@ -18,14 +17,13 @@ function render(v){
   return ready;
 }
 async function refresh(){
-  try{const r=await fetch('/api/miniapp/me',{headers:headers(),cache:'no-store'}),d=await r.json();if(r.ok)return render(d?.vkGroup)}catch{}return false;
+  try{const d=await api.getAccountState();return render(d?.vkGroup)}catch{}return false;
 }
 button.addEventListener('click',async()=>{
   button.disabled=true;button.textContent='Открываем ВКонтакте…';
   try{
-    const r=await fetch('/api/miniapp/vk-onboarding',{method:'POST',headers:headers()}),d=await r.json().catch(()=>null);
-    if(!r.ok||!d?.vkUrl)throw new Error(d?.error?.message||'Не удалось открыть выбор группы.');
-    waiting=true;tg.HapticFeedback?.selectionChanged();tg.openLink(d.vkUrl,{try_instant_view:false});
+    const d=await api.createVkHandoff();if(!d?.vkUrl)throw new Error('Не удалось открыть выбор группы.');
+    waiting=true;telegram.notifySelection();telegram.openExternalLink(d.vkUrl);
   }catch(e){notify(e?.message||'Не удалось открыть выбор группы.');}
   finally{button.disabled=false;await refresh();}
 });
