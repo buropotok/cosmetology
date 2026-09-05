@@ -22,7 +22,8 @@ describe('Mini App bootstrap',()=>{
     const scriptSources=[...html.matchAll(/<script\b[^>]*\bsrc=["']([^"']+)["'][^>]*>/g)].map(match=>match[1]);
     for(const name of runtimeModules){
       expect(scriptSources).not.toContain(`/${name}`);
-      expect(bootstrap.match(new RegExp(`['"]/\\${name.replace('.','\\.')}['"]`,'g'))||[]).toHaveLength(1);
+      const importLiteral=`'/${name}'`;
+      expect(bootstrap.split(importLiteral)).toHaveLength(2);
     }
     expect(scriptSources).toContain('/bootstrap.js');
     expect(scriptSources).toHaveLength(2);
