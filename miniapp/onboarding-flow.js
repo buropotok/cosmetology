@@ -1,7 +1,7 @@
 (()=>{
 const tg=window.Telegram?.WebApp;
 const auth=()=>({Authorization:`tma ${tg?.initData||''}`,'content-type':'application/json'});
-let reconciling=false,activeFlowStep=null,continuation=null;
+let bypassPreview=false,bypassPublish=false,reconciling=false,activeFlowStep=null,continuation=null;
 async function api(path,{method='GET',body}={}){const response=await fetch(path,{method,headers:auth(),cache:'no-store',...(body?{body:JSON.stringify(body)}:{})}),data=await response.json().catch(()=>null);if(!response.ok)throw new Error(data?.error?.message||'Не удалось обновить состояние onboarding.');return data}
 async function account(){return api('/api/miniapp/me')}
 function requirementsReady(action,state){const bot=!!state?.managedBot,group=!!state?.managedBot?.destination?.connected,preview=!!state?.previewReady;return action==='telegram_preview'?bot&&preview:action==='telegram_publish'?bot&&group:false}
@@ -9,42 +9,18 @@ async function createIntent(action){await window.CosmoSofaDraft?.flush?.(`onboar
 async function complete(){return api('/api/miniapp/onboarding-intent/complete',{method:'POST'})}
 async function cancel(){return api('/api/miniapp/onboarding-intent/cancel',{method:'POST'})}
 function router(){return window.CosmoRouter}
-function openStep(step){
-  const onboarding=window.CosmoOnboardingRouter;
-  if(activeFlowStep===step&&onboarding?.active)return onboarding.active;
-  activeFlowStep=step;
-  let run;
-  if(onboarding?.active&&onboarding?.controller){router()?.show?.('onboarding');run=Promise.resolve(onboarding.controller.open(step))}
-  else if(step==='telegram_bot')run=window.CosmoOnboarding?.openBot?.();
-  else if(step==='telegram_preview')run=window.CosmoOnboarding?.openPreview?.();
-  else if(step==='telegram_group')run=window.CosmoOnboarding?.openTelegramGroup?.();
-  return Promise.resolve(run).finally(()=>{if(activeFlowStep===step)activeFlowStep=null});
-}
+function openStep(step){const onboarding=window.CosmoOnboardingRouter;if(activeFlowStep===step&&onboarding?.active)return onboarding.active;activeFlowStep=step;let run;if(onboarding?.active&&onboarding?.controller){router()?.show?.('onboarding');run=Promise.resolve(onboarding.controller.open(step))}else if(step==='telegram_bot')run=window.CosmoOnboarding?.openBot?.();else if(step==='telegram_preview')run=window.CosmoOnboarding?.openPreview?.();else if(step==='telegram_group')run=window.CosmoOnboarding?.openTelegramGroup?.();return Promise.resolve(run).finally(()=>{if(activeFlowStep===step)activeFlowStep=null})}
 function ensureModal(){let root=document.querySelector('#cosmo-onboarding-flow-modal');if(root)return root;root=document.createElement('div');root.id='cosmo-onboarding-flow-modal';root.hidden=true;root.innerHTML='<div class="cosmo-flow-modal-card" role="dialog" aria-modal="true"><h2 data-flow-title></h2><p data-flow-message></p><div class="cosmo-flow-modal-actions"><button type="button" data-flow-primary></button><button type="button" data-flow-cancel>Отмена</button></div></div>';document.body.append(root);return root}
-function modal({title,message,primary,onPrimary,onCancel}){const root=ensureModal();root.querySelector('[data-flow-title]').textContent=title;root.querySelector('[data-flow-message]').textContent=message;const ok=root.querySelector('[data-flow-primary]'),no=root.querySelector('[data-flow-cancel]');ok.textContent=primary;root.hidden=false;ok.onclick=async()=>{root.hidden=true;await onPrimary?.()};no.onclick=async()=>{root.hidden=true;await onCancel?.()};return root}
+function modal({title,message,primary,onPrimary,onCancel}){const root=ensureModal();root.querySelector('[data-flow-title]').textContent=title;root.querySelector('[data-flow-message]').textContent=message;const ok=root.querySelector('[data-flow-primary]'),no=root.querySelector('[data-flow-cancel]');ok.textContent=primary;root.hidden=false;ok.onclick=async()=>{if(ok.disabled)return;ok.disabled=true;root.hidden=true;try{await onPrimary?.()}finally{ok.disabled=false}};no.onclick=async()=>{root.hidden=true;await onCancel?.()};return root}
 function showResumeBot(){router()?.show?.('composer');modal({title:'Подключение Telegram не завершено',message:'Вы начали публикацию, но персональный бот ещё не подключён.',primary:'Продолжить подключение',onPrimary:()=>openStep('telegram_bot'),onCancel:cancel})}
-function continueComposer(action){
-  if(continuation)return continuation;
-  continuation=(async()=>{
-    try{
-      const form=document.querySelector('#publish-form');
-      if(action==='telegram_preview')return await window.CosmoComposerActions?.preview?.(form?new FormData(form):undefined);
-      if(action==='telegram_publish'){
-        if(!form)return;
-        const submitter=document.querySelector('#publish');
-        form.requestSubmit?.(submitter);
-      }
-    }finally{continuation=null}
-  })();
-  return continuation;
-}
-function showPublishConfirmation(){router()?.show?.('composer');modal({title:'Telegram подключён',message:'Всё готово для публикации.',primary:'Опубликовать',onPrimary:async()=>{await complete();await continueComposer('telegram_publish')},onCancel:cancel})}
-async function resumePreview(){router()?.show?.('composer');await complete();document.querySelector('.composer-telegram-preview')?.click()}
+function continuePublish(){if(continuation)return continuation;continuation=(async()=>{try{const form=document.querySelector('#publish-form'),submitter=document.querySelector('#publish');if(!form)return;bypassPublish=true;form.requestSubmit?.(submitter)}finally{continuation=null}})();return continuation}
+function showPublishConfirmation(){router()?.show?.('composer');modal({title:'Telegram подключён',message:'Всё готово для публикации.',primary:'Опубликовать',onPrimary:async()=>{await complete();await continuePublish()},onCancel:cancel})}
+async function resumePreview(){router()?.show?.('composer');await complete();const button=document.querySelector('.composer-telegram-preview');if(button){bypassPreview=true;button.click()}}
 async function apply(flow,{initial=false}={}){if(!flow?.intent)return;const decision=flow.reconciliation?.decision;if(decision==='continue_bot'){if(window.CosmoOnboardingRouter?.active)return;router()?.show?.('composer');if(initial)showResumeBot();else await openStep('telegram_bot');return}if(decision==='continue_preview_activation'){if(!window.CosmoOnboardingRouter?.active)await openStep('telegram_preview');return}if(decision==='continue_group'){if(!window.CosmoOnboardingRouter?.active)await openStep('telegram_group');return}if(decision==='resume_preview'){await resumePreview();return}if(decision==='show_publish_confirmation'){showPublishConfirmation()}}
 async function reconcile(options={}){if(reconciling||!tg?.initData)return;reconciling=true;try{await apply(await api('/api/miniapp/onboarding-flow'),options)}catch(error){console.warn('Onboarding flow reconciliation failed',error)}finally{reconciling=false}}
 async function guard(action){const state=await account();if(requirementsReady(action,state))return true;const flow=await createIntent(action);await apply(flow);return false}
-document.addEventListener('click',async event=>{const button=event.target.closest?.('.composer-telegram-preview');if(!button)return;try{if(!await guard('telegram_preview')){event.preventDefault();event.stopImmediatePropagation()}}catch(error){event.preventDefault();event.stopImmediatePropagation();tg?.showAlert?.(error instanceof Error?error.message:'Не удалось открыть onboarding.')}},true);
-document.addEventListener('submit',async event=>{if(event.target?.id!=='publish-form')return;if(event.submitter?.dataset?.onboardingConfirmed==='true'){delete event.submitter.dataset.onboardingConfirmed;return}try{if(await guard('telegram_publish'))return;event.preventDefault();event.stopImmediatePropagation()}catch(error){event.preventDefault();event.stopImmediatePropagation();tg?.showAlert?.(error instanceof Error?error.message:'Не удалось открыть onboarding.')}},true);
+document.addEventListener('click',event=>{const button=event.target.closest?.('.composer-telegram-preview');if(!button)return;if(bypassPreview){bypassPreview=false;return}event.preventDefault();event.stopImmediatePropagation();guard('telegram_preview').then(ready=>{if(ready){bypassPreview=true;button.click()}}).catch(error=>tg?.showAlert?.(error instanceof Error?error.message:'Не удалось открыть onboarding.'))},true);
+document.addEventListener('submit',event=>{if(event.target?.id!=='publish-form')return;if(bypassPublish){bypassPublish=false;return}event.preventDefault();event.stopImmediatePropagation();guard('telegram_publish').then(ready=>{if(ready){bypassPublish=true;event.target.requestSubmit(document.querySelector('#publish'))}}).catch(error=>tg?.showAlert?.(error instanceof Error?error.message:'Не удалось открыть onboarding.'))},true);
 function installDiagnostics(){const settings=document.querySelector('#settings-screen');if(!settings||settings.querySelector('[data-onboarding-diagnostics]'))return;const button=document.createElement('button');button.type='button';button.dataset.onboardingDiagnostics='';button.className='cosmo-onboarding-diagnostics-button';button.textContent='Диагностика onboarding flow';settings.append(button);button.addEventListener('click',showDiagnostics)}
 async function showDiagnostics(){let root=document.querySelector('#cosmo-onboarding-diagnostics');if(!root){root=document.createElement('div');root.id='cosmo-onboarding-diagnostics';root.hidden=true;root.innerHTML='<div class="cosmo-flow-diagnostics-card"><header><h2>Onboarding Flow Diagnostics</h2><button type="button" data-close>Закрыть</button></header><pre></pre></div>';document.body.append(root);root.querySelector('[data-close]').onclick=()=>root.hidden=true}root.hidden=false;root.querySelector('pre').textContent='Загрузка…';try{const data=await api('/api/miniapp/onboarding-diagnostics');root.querySelector('pre').textContent=JSON.stringify(data,null,2)}catch(error){root.querySelector('pre').textContent=error instanceof Error?error.message:'Ошибка диагностики'}}
 const style=document.createElement('style');style.textContent=`#cosmo-onboarding-flow-modal,#cosmo-onboarding-diagnostics{position:fixed;inset:0;z-index:20000;background:rgba(0,0,0,.38);display:grid;place-items:center;padding:20px}#cosmo-onboarding-flow-modal[hidden],#cosmo-onboarding-diagnostics[hidden]{display:none!important}.cosmo-flow-modal-card,.cosmo-flow-diagnostics-card{width:min(100%,420px);max-height:85vh;overflow:auto;box-sizing:border-box;background:#fff;color:#111;border-radius:16px;padding:20px;box-shadow:0 18px 50px rgba(0,0,0,.22)}.cosmo-flow-modal-card h2,.cosmo-flow-diagnostics-card h2{margin:0 0 10px;font-size:20px}.cosmo-flow-modal-card p{margin:0 0 18px;color:#555;line-height:1.45}.cosmo-flow-modal-actions{display:grid;gap:9px}.cosmo-flow-modal-actions button,.cosmo-onboarding-diagnostics-button{border:0;border-radius:12px;padding:13px 16px;font:600 15px/1.2 inherit}.cosmo-flow-modal-actions [data-flow-primary]{background:#2481cc;color:#fff}.cosmo-flow-modal-actions [data-flow-cancel],.cosmo-onboarding-diagnostics-button{background:#f2f2f7;color:#2481cc}.cosmo-onboarding-diagnostics-button{display:block;margin:18px auto}.cosmo-flow-diagnostics-card header{display:flex;align-items:center;justify-content:space-between;gap:12px}.cosmo-flow-diagnostics-card header button{border:0;background:transparent;color:#2481cc}.cosmo-flow-diagnostics-card pre{white-space:pre-wrap;word-break:break-word;font:12px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;background:#f6f7f8;border-radius:10px;padding:12px}`;document.head.append(style);
