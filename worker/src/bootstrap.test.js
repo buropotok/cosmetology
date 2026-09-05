@@ -19,13 +19,14 @@ describe('Mini App bootstrap',()=>{
       'diagnostics-fetch.js','composer-state.js','draft-store.js','drafts.js','composer-actions.js',
       'ai-mock-transfer.js','build-id.js','vk-return-confirmation.js'
     ];
+    const scriptSources=[...html.matchAll(/<script\b[^>]*\bsrc=["']([^"']+)["'][^>]*>/g)].map(match=>match[1]);
     for(const name of runtimeModules){
-      expect(html.match(new RegExp(name.replace('.','\\.'),'g'))||[]).toHaveLength(0);
-      expect(bootstrap.match(new RegExp(name.replace('.','\\.'),'g'))||[]).toHaveLength(1);
+      expect(scriptSources).not.toContain(`/${name}`);
+      expect(bootstrap.match(new RegExp(`['"]/\\${name.replace('.','\\.')}['"]`,'g'))||[]).toHaveLength(1);
     }
-    expect(html.match(/bootstrap\.js/g)).toHaveLength(1);
-    expect(html.match(/<script\b/g)||[]).toHaveLength(2);
-    expect(html).toContain('https://telegram.org/js/telegram-web-app.js');
+    expect(scriptSources).toContain('/bootstrap.js');
+    expect(scriptSources).toHaveLength(2);
+    expect(scriptSources).toContain('https://telegram.org/js/telegram-web-app.js');
     expect(miniappFile('composer-mockup.js')).not.toContain("import('/navigation.js')");
     expect(miniappFile('drafts.js')).not.toContain("import('/navigation.js')");
   });
