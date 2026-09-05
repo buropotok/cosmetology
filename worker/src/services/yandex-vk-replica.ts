@@ -68,7 +68,9 @@ async function presignR2Get(env: Env, key: string, expiresSeconds = 15 * 60) {
   query.set('X-Amz-Date', amzDate);
   query.set('X-Amz-Expires', String(expiresSeconds));
   query.set('X-Amz-SignedHeaders', 'host');
-  const canonicalQuery = Array.from(query.entries())
+  const queryEntries: Array<[string,string]> = [];
+  query.forEach((value,name)=>queryEntries.push([name,value]));
+  const canonicalQuery = queryEntries
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([name, value]) => `${rfc3986(name)}=${rfc3986(value)}`)
     .join('&');

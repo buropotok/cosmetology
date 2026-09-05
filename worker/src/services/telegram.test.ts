@@ -105,7 +105,7 @@ describe('Managed Bot token transport diagnostics',()=>{
     vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify({ok:false,error_code:401,description:`Unauthorized ${managedToken}`}),{status:401})));
     const {getTelegramBotMeWithToken}=await import('./telegram');
     await expect(getTelegramBotMeWithToken(managedToken)).rejects.toMatchObject({code:'TELEGRAM_ERROR',status:502});
-    expect(error).toHaveBeenCalledWith({event:'telegram_managed_bot_api_error',method:'getMe',errorCode:401,description:'Unauthorized [REDACTED]'});
+    expect(error).toHaveBeenCalledWith({event:'telegram_bot_api_error',method:'getMe',errorCode:401,description:'Unauthorized [REDACTED]'});
     expect(JSON.stringify(error.mock.calls)).not.toContain(managedToken);
   });
 });
