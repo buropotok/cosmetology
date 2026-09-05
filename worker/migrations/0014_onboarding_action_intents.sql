@@ -3,7 +3,7 @@ CREATE TABLE IF NOT EXISTS user_onboarding_intent (
   action TEXT NOT NULL CHECK(action IN ('telegram_preview','telegram_publish')),
   draft_ref TEXT,
   return_screen TEXT NOT NULL DEFAULT 'composer',
-  waiting_for TEXT NOT NULL CHECK(waiting_for IN ('telegram_bot','telegram_group','confirmation')),
+  waiting_for TEXT NOT NULL CHECK(waiting_for IN ('telegram_bot','telegram_preview','telegram_group','confirmation')),
   status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','completed','cancelled')),
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
