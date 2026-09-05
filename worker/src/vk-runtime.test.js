@@ -7,25 +7,28 @@ const app=readFileSync(resolve(repositoryRoot,'miniapp','app.js'),'utf8');
 const composerScreen=readFileSync(resolve(repositoryRoot,'miniapp','composer-screen.js'),'utf8');
 
 describe('verified VK preparation runtime',()=>{
-  it('keeps the canonical VK button and draft-backed Telegram download flow',()=>{
+  it('keeps the canonical VK button and downloads all draft-backed photos',()=>{
     expect(app).toContain("document.querySelector('#publish-vk')");
     expect(app).toContain("publishVk.addEventListener('click'");
     expect(app).toContain("CosmoComposerActions.publishVk");
     expect(app).toContain("fetch('/api/miniapp/draft'");
-    expect(app).toContain("result?.draft?.images?.[0]");
+    expect(app).toContain("const images=(result?.draft?.images||[]).filter(image=>image?.url).slice(0,10)");
+    expect(app).toContain('for(let index=0;index<images.length;index++)await downloadVkPhoto(images[index],index)');
     expect(app).toContain('webApp.downloadFile({url,file_name:fileName}');
     expect(app).toContain('navigator.clipboard.writeText(text.value)');
     expect(composerScreen).toContain("document.querySelector('#publish-vk')");
   });
 
-  it('does not reintroduce the experimental VK test harness',()=>{
+  it('uses only the simple preparation modal and existing VK link',()=>{
     expect(app).not.toContain('combinedTestButton');
     expect(app).not.toContain('legacyPublishVk');
     expect(app).not.toContain('dataset.vkTest');
     expect(app).not.toContain('BUILD-20260904-VK-TEST');
     expect(app).not.toContain("'Тест:");
-    expect(app).not.toContain('showVkReadyModal');
-    expect(app).not.toContain('prepareVkLink');
+    expect(app).toContain('showVkReadyModal');
+    expect(app).toContain('prepareVkLink');
+    expect(app).toContain("fetch('/api/miniapp/vk-link'");
+    expect(app).not.toContain('post_id');
     expect(composerScreen).not.toContain('publish-vk-test');
     expect(composerScreen).not.toContain('testVk');
   });
