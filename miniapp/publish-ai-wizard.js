@@ -27,12 +27,23 @@
       <span>Ручное создание публикации</span>
     </button>`;
 
-  form.insertAdjacentElement('beforebegin',root);
+  // composer-mockup.js materializes the real Composer as direct children of
+  // #composer-screen: photo label/card, image input/preview, publication
+  // label/editor, bottom actions, status and the original #publish-form.
+  // Mount the wizard after the navigation header, then toggle those actual
+  // materialized nodes instead of assuming #publish-form contains the UI.
+  const nav=screen.querySelector('.composer-nav')||screen.querySelector('.topbar');
+  if(nav)nav.insertAdjacentElement('afterend',root);
+  else screen.prepend(root);
+
+  function composeNodes(){
+    return [...screen.children].filter(node=>node!==root&&node!==nav);
+  }
 
   function setMode(mode){
     const wizardMode=mode==='wizard';
     root.hidden=!wizardMode;
-    form.hidden=wizardMode;
+    composeNodes().forEach(node=>{node.hidden=wizardMode});
     screen.dataset.publishMode=mode;
     window.dispatchEvent(new CustomEvent('cosmo-publish-mode',{detail:{mode}}));
   }
