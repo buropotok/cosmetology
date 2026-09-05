@@ -9,15 +9,37 @@ const miniappFile=name=>readFileSync(resolve(repositoryRoot,'miniapp',name),'utf
 beforeAll(async()=>{await import('../../miniapp/diagnostics-fetch.js')});
 
 describe('Mini App bootstrap',()=>{
-  it('is the only loader for stateful composer modules',()=>{
+  it('is the only loader for first-party runtime modules',()=>{
     const html=miniappFile('index.html'),bootstrap=miniappFile('bootstrap.js');
-    for(const name of ['drafts.js','composer-screen.js','composer-image-manager.js','build-id.js']){
+    const runtimeModules=[
+      'telegram-gateway.js','app-router.js','app.js','account-state.js',
+      'onboarding-api.js','onboarding-controller.js','onboarding-view.js','onboarding-router.js',
+      'settings.js','composer-mockup.js','vk-diagnostics.js','navigation.js','composer-screen.js',
+      'composer-editor-stability.js','composer-image-manager.js','before-after-bridge.js',
+      'diagnostics-fetch.js','composer-state.js','draft-store.js','drafts.js','composer-actions.js',
+      'ai-mock-transfer.js','build-id.js','vk-return-confirmation.js'
+    ];
+    for(const name of runtimeModules){
       expect(html.match(new RegExp(name.replace('.','\\.'),'g'))||[]).toHaveLength(0);
       expect(bootstrap.match(new RegExp(name.replace('.','\\.'),'g'))||[]).toHaveLength(1);
     }
     expect(html.match(/bootstrap\.js/g)).toHaveLength(1);
+    expect(html.match(/<script\b/g)||[]).toHaveLength(2);
+    expect(html).toContain('https://telegram.org/js/telegram-web-app.js');
     expect(miniappFile('composer-mockup.js')).not.toContain("import('/navigation.js')");
     expect(miniappFile('drafts.js')).not.toContain("import('/navigation.js')");
+  });
+
+  it('preserves legacy first-party startup order inside bootstrap',()=>{
+    const bootstrap=miniappFile('bootstrap.js');
+    const ordered=[
+      'telegram-gateway.js','app-router.js','app.js','account-state.js',
+      'onboarding-api.js','onboarding-controller.js','onboarding-view.js','onboarding-router.js',
+      'settings.js','composer-mockup.js','vk-diagnostics.js','navigation.js'
+    ];
+    for(let i=1;i<ordered.length;i++){
+      expect(bootstrap.indexOf(ordered[i-1])).toBeLessThan(bootstrap.indexOf(ordered[i]));
+    }
   });
 
   it('loads VK diagnostics once from bootstrap before dependent runtime code',()=>{
