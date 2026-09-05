@@ -4,6 +4,7 @@ import { resolveOrCreateTelegramIdentity } from './telegram-identity';
 import { MINIAPP_IMAGE_MAX_BYTES, MINIAPP_IMAGE_MAX_COUNT, MINIAPP_TEXT_MAX_LENGTH } from './miniapp';
 
 const DOWNLOAD_TTL_SECONDS = 5 * 60;
+const AI_STATE_MAX_LENGTH = 100_000;
 function initDataFrom(request: Request) { return request.headers.get('authorization')?.match(/^tma\s+(.+)$/i)?.[1] ?? ''; }
 async function accountFor(request: Request, env: Env) {
   const validated = await validateTelegramMiniAppInitData(initDataFrom(request), env.TELEGRAM_BOT_TOKEN);
@@ -21,11 +22,14 @@ async function signedDownloadUrl(env: Env, key: string) {
 
 export async function getMiniAppDraft(request: Request, env: Env) {
   const account = await accountFor(request, env);
-  const draft = await env.DB.prepare('SELECT text_content AS text, platform, active_photo_index AS activePhotoIndex, updated_at AS updatedAt FROM miniapp_drafts WHERE user_id=?').bind(account.userId).first<{text:string;platform:string;activePhotoIndex:number;updatedAt:string}>();
+  const draft = await env.DB.prepare('SELECT text_content AS text, platform, active_photo_index AS activePhotoIndex, screen, ai_state AS aiStateJson, updated_at AS updatedAt FROM miniapp_drafts WHERE user_id=?').bind(account.userId).first<{text:string;platform:string;activePhotoIndex:number;screen:string;aiStateJson:string;updatedAt:string}>();
   if (!draft) return { draft: null };
+  const { aiStateJson, ...rest } = draft;
+  let aiState: unknown = null;
+  try { aiState = aiStateJson ? JSON.parse(aiStateJson) : null; } catch { aiState = null; }
   const images = await env.DB.prepare('SELECT position, r2_key AS key, file_name AS fileName, content_type AS contentType, size_bytes AS size FROM miniapp_draft_images WHERE user_id=? ORDER BY position').bind(account.userId).all<{position:number;key:string;fileName:string|null;contentType:string|null;size:number}>();
   const mapped=[]; for(const image of images.results || []) mapped.push({ ...image, url: await signedDownloadUrl(env,image.key) });
-  return { draft: { ...draft, images: mapped } };
+  return { draft: { ...rest, aiState, images: mapped } };
 }
 
 export async function saveMiniAppDraft(request: Request, env: Env) {
@@ -37,8 +41,12 @@ export async function saveMiniAppDraft(request: Request, env: Env) {
   const platform = form.get('platform') === 'vk' ? 'vk' : 'telegram';
   const activeRaw = Number(form.get('activePhotoIndex') || 0);
   const activePhotoIndex = Number.isFinite(activeRaw) && activeRaw >= 0 ? Math.floor(activeRaw) : 0;
+  const screen = form.get('screen') === 'publish' ? 'publish' : 'ai';
+  const aiStateJson = typeof form.get('aiState') === 'string' ? String(form.get('aiState')) : '';
+  if (aiStateJson.length > AI_STATE_MAX_LENGTH) throw new AppError('INVALID_AI_STATE','Состояние AI слишком большое',400);
+  if (aiStateJson) { try { JSON.parse(aiStateJson); } catch { throw new AppError('INVALID_AI_STATE','Некорректное состояние AI',400); } }
   const imagesChanged = form.get('imagesChanged') === '1';
-  await env.DB.prepare(`INSERT INTO miniapp_drafts(user_id,text_content,platform,active_photo_index,created_at,updated_at) VALUES(?,?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP) ON CONFLICT(user_id) DO UPDATE SET text_content=excluded.text_content,platform=excluded.platform,active_photo_index=excluded.active_photo_index,updated_at=CURRENT_TIMESTAMP`).bind(account.userId,text,platform,activePhotoIndex).run();
+  await env.DB.prepare(`INSERT INTO miniapp_drafts(user_id,text_content,platform,active_photo_index,screen,ai_state,created_at,updated_at) VALUES(?,?,?,?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP) ON CONFLICT(user_id) DO UPDATE SET text_content=excluded.text_content,platform=excluded.platform,active_photo_index=excluded.active_photo_index,screen=excluded.screen,ai_state=excluded.ai_state,updated_at=CURRENT_TIMESTAMP`).bind(account.userId,text,platform,activePhotoIndex,screen,aiStateJson).run();
   if (imagesChanged) {
     const rawImages = form.getAll('images');
     if (rawImages.some(item => !(item instanceof File))) throw new AppError('INVALID_IMAGE','Некорректное изображение',400);
