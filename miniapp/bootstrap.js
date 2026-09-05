@@ -17,7 +17,6 @@ async function loadOnboardingAndSettings(){
 }
 
 async function loadAppShell(){
-  await import('/vk-diagnostics.js');
   await import('/navigation.js');
 }
 
