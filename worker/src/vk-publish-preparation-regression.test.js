@@ -6,10 +6,13 @@ const root=process.cwd().endsWith('/worker')?resolve(process.cwd(),'..'):process
 const app=readFileSync(resolve(root,'miniapp/app.js'),'utf8');
 
 describe('VK publish preparation regression coverage',()=>{
-  it('retains the user-verified one-image preparation path',()=>{
+  it('downloads every saved image before opening the VK continuation modal',()=>{
     expect(app).toContain("document.querySelector('#publish-vk')");
     expect(app).toContain('navigator.clipboard.writeText(text.value)');
-    expect(app).toContain('result?.draft?.images?.[0]');
+    expect(app).toContain('result?.draft?.images||[]');
+    expect(app).toContain('for(let index=0;index<images.length;index++)await downloadVkPhoto(images[index],index)');
     expect(app).toContain('webApp.downloadFile({url,file_name:fileName}');
+    expect(app).toContain('showVkReadyModal({vkUrl,textCopied,photoCount:images.length})');
+    expect(app).not.toContain('result?.draft?.images?.[0]');
   });
 });
