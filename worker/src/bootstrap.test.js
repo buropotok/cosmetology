@@ -75,6 +75,20 @@ describe('Mini App bootstrap',()=>{
     expect(flow).toContain("cancel().catch(error=>console.warn('Onboarding intent cancellation failed',error))");
   });
 
+  it('prepares VK by downloading every saved photo before the continue modal',()=>{
+    const app=miniappFile('app.js');
+    expect(app).toContain("const images=(result?.draft?.images||[]).filter(image=>image?.url).slice(0,10)");
+    expect(app).toContain('for(let index=0;index<images.length;index++)await downloadVkPhoto(images[index],index)');
+    expect(app).not.toContain('draft?.images?.[0]');
+    expect(app).toContain("'/api/miniapp/vk-link'");
+    expect(app).toContain('✓ Текст скопирован');
+    expect(app).toContain('✓ Фото скачаны');
+    expect(app).toContain('Отключите VPN чтобы продолжить.');
+    expect(app).toContain("vkButton('Продолжить',true)");
+    expect(app).toContain('webApp.openLink(vkUrl');
+    expect(app).not.toContain('post_id');
+  });
+
   it('does not load the removed VK diagnostics harness',()=>{
     const app=miniappFile('app.js'),bootstrap=miniappFile('bootstrap.js');
     expect(app).not.toContain('vk-diagnostics.js');
