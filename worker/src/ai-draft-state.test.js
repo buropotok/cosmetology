@@ -32,4 +32,15 @@ describe('AI draft state',()=>{
     expect(service).toContain('screen,ai_state');
     expect(service).not.toContain('miniapp_ai_drafts');
   });
+
+  it('uses one stateful control panel for discovery and ready-post actions',()=>{
+    const wizard=source('publish-ai-wizard.js');
+    expect(wizard).toContain('data-ai-control-panel');
+    expect(wizard).toContain("renderControlPanel('discovery',discovery)");
+    expect(wizard).toContain("controlsState:'ready-post'");
+    expect(wizard).toContain("['Короче','shorter']");
+    expect(wizard).toContain("['Другое','another']");
+    expect(wizard).toContain('Сделай предыдущий готовый пост короче, сохранив ключевые факты и смысл.');
+    expect(wizard).toContain('Подготовь другой полный вариант этого поста с другой подачей, сохранив фактическую точность.');
+  });
 });
