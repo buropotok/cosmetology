@@ -14,7 +14,7 @@ describe('Mini App bootstrap',()=>{
     const runtimeModules=[
       'telegram-gateway.js','app-router.js','app.js','account-state.js',
       'onboarding-api.js','onboarding-controller.js','onboarding-view.js','onboarding-router.js',
-      'settings.js','composer-mockup.js','navigation.js','composer-screen.js',
+      'settings.js','composer-mockup.js','navigation.js','settings-button.js','composer-screen.js',
       'composer-editor-stability.js','composer-image-manager.js','before-after-bridge.js',
       'diagnostics-fetch.js','composer-state.js','draft-store.js','drafts.js','composer-actions.js',
       'ai-mock-transfer.js','build-id.js','vk-return-confirmation.js'
@@ -45,9 +45,18 @@ describe('Mini App bootstrap',()=>{
     const ordered=[
       'telegram-gateway.js','app-router.js','app.js','account-state.js',
       'onboarding-api.js','onboarding-controller.js','onboarding-view.js','onboarding-router.js',
-      'settings.js','composer-mockup.js','navigation.js'
+      'settings.js','composer-mockup.js','navigation.js','settings-button.js'
     ];
     for(let i=1;i<ordered.length;i++)expect(bootstrap.indexOf(ordered[i-1])).toBeLessThan(bootstrap.indexOf(ordered[i]));
+  });
+
+  it('uses one component contract for Home and AI settings buttons',()=>{
+    const component=miniappFile('settings-button.js');
+    expect(component).toContain("document.querySelector('#home-screen')");
+    expect(component).toContain("document.querySelector('#ai-screen')");
+    expect(component).toContain("button.className='cosmo-flow-settings cosmo-settings-button'");
+    expect(component).toContain('.cosmo-flow-nav .cosmo-settings-button');
+    expect(component).toContain('button.innerHTML=gearSvg');
   });
 
   it('does not load the removed VK diagnostics harness',()=>{
