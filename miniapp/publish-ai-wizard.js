@@ -7,6 +7,15 @@
   const legacyBeforeAfter=document.querySelector('.composer-before-after');
   legacyBeforeAfter?.remove();
 
+  const discovery='Сначала предложи ровно 5 кратких пронумерованных тем (1–5), а не полные посты. На этом шаге не создавай готовую публикацию и не добавляй формат публикации.';
+  const presetPrompts={
+    'Новости':`Найди актуальные новости доказательной косметологии и дерматологии. Используй Google Search и проверь факты по первичным источникам. Ищи прежде всего события за последние 30 дней; если недостаточно пяти сильных тем, расширь период максимум до 60 дней. Подходят конкретные новые исследования, клинические испытания, систематические обзоры или мета-анализы, клинические рекомендации, решения регуляторов, одобрения и другие значимые события. Не предлагай вечнозелёные темы под видом новостей, расплывчатые «последние исследования», рекламные материалы, SEO-страницы или публикации из социальных сетей. Учитывай тип исследования и размер выборки и не делай медицинских обещаний или выводов сильнее доказательств. Предпочитай первичные источники. ${discovery}\n\nДля каждой темы укажи только: короткий заголовок; дату события в формате ДД.ММ.ГГГГ; тезис до 30 слов; первичный источник. Не добавляй вступление, заключение или раздел «Почему интересно».`,
+    'Мифы':`Предложи мифы о косметологии, которые полезно корректно разобрать. ${discovery}`,
+    'Интересные факты':`Предложи неожиданные, проверяемые факты о коже и косметологии. ${discovery}`,
+    'Научпоп':`Предложи научно-популярные темы о коже и косметологических процедурах. ${discovery}`,
+    'Уход':`Предложи полезные темы об уходе за кожей с понятными практическими советами. ${discovery}`
+  };
+
   const root=document.createElement('section');
   root.id='publish-ai-wizard';
   root.className='publish-ai-wizard';
@@ -138,6 +147,10 @@
   const presetButtons=[...root.querySelectorAll('.publish-ai-wizard__presets button')];
   presetButtons.forEach(button=>button.addEventListener('click',()=>{
     presetButtons.forEach(item=>item.classList.toggle('is-active',item===button));
+    const prompt=presetPrompts[button.textContent.trim()];
+    if(!prompt)return;
+    window.dispatchEvent(new CustomEvent('cosmo-ai-wizard-submit',{detail:{message:prompt,preset:button.textContent.trim()}}));
+    void sendAiMessage(prompt);
   }));
 
   promptInput?.addEventListener('input',resizePrompt);
