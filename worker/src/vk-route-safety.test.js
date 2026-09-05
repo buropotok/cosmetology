@@ -7,8 +7,12 @@ const entry=readFileSync(resolve(root,'worker/src/entry.ts'),'utf8');
 
 describe('VK route safety boundary',()=>{
   it('retains production VK routes needed by current or protected flows',()=>{
-    for(const route of ['/api/miniapp/vk-link','/api/miniapp/vk-onboarding','/api/vk-onboarding/','/api/miniapp/vk-handoff','/api/vk-handoff/','/api/vk-handoff-upload/']){
-      expect(entry).toContain(route);
-    }
+    expect(entry).toContain('/api/miniapp/vk-link');
+    expect(entry).toContain('/api/miniapp/vk-onboarding');
+    expect(entry).toContain("url.pathname.match(/^\\/api\\/vk-onboarding\\/");
+    expect(entry).toContain('/api/miniapp/vk-handoff');
+    expect(entry).toContain("url.pathname.match(/^\\/api\\/vk-handoff\\/");
+    expect(entry).toContain("url.pathname.match(/^\\/api\\/vk-handoff-upload\\/");
+    expect(entry).toContain("url.pathname.match(/^\\/api\\/vk-handoff-image\\/");
   });
 });
