@@ -36,6 +36,7 @@ async function loadComposerRuntime(){
   await import('/drafts.js');
   await import('/composer-actions.js');
   await import('/onboarding-flow.js');
+  await import('/publish-ai-wizard.js');
 }
 
 async function loadRuntimeIntegrations(){
