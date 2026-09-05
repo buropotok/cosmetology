@@ -68,6 +68,13 @@ describe('Mini App bootstrap',()=>{
     expect(flow).toContain('Диагностика onboarding flow');
   });
 
+  it('cancels the pending action intent when edit onboarding is backed out',()=>{
+    const flow=miniappFile('onboarding-flow.js'),controller=miniappFile('onboarding-controller.js');
+    expect(controller).toContain("this.finish('cancelled','user_back')");
+    expect(flow).toContain("result?.status==='cancelled'&&result?.reason==='user_back'");
+    expect(flow).toContain("cancel().catch(error=>console.warn('Onboarding intent cancellation failed',error))");
+  });
+
   it('does not load the removed VK diagnostics harness',()=>{
     const app=miniappFile('app.js'),bootstrap=miniappFile('bootstrap.js');
     expect(app).not.toContain('vk-diagnostics.js');
