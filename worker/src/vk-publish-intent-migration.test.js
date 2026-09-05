@@ -2,7 +2,7 @@ import {describe,it,expect} from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 
-const migration=fs.readFileSync(path.resolve('migrations/0015_vk_publish_intent.sql'),'utf8');
+const migration=fs.readFileSync(path.resolve('migrations/0016_vk_publish_intent.sql'),'utf8');
 
 describe('VK publish intent migration',()=>{
   it('allows persisted publish_vk and vk_vpn values',()=>{
