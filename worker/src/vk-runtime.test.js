@@ -4,6 +4,7 @@ import {describe,expect,it} from 'vitest';
 
 const repositoryRoot=process.cwd().endsWith('/worker')?resolve(process.cwd(),'..'):process.cwd();
 const app=readFileSync(resolve(repositoryRoot,'miniapp','app.js'),'utf8');
+const composerScreen=readFileSync(resolve(repositoryRoot,'miniapp','composer-screen.js'),'utf8');
 
 describe('verified VK preparation runtime',()=>{
   it('keeps the canonical VK button and draft-backed Telegram download flow',()=>{
@@ -14,6 +15,7 @@ describe('verified VK preparation runtime',()=>{
     expect(app).toContain("result?.draft?.images?.[0]");
     expect(app).toContain('webApp.downloadFile({url,file_name:fileName}');
     expect(app).toContain('navigator.clipboard.writeText(text.value)');
+    expect(composerScreen).toContain("document.querySelector('#publish-vk')");
   });
 
   it('does not reintroduce the experimental VK test harness',()=>{
@@ -24,5 +26,7 @@ describe('verified VK preparation runtime',()=>{
     expect(app).not.toContain("'Тест:");
     expect(app).not.toContain('showVkReadyModal');
     expect(app).not.toContain('prepareVkLink');
+    expect(composerScreen).not.toContain('publish-vk-test');
+    expect(composerScreen).not.toContain('testVk');
   });
 });
