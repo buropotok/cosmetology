@@ -14,7 +14,7 @@ describe('Mini App bootstrap',()=>{
     const runtimeModules=[
       'telegram-gateway.js','app-router.js','app.js','account-state.js',
       'onboarding-api.js','onboarding-controller.js','onboarding-view.js','onboarding-router.js',
-      'settings.js','composer-mockup.js','vk-diagnostics.js','navigation.js','composer-screen.js',
+      'settings.js','composer-mockup.js','navigation.js','composer-screen.js',
       'composer-editor-stability.js','composer-image-manager.js','before-after-bridge.js',
       'diagnostics-fetch.js','composer-state.js','draft-store.js','drafts.js','composer-actions.js',
       'ai-mock-transfer.js','build-id.js','vk-return-confirmation.js'
@@ -40,22 +40,21 @@ describe('Mini App bootstrap',()=>{
     for(let i=1;i<phases.length;i++)expect(start.indexOf(`await ${phases[i-1]}()`)).toBeLessThan(start.indexOf(`await ${phases[i]}()`));
   });
 
-  it('preserves legacy first-party startup order inside bootstrap',()=>{
+  it('preserves first-party startup order inside bootstrap',()=>{
     const bootstrap=miniappFile('bootstrap.js');
     const ordered=[
       'telegram-gateway.js','app-router.js','app.js','account-state.js',
       'onboarding-api.js','onboarding-controller.js','onboarding-view.js','onboarding-router.js',
-      'settings.js','composer-mockup.js','vk-diagnostics.js','navigation.js'
+      'settings.js','composer-mockup.js','navigation.js'
     ];
     for(let i=1;i<ordered.length;i++)expect(bootstrap.indexOf(ordered[i-1])).toBeLessThan(bootstrap.indexOf(ordered[i]));
   });
 
-  it('loads VK diagnostics once from bootstrap before dependent runtime code',()=>{
+  it('does not load the removed VK diagnostics harness',()=>{
     const app=miniappFile('app.js'),bootstrap=miniappFile('bootstrap.js');
     expect(app).not.toContain('vk-diagnostics.js');
-    expect(app).not.toMatch(/createElement\(['"]script['"]\)/);
-    expect(bootstrap.match(/vk-diagnostics\.js/g)).toHaveLength(1);
-    expect(bootstrap.indexOf('vk-diagnostics.js')).toBeLessThan(bootstrap.indexOf('navigation.js'));
+    expect(bootstrap).not.toContain('vk-diagnostics.js');
+    expect(app).not.toContain('CosmoVkDiagnostics');
   });
 
   it('does not replace global fetch when draft diagnostics are enabled',async()=>{
