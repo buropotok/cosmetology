@@ -1,31 +1,25 @@
 const webApp=window.Telegram?.WebApp;webApp?.ready();webApp?.expand();
 const form=document.querySelector('#publish-form'),imageInput=document.querySelector('#image'),previewWrap=document.querySelector('#preview-wrap'),previews=document.querySelector('#previews'),removeImage=document.querySelector('#remove-image'),text=document.querySelector('#text'),publish=document.querySelector('#publish'),status=document.querySelector('#status'),publishVk=document.querySelector('#publish-vk');
 
+function vkButton(label,primary=false){const button=document.createElement('button');button.type='button';button.textContent=label;button.style.cssText=`width:100%;padding:13px 16px;border-radius:12px;font:600 16px system-ui;border:${primary?'0':'1px solid rgba(128,128,128,.35)'};background:${primary?'var(--tg-theme-button-color,#2481cc)':'transparent'};color:${primary?'var(--tg-theme-button-text-color,#fff)':'var(--tg-theme-text-color,#111)'};margin-top:8px`;return button}
+function showVkReadyModal({vkUrl,textCopied,photoCount}){document.querySelector('#vk-preparation-modal')?.remove();const overlay=document.createElement('div');overlay.id='vk-preparation-modal';overlay.style.cssText='position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.45);display:grid;place-items:center;padding:20px';const card=document.createElement('div');card.style.cssText='width:min(100%,420px);background:var(--tg-theme-bg-color,#fff);color:var(--tg-theme-text-color,#111);border-radius:18px;padding:20px;box-shadow:0 20px 60px rgba(0,0,0,.25)';const title=document.createElement('strong');title.textContent='Публикация в VK';title.style.cssText='display:block;font-size:20px;margin-bottom:12px';const note=document.createElement('p');note.style.cssText='margin:0 0 14px;line-height:1.65;white-space:pre-line';note.textContent=`${textCopied?'✓ Текст скопирован\n':''}${photoCount?'✓ Фото скачаны\n':''}\nОтключите VPN чтобы продолжить.`;const proceed=vkButton('Продолжить',true),cancel=vkButton('Отмена');cancel.onclick=()=>overlay.remove();proceed.onclick=()=>{overlay.remove();webApp.openLink(vkUrl,{try_instant_view:false})};card.append(title,note,proceed,cancel);overlay.append(card);document.body.append(overlay)}
+function downloadVkPhoto(image,index){return new Promise((resolve,reject)=>{const url=new URL(image.url,location.origin).href,fileName=image.fileName||`cosmo-sofa-${index+1}.jpg`;vkDiag('vk-image-download-request',{fileName,index});webApp.downloadFile({url,file_name:fileName},accepted=>{vkDiag('vk-image-download-result',{accepted:!!accepted,fileName,index});accepted?resolve():reject(new Error(`Не удалось скачать фото ${index+1}.`))})})}
+async function prepareVkLink(){const response=await fetch('/api/miniapp/vk-link',{method:'POST',headers:authHeaders(),body:''}),result=await response.json().catch(()=>null);if(!response.ok||!result?.vkUrl)throw new Error(result?.error?.message||'Не удалось открыть публикацию VK.');return result.vkUrl}
 publishVk.addEventListener('click',async()=>window.CosmoComposerActions.publishVk(async()=>{
+  publishVk.disabled=true;
   try{
-    let textCopied=false,imageDownloadStarted=false;
-    if(text.value.trim()){
-      await navigator.clipboard.writeText(text.value);
-      textCopied=true;
-      vkDiag('vk-text-copied',{textLength:text.value.length});
-    }
+    let textCopied=false;
+    if(text.value.trim()){await navigator.clipboard.writeText(text.value);textCopied=true;vkDiag('vk-text-copied',{textLength:text.value.length})}
     if(typeof webApp?.downloadFile!=='function')throw new Error('Telegram downloadFile недоступен.');
-    const response=await fetch('/api/miniapp/draft',{headers:authHeaders()}),result=await response.json().catch(()=>null);
-    if(!response.ok)throw new Error(result?.error?.message||'Не удалось получить изображение.');
-    const image=result?.draft?.images?.[0];
-    if(!image?.url)throw new Error('Нет сохранённого изображения.');
-    const url=new URL(image.url,location.origin).href,fileName=image.fileName||'cosmo-sofa.jpg';
-    vkDiag('vk-image-download-request',{fileName,textCopied});
-    webApp.downloadFile({url,file_name:fileName},accepted=>{
-      imageDownloadStarted=!!accepted;
-      vkDiag('vk-image-download-result',{accepted:imageDownloadStarted,textCopied});
-      setStatus(imageDownloadStarted?(textCopied?'Текст скопирован, загрузка фото началась.':'Загрузка фото началась.'):(textCopied?'Текст скопирован, загрузка фото отменена.':'Загрузка фото отменена.'),imageDownloadStarted?'success':'error');
-    });
-  }catch(error){
-    const message=error instanceof Error?error.message:'Не удалось подготовить материалы.';
-    vkDiag('vk-preparation-error',{message});
-    setStatus(message,'error');
-  }
+    const response=await fetch('/api/miniapp/draft',{headers:authHeaders(),cache:'no-store'}),result=await response.json().catch(()=>null);
+    if(!response.ok)throw new Error(result?.error?.message||'Не удалось получить изображения.');
+    const images=(result?.draft?.images||[]).filter(image=>image?.url).slice(0,10);
+    for(let index=0;index<images.length;index++)await downloadVkPhoto(images[index],index);
+    const vkUrl=await prepareVkLink();
+    showVkReadyModal({vkUrl,textCopied,photoCount:images.length});
+    setStatus('Материалы для VK подготовлены.','success');
+  }catch(error){const message=error instanceof Error?error.message:'Не удалось подготовить материалы.';vkDiag('vk-preparation-error',{message});setStatus(message,'error')}
+  finally{publishVk.disabled=false}
 }));
 
 let previewUrls=[];const user=webApp?.initDataUnsafe?.user;if(user?.first_name)document.querySelector('#greeting').textContent=`Здравствуйте, ${user.first_name}`;
