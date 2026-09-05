@@ -18,6 +18,7 @@ async function loadOnboardingAndSettings(){
 }
 
 async function loadAppShell(){
+  await import('/publish-ai-wizard.js');
   await import('/navigation.js');
   await import('/ai-response-ui.js');
   await import('/settings-button.js');
@@ -36,7 +37,6 @@ async function loadComposerRuntime(){
   await import('/drafts.js');
   await import('/composer-actions.js');
   await import('/onboarding-flow.js');
-  await import('/publish-ai-wizard.js');
 }
 
 async function loadRuntimeIntegrations(){
