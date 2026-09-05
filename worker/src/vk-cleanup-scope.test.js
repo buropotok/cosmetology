@@ -8,7 +8,8 @@ const entry=readFileSync(resolve(repositoryRoot,'worker/src/entry.ts'),'utf8');
 describe('VK cleanup scope',()=>{
   it('leaves historical handoff routes intact until their Yandex relationship is audited separately',()=>{
     expect(entry).toContain("url.pathname==='/api/miniapp/vk-handoff'");
-    expect(entry).toContain('/api/vk-handoff');
-    expect(entry).toContain('/api/vk-handoff-upload');
+    expect(entry).toContain("url.pathname.match(/^\\/api\\/vk-handoff\\/");
+    expect(entry).toContain("url.pathname.match(/^\\/api\\/vk-handoff-upload\\/");
+    expect(entry).toContain("url.pathname.match(/^\\/api\\/vk-handoff-image\\/");
   });
 });
