@@ -1,7 +1,7 @@
 (()=>{
   const screen=document.querySelector('#composer-screen');
-  const form=document.querySelector('#publish-form');
-  if(!screen||!form||document.querySelector('#publish-ai-wizard'))return;
+  const composerContent=document.querySelector('#composer-content');
+  if(!screen||!composerContent||document.querySelector('#publish-ai-wizard'))return;
 
   const root=document.createElement('section');
   root.id='publish-ai-wizard';
@@ -27,23 +27,12 @@
       <span>Ручное создание публикации</span>
     </button>`;
 
-  // composer-mockup.js materializes the real Composer as direct children of
-  // #composer-screen: photo label/card, image input/preview, publication
-  // label/editor, bottom actions, status and the original #publish-form.
-  // Mount the wizard after the navigation header, then toggle those actual
-  // materialized nodes instead of assuming #publish-form contains the UI.
-  const nav=screen.querySelector('.composer-nav')||screen.querySelector('.topbar');
-  if(nav)nav.insertAdjacentElement('afterend',root);
-  else screen.prepend(root);
-
-  function composeNodes(){
-    return [...screen.children].filter(node=>node!==root&&node!==nav);
-  }
+  composerContent.insertAdjacentElement('beforebegin',root);
 
   function setMode(mode){
     const wizardMode=mode==='wizard';
     root.hidden=!wizardMode;
-    composeNodes().forEach(node=>{node.hidden=wizardMode});
+    composerContent.hidden=wizardMode;
     screen.dataset.publishMode=mode;
     window.dispatchEvent(new CustomEvent('cosmo-publish-mode',{detail:{mode}}));
   }
