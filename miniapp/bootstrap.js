@@ -18,6 +18,7 @@ async function loadOnboardingAndSettings(){
 
 async function loadAppShell(){
   await import('/navigation.js');
+  await import('/settings-button.js');
 }
 
 async function loadComposerRuntime(){
