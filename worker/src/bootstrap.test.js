@@ -16,7 +16,7 @@ describe('Mini App bootstrap',()=>{
       'onboarding-api.js','onboarding-controller.js','onboarding-view.js','onboarding-router.js',
       'settings.js','composer-mockup.js','navigation.js','settings-button.js','composer-screen.js',
       'composer-editor-stability.js','composer-image-manager.js','before-after-bridge.js',
-      'diagnostics-fetch.js','composer-state.js','draft-store.js','drafts.js','composer-actions.js',
+      'diagnostics-fetch.js','composer-state.js','draft-store.js','drafts.js','composer-actions.js','onboarding-flow.js',
       'ai-mock-transfer.js','build-id.js','vk-return-confirmation.js'
     ];
     const scriptSources=[...html.matchAll(/<script\b[^>]*\bsrc=["']([^"']+)["'][^>]*>/g)].map(match=>match[1]);
@@ -57,6 +57,15 @@ describe('Mini App bootstrap',()=>{
     expect(component).toContain("button.className='cosmo-flow-settings cosmo-settings-button'");
     expect(component).toContain('.cosmo-flow-nav .cosmo-settings-button');
     expect(component).toContain('button.innerHTML=gearSvg');
+  });
+
+  it('loads the persisted onboarding action gate after composer actions',()=>{
+    const bootstrap=miniappFile('bootstrap.js'),flow=miniappFile('onboarding-flow.js');
+    expect(bootstrap.indexOf("'/composer-actions.js'")).toBeLessThan(bootstrap.indexOf("'/onboarding-flow.js'"));
+    expect(flow).toContain("'/api/miniapp/onboarding-intent'");
+    expect(flow).toContain("'/api/miniapp/onboarding-flow'");
+    expect(flow).toContain('showPublishConfirmation');
+    expect(flow).toContain('Диагностика onboarding flow');
   });
 
   it('does not load the removed VK diagnostics harness',()=>{
