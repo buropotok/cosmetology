@@ -29,6 +29,14 @@
 
   form.insertAdjacentElement('beforebegin',root);
 
+  function setMode(mode){
+    const wizardMode=mode==='wizard';
+    root.hidden=!wizardMode;
+    form.hidden=wizardMode;
+    screen.dataset.publishMode=mode;
+    window.dispatchEvent(new CustomEvent('cosmo-publish-mode',{detail:{mode}}));
+  }
+
   const presetButtons=[...root.querySelectorAll('.publish-ai-wizard__presets button')];
   presetButtons.forEach(button=>button.addEventListener('click',()=>{
     presetButtons.forEach(item=>item.classList.toggle('is-active',item===button));
@@ -42,8 +50,12 @@
   });
 
   root.querySelector('.publish-ai-wizard__manual')?.addEventListener('click',()=>{
-    root.hidden=true;
+    setMode('compose');
     document.querySelector('#text')?.focus();
     window.dispatchEvent(new CustomEvent('cosmo-ai-wizard-manual'));
   });
+
+  window.addEventListener('cosmo-ai-wizard-use-post',()=>setMode('compose'));
+  window.addEventListener('cosmo-ai-wizard-reset',()=>setMode('wizard'));
+  setMode('wizard');
 })();
