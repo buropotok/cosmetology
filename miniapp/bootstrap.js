@@ -19,6 +19,7 @@ async function loadOnboardingAndSettings(){
 
 async function loadAppShell(){
   await import('/navigation.js');
+  await import('/ai-response-ui.js');
   await import('/settings-button.js');
 }
 
