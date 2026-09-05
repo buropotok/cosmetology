@@ -2,6 +2,7 @@ import worker from './index';
 import { createVkHandoff, getVkHandoff, getVkHandoffImage, uploadVkHandoffImage } from './services/vk-handoff';
 import { createVkOnboardingHandoff, getVkOnboardingHandoff, selectVkOnboardingGroup } from './services/vk-onboarding';
 import { getMiniAppDraft, saveMiniAppDraft, getMiniAppDraftImage } from './services/miniapp-drafts';
+import { generateMiniAppAiReply } from './services/miniapp-ai';
 import { validateTelegramMiniAppInitData } from './services/telegram-miniapp-auth';
 import { resolveOrCreateTelegramIdentity } from './services/telegram-identity';
 import { adminHtml, listAdminUsers, deleteAdminTelegramBot, deleteAdminTelegramGroup, deleteAdminVkGroup, deleteAdminUser } from './admin';
@@ -36,6 +37,7 @@ async function sendVkLinkBackup(req: Request, env: Env) {
 export default { async fetch(req: Request, env: Env, ctx: ExecutionContext) {
   const url = new URL(req.url);
   try {
+    if (req.method === 'POST' && url.pathname === '/api/miniapp/ai/chat') return json(await generateMiniAppAiReply(req, env));
     if (req.method === 'POST' && url.pathname === '/api/miniapp/vk-link') return json(await sendVkLinkBackup(req,env));
     if (req.method === 'GET' && url.pathname === '/api/miniapp/draft') return json(await getMiniAppDraft(req,env));
     if (req.method === 'POST' && url.pathname === '/api/miniapp/draft') return json(await saveMiniAppDraft(req,env));
