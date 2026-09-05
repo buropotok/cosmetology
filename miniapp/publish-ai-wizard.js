@@ -4,6 +4,9 @@
   if(!screen||!composerContent||document.querySelector('#publish-ai-wizard'))return;
 
   const tg=window.Telegram?.WebApp;
+  const legacyBeforeAfter=document.querySelector('.composer-before-after');
+  legacyBeforeAfter?.remove();
+
   const root=document.createElement('section');
   root.id='publish-ai-wizard';
   root.className='publish-ai-wizard';
@@ -35,6 +38,13 @@
     <button type="button" class="publish-ai-wizard__manual">
       <img src="/assets/icons/manual-edit.svg" alt="" aria-hidden="true">
       <span>Ручное создание публикации</span>
+    </button>
+    <button type="button" class="publish-ai-wizard__before-after">
+      <span class="publish-ai-wizard__before-after-icons" aria-hidden="true">
+        <img src="/assets/icons/account-box.svg" alt="">
+        <img src="/assets/icons/account-box.svg" alt="">
+      </span>
+      <span>ДО/ПОСЛЕ</span>
     </button>`;
 
   composerContent.insertAdjacentElement('beforebegin',root);
@@ -44,6 +54,12 @@
   const promptInput=promptForm?.querySelector('textarea');
   const promptButton=promptForm?.querySelector('button');
   let activeController=null;
+
+  function resizePrompt(){
+    if(!promptInput)return;
+    promptInput.style.height='auto';
+    promptInput.style.height=`${promptInput.scrollHeight}px`;
+  }
 
   function setResponse(value){
     if(!responseBody)return;
@@ -124,6 +140,9 @@
     presetButtons.forEach(item=>item.classList.toggle('is-active',item===button));
   }));
 
+  promptInput?.addEventListener('input',resizePrompt);
+  resizePrompt();
+
   promptForm?.addEventListener('submit',event=>{
     event.preventDefault();
     const message=promptInput?.value.trim();
@@ -145,11 +164,22 @@
     window.dispatchEvent(new CustomEvent('cosmo-ai-wizard-manual'));
   });
 
+  root.querySelector('.publish-ai-wizard__before-after')?.addEventListener('click',()=>{
+    cancelAiMessage();
+    legacyBeforeAfter?.click();
+  });
+
+  window.addEventListener('message',event=>{
+    if(event.origin!==location.origin||event.data?.type!=='cosmo-before-after-close')return;
+    if(event.data.action==='save')setMode('compose');
+  });
+
   window.addEventListener('cosmo-ai-wizard-response',event=>setResponse(event.detail?.text));
   window.addEventListener('cosmo-ai-wizard-use-post',()=>setMode('compose'));
   window.addEventListener('cosmo-ai-wizard-reset',()=>{
     cancelAiMessage();
     setResponse('');
+    resizePrompt();
     setMode('wizard');
   });
   setMode('wizard');
