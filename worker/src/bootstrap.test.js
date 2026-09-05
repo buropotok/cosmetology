@@ -30,6 +30,14 @@ describe('Mini App bootstrap',()=>{
     expect(miniappFile('drafts.js')).not.toContain("import('/navigation.js')");
   });
 
+  it('declares explicit startup phases in dependency order',()=>{
+    const bootstrap=miniappFile('bootstrap.js');
+    const phases=['loadPlatform','loadOnboardingAndSettings','loadAppShell','loadComposerRuntime','loadRuntimeIntegrations'];
+    for(const phase of phases)expect(bootstrap).toContain(`async function ${phase}()`);
+    const start=bootstrap.slice(bootstrap.indexOf('async function start()'));
+    for(let i=1;i<phases.length;i++)expect(start.indexOf(`await ${phases[i-1]}()`)).toBeLessThan(start.indexOf(`await ${phases[i]}()`));
+  });
+
   it('preserves legacy first-party startup order inside bootstrap',()=>{
     const bootstrap=miniappFile('bootstrap.js');
     const ordered=[
@@ -37,9 +45,7 @@ describe('Mini App bootstrap',()=>{
       'onboarding-api.js','onboarding-controller.js','onboarding-view.js','onboarding-router.js',
       'settings.js','composer-mockup.js','vk-diagnostics.js','navigation.js'
     ];
-    for(let i=1;i<ordered.length;i++){
-      expect(bootstrap.indexOf(ordered[i-1])).toBeLessThan(bootstrap.indexOf(ordered[i]));
-    }
+    for(let i=1;i<ordered.length;i++)expect(bootstrap.indexOf(ordered[i-1])).toBeLessThan(bootstrap.indexOf(ordered[i]));
   });
 
   it('loads VK diagnostics once from bootstrap before dependent runtime code',()=>{
