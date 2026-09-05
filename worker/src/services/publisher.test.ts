@@ -2,13 +2,14 @@ import {afterEach, describe, expect, it, vi} from 'vitest';
 import type {Env} from '../types';
 
 vi.mock('./vk', () => ({publishVK: vi.fn(async () => ({external_id: 'vk-id'}))}));
-vi.mock('./telegram', () => ({publishTelegram: vi.fn(async () => ({external_id: 'tg-id'}))}));
+vi.mock('./telegram', () => ({publishTelegramWithToken: vi.fn(async () => ({external_id: 'tg-id'}))}));
 
 import {publishPlatform} from './publisher';
-import {publishTelegram} from './telegram';
+import {publishTelegramWithToken} from './telegram';
 import {publishVK} from './vk';
 
 const env = {} as Env;
+const telegramTarget = {botId: '9001', token: 'managed-token', chatId: '@group', username: 'created_bot'};
 
 afterEach(() => vi.clearAllMocks());
 
@@ -28,11 +29,11 @@ describe('platform image policy', () => {
 
   it('continues sending Telegram the selected image and publication text', async () => {
     const image = new File(['image'], 'post.png', {type: 'image/png'});
-    await publishPlatform(env, 'telegram', 'Full illustration post', image, undefined, '@group');
-    await publishPlatform(env, 'telegram', 'Infographic title', image, undefined, '@group');
-    await publishPlatform(env, 'telegram', 'Text-only post', undefined, undefined, '@group');
-    expect(publishTelegram).toHaveBeenNthCalledWith(1, env, 'Full illustration post', image, '@group');
-    expect(publishTelegram).toHaveBeenCalledWith(env, 'Infographic title', image, '@group');
-    expect(publishTelegram).toHaveBeenLastCalledWith(env, 'Text-only post', undefined, '@group');
+    await publishPlatform(env, 'telegram', 'Full illustration post', image, undefined, telegramTarget);
+    await publishPlatform(env, 'telegram', 'Infographic title', image, undefined, telegramTarget);
+    await publishPlatform(env, 'telegram', 'Text-only post', undefined, undefined, telegramTarget);
+    expect(publishTelegramWithToken).toHaveBeenNthCalledWith(1, telegramTarget.token, 'Full illustration post', image, telegramTarget.chatId);
+    expect(publishTelegramWithToken).toHaveBeenCalledWith(telegramTarget.token, 'Infographic title', image, telegramTarget.chatId);
+    expect(publishTelegramWithToken).toHaveBeenLastCalledWith(telegramTarget.token, 'Text-only post', undefined, telegramTarget.chatId);
   });
 });
