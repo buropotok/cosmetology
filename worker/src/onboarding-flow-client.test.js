@@ -24,4 +24,11 @@ describe('Onboarding flow client continuation',()=>{
     expect(source).toContain('if(ok.disabled)return;ok.disabled=true');
     expect(source).toContain('finally{ok.disabled=false}');
   });
+
+  it('renders a reconciliation decision modal only once while it is already visible',()=>{
+    expect(source).toContain('visibleFlowDecision=null');
+    expect(source).toContain('if(decision&&visibleFlowDecision===decision&&!root.hidden)return root');
+    expect(source).toContain("if(visibleFlowDecision==='show_publish_confirmation'&&!root.hidden)return root");
+    expect(source).toContain("decision:'show_publish_confirmation'");
+  });
 });
