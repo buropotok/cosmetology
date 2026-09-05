@@ -18,9 +18,7 @@ async function loadOnboardingAndSettings(){
 }
 
 async function loadAppShell(){
-  // The AI wizard intentionally takes ownership of the existing Composer
-  // Before/After action, so that action must exist before the wizard loads.
-  await import('/composer-screen.js');
+  await import('/before-after-controller.js');
   await import('/publish-ai-wizard.js');
   await import('/navigation.js');
   await import('/ai-response-ui.js');
@@ -29,6 +27,7 @@ async function loadAppShell(){
 
 async function loadComposerRuntime(){
   await Promise.all([
+    import('/composer-screen.js'),
     import('/composer-editor-stability.js'),
     import('/composer-image-manager.js'),
     import('/before-after-bridge.js')
