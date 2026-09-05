@@ -33,6 +33,7 @@ async function loadComposerRuntime(){
   await import('/draft-store.js');
   await import('/drafts.js');
   await import('/composer-actions.js');
+  await import('/vk-publish-flow.js');
   await import('/onboarding-flow.js');
 }
 
