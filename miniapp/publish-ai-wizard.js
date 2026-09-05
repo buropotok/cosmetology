@@ -2,198 +2,30 @@
   const screen=document.querySelector('#composer-screen');
   const composerContent=document.querySelector('#composer-content');
   if(!screen||!composerContent||document.querySelector('#publish-ai-wizard'))return;
-
   const tg=window.Telegram?.WebApp;
-  const legacyBeforeAfter=document.querySelector('.composer-before-after');
-  legacyBeforeAfter?.remove();
-
-  const discovery='Сначала предложи ровно 5 кратких пронумерованных тем (1–5), а не полные посты. На этом шаге не создавай готовую публикацию и не добавляй формат публикации.';
-  const presetPrompts={
-    'Новости':`Найди актуальные новости доказательной косметологии и дерматологии. Используй Google Search и проверь факты по первичным источникам. Ищи прежде всего события за последние 30 дней; если недостаточно пяти сильных тем, расширь период максимум до 60 дней. Подходят конкретные новые исследования, клинические испытания, систематические обзоры или мета-анализы, клинические рекомендации, решения регуляторов, одобрения и другие значимые события. Не предлагай вечнозелёные темы под видом новостей, расплывчатые «последние исследования», рекламные материалы, SEO-страницы или публикации из социальных сетей. Учитывай тип исследования и размер выборки и не делай медицинских обещаний или выводов сильнее доказательств. Предпочитай первичные источники. ${discovery}\n\nДля каждой темы укажи только: короткий заголовок; дату события в формате ДД.ММ.ГГГГ; тезис до 30 слов; первичный источник. Не добавляй вступление, заключение или раздел «Почему интересно».`,
-    'Мифы':`Предложи мифы о косметологии, которые полезно корректно разобрать. ${discovery}`,
-    'Интересные факты':`Предложи неожиданные, проверяемые факты о коже и косметологии. ${discovery}`,
-    'Научпоп':`Предложи научно-популярные темы о коже и косметологических процедурах. ${discovery}`,
-    'Уход':`Предложи полезные темы об уходе за кожей с понятными практическими советами. ${discovery}`
+  const legacyBeforeAfter=document.querySelector('.composer-before-after');legacyBeforeAfter?.remove();
+  const discoveryInstruction='Сначала предложи ровно 5 кратких тем. На этом шаге не создавай готовую публикацию.';
+  const READY_POST_FORMAT_CONTRACT=`Подготовь только готовый текст публикации. Не добавляй вводных фраз, пояснений о своей работе или заключений вне поста. Сразу начинай с публикации.\n\nИспользуй естественное форматирование ChatGPT: один основной заголовок, короткие читаемые абзацы, умеренное выделение ключевых утверждений жирным и italic только когда это улучшает чтение. Важные самостоятельные тезисы можно оформлять цитатами. Используй маркированные, нумерованные и вложенные списки там, где это естественно. Обычные источники оформляй обычными ссылками.\n\nЕсли есть большой дополнительный материал, который необязательно показывать сразу, оформи его строго так: заголовок «Подробнее» с italic-пояснением «(в Telegram текст будет раскрываемым)», после которого весь раскрываемый материал находится в следующем blockquote.\n\nЕсли нужен CTA button, оформи его обычной ссылкой и сразу после неё добавь italic-пояснение «(в Telegram будет отображаться в виде кнопки)».\n\nЭти два пояснения предназначены только для интерфейса ChatGPT и не являются частью публикации. Не используй Telegram-specific элементы без необходимости. Не выводи JSON, HTML, XML, служебную разметку, code fences, технические теги или инструкции пользователю.`;
+  const presets={
+    'Новости':`Найди 5 актуальных новостей доказательной косметологии и дерматологии. Ищи конкретные события: исследование, клиническое испытание, мета-анализ, рекомендации профессиональной организации, решение регулятора или одобрение. Сначала ищи за последние 30 дней; если недостаточно 5 качественных тем, расширь период максимум до 60 дней. Проверяй факты по первичным источникам. Не используй Facebook, социальные сети, рекламные и SEO-материалы как источник. Не выдавай evergreen-темы за новости. Для каждой темы укажи короткий заголовок, дату, тезис не более 30 слов и первичный источник. ${discoveryInstruction}`,
+    'Мифы':`Предложи мифы о косметологии, которые полезно корректно разобрать. ${discoveryInstruction}`,
+    'Интересные факты':`Предложи неожиданные, проверяемые факты о коже и косметологии. ${discoveryInstruction}`,
+    'Научпоп':`Предложи научно-популярные темы о коже и косметологических процедурах. ${discoveryInstruction}`,
+    'Уход':`Предложи полезные темы об уходе за кожей с понятными практическими советами. ${discoveryInstruction}`
   };
-
-  const root=document.createElement('section');
-  root.id='publish-ai-wizard';
-  root.className='publish-ai-wizard';
-  root.setAttribute('aria-label','Cosmo Sofa AI');
-  root.innerHTML=`
-    <div class="publish-ai-wizard__header">
-      <span class="publish-ai-wizard__logo" aria-hidden="true">✦</span>
-      <div><strong>Cosmo Sofa AI</strong><span>Подготовит идею, текст и изображение</span></div>
-    </div>
-    <div class="publish-ai-wizard__presets" role="group" aria-label="Темы">
-      <button type="button" class="is-active">✨ Идея дня</button>
-      <button type="button">Новости</button>
-      <button type="button">Мифы</button>
-      <button type="button">Интересные факты</button>
-      <button type="button">Научпоп</button>
-      <button type="button">Разбор препарата</button>
-      <button type="button">Уход</button>
-    </div>
-    <form class="publish-ai-wizard__prompt">
-      <textarea rows="1" placeholder="Введите свою идею" aria-label="Своя идея" autocomplete="off"></textarea>
-      <button type="submit" aria-label="Отправить идею"><span class="publish-ai-wizard__send-icon" aria-hidden="true"></span></button>
-    </form>
-    <div class="publish-ai-wizard__response" aria-live="polite" aria-label="Ответ Cosmo Sofa AI">
-      <div class="publish-ai-wizard__response-label">Ответ Cosmo Sofa AI</div>
-      <div class="publish-ai-wizard__response-body" data-ai-response>
-        <span class="publish-ai-wizard__response-placeholder">Здесь появится ответ AI</span>
-      </div>
-    </div>
-    <button type="button" class="publish-ai-wizard__manual">
-      <img src="/assets/icons/manual-edit.svg" alt="" aria-hidden="true">
-      <span>Ручное создание публикации</span>
-    </button>
-    <button type="button" class="publish-ai-wizard__before-after">
-      <span class="publish-ai-wizard__before-after-icons" aria-hidden="true">
-        <img src="/assets/icons/account-box.svg" alt="">
-        <img src="/assets/icons/account-box.svg" alt="">
-      </span>
-      <span>ДО/ПОСЛЕ</span>
-    </button>`;
-
+  const root=document.createElement('section');root.id='publish-ai-wizard';root.className='publish-ai-wizard';root.setAttribute('aria-label','Cosmo Sofa AI');
+  root.innerHTML=`<div class="publish-ai-wizard__header"><span class="publish-ai-wizard__logo" aria-hidden="true">✦</span><div><strong>Cosmo Sofa AI</strong><span>Подготовит идею, текст и изображение</span></div></div><div class="publish-ai-wizard__presets" role="group" aria-label="Темы"><button type="button" class="is-active">✨ Идея дня</button><button type="button">Новости</button><button type="button">Мифы</button><button type="button">Интересные факты</button><button type="button">Научпоп</button><button type="button">Разбор препарата</button><button type="button">Уход</button></div><form class="publish-ai-wizard__prompt"><textarea rows="1" placeholder="Введите свою идею" aria-label="Своя идея" autocomplete="off"></textarea><button type="submit" aria-label="Отправить идею"><span class="publish-ai-wizard__send-icon" aria-hidden="true"></span></button></form><div class="publish-ai-wizard__response" aria-live="polite" aria-label="Ответ Cosmo Sofa AI"><div class="publish-ai-wizard__response-label">Ответ Cosmo Sofa AI</div><div class="publish-ai-wizard__response-body" data-ai-response><span class="publish-ai-wizard__response-placeholder">Здесь появится ответ AI</span></div></div><button type="button" class="publish-ai-wizard__manual"><img src="/assets/icons/manual-edit.svg" alt="" aria-hidden="true"><span>Ручное создание публикации</span></button><button type="button" class="publish-ai-wizard__before-after"><span class="publish-ai-wizard__before-after-icons" aria-hidden="true"><img src="/assets/icons/account-box.svg" alt=""><img src="/assets/icons/account-box.svg" alt=""></span><span>ДО/ПОСЛЕ</span></button>`;
   composerContent.insertAdjacentElement('beforebegin',root);
-
-  const responseBody=root.querySelector('[data-ai-response]');
-  const promptForm=root.querySelector('.publish-ai-wizard__prompt');
-  const promptInput=promptForm?.querySelector('textarea');
-  const promptButton=promptForm?.querySelector('button');
-  let activeController=null;
-
-  function resizePrompt(){
-    if(!promptInput)return;
-    promptInput.style.height='auto';
-    promptInput.style.height=`${promptInput.scrollHeight}px`;
-  }
-
-  function setResponse(value){
-    if(!responseBody)return;
-    const text=typeof value==='string'?value.trim():'';
-    responseBody.replaceChildren();
-    if(!text){
-      const placeholder=document.createElement('span');
-      placeholder.className='publish-ai-wizard__response-placeholder';
-      placeholder.textContent='Здесь появится ответ AI';
-      responseBody.append(placeholder);
-      return;
-    }
-    const content=document.createElement('div');
-    content.className='publish-ai-wizard__response-text';
-    content.textContent=text;
-    responseBody.append(content);
-  }
-
-  function setPending(pending){
-    root.classList.toggle('is-pending',pending);
-    if(promptButton){
-      promptButton.type=pending?'button':'submit';
-      promptButton.setAttribute('aria-label',pending?'Прервать генерацию':'Отправить идею');
-    }
-  }
-
-  function cancelAiMessage(){
-    if(!activeController)return;
-    activeController.abort();
-    activeController=null;
-    setPending(false);
-    setResponse('Генерация остановлена.');
-  }
-
-  async function sendAiMessage(message){
-    if(!message||activeController)return;
-    tg?.HapticFeedback?.impactOccurred?.('light');
-    const controller=new AbortController();
-    activeController=controller;
-    setPending(true);
-    setResponse('Генерирую ответ…');
-    try{
-      const response=await fetch('/api/miniapp/ai/chat',{
-        method:'POST',
-        headers:{Authorization:`tma ${tg?.initData||''}`,'content-type':'application/json'},
-        body:JSON.stringify({message}),
-        signal:controller.signal
-      });
-      const result=await response.json().catch(()=>null);
-      if(!response.ok)throw new Error(result?.error?.message||'Не удалось получить ответ AI.');
-      if(typeof result?.text!=='string'||!result.text.trim())throw new Error('AI вернул пустой ответ.');
-      setResponse(result.text);
-      window.dispatchEvent(new CustomEvent('cosmo-ai-wizard-response',{detail:{text:result.text}}));
-      tg?.HapticFeedback?.notificationOccurred?.('success');
-    }catch(error){
-      if(error?.name!=='AbortError'){
-        setResponse(error instanceof Error?error.message:'Не удалось получить ответ AI.');
-        tg?.HapticFeedback?.notificationOccurred?.('error');
-      }
-    }finally{
-      if(activeController===controller){
-        activeController=null;
-        setPending(false);
-      }
-    }
-  }
-
-  function setMode(mode){
-    const wizardMode=mode==='wizard';
-    root.hidden=!wizardMode;
-    composerContent.hidden=wizardMode;
-    screen.dataset.publishMode=mode;
-    window.dispatchEvent(new CustomEvent('cosmo-publish-mode',{detail:{mode}}));
-  }
-
-  const presetButtons=[...root.querySelectorAll('.publish-ai-wizard__presets button')];
-  presetButtons.forEach(button=>button.addEventListener('click',()=>{
-    presetButtons.forEach(item=>item.classList.toggle('is-active',item===button));
-    const prompt=presetPrompts[button.textContent.trim()];
-    if(!prompt)return;
-    window.dispatchEvent(new CustomEvent('cosmo-ai-wizard-submit',{detail:{message:prompt,preset:button.textContent.trim()}}));
-    void sendAiMessage(prompt);
-  }));
-
-  promptInput?.addEventListener('input',resizePrompt);
-  resizePrompt();
-
-  promptForm?.addEventListener('submit',event=>{
-    event.preventDefault();
-    const message=promptInput?.value.trim();
-    if(!message){promptInput?.focus();return;}
-    window.dispatchEvent(new CustomEvent('cosmo-ai-wizard-submit',{detail:{message}}));
-    void sendAiMessage(message);
-  });
-
-  promptButton?.addEventListener('click',event=>{
-    if(!activeController)return;
-    event.preventDefault();
-    cancelAiMessage();
-  });
-
-  root.querySelector('.publish-ai-wizard__manual')?.addEventListener('click',()=>{
-    cancelAiMessage();
-    setMode('compose');
-    document.querySelector('#text')?.focus();
-    window.dispatchEvent(new CustomEvent('cosmo-ai-wizard-manual'));
-  });
-
-  root.querySelector('.publish-ai-wizard__before-after')?.addEventListener('click',()=>{
-    cancelAiMessage();
-    legacyBeforeAfter?.click();
-  });
-
-  window.addEventListener('message',event=>{
-    if(event.origin!==location.origin||event.data?.type!=='cosmo-before-after-close')return;
-    if(event.data.action==='save')setMode('compose');
-  });
-
-  window.addEventListener('cosmo-ai-wizard-response',event=>setResponse(event.detail?.text));
-  window.addEventListener('cosmo-ai-wizard-use-post',()=>setMode('compose'));
-  window.addEventListener('cosmo-ai-wizard-reset',()=>{
-    cancelAiMessage();
-    setResponse('');
-    resizePrompt();
-    setMode('wizard');
-  });
-  setMode('wizard');
+  const responseBody=root.querySelector('[data-ai-response]'),promptForm=root.querySelector('.publish-ai-wizard__prompt'),promptInput=promptForm?.querySelector('textarea'),promptButton=promptForm?.querySelector('button');let activeController=null,currentDiscovery=null;
+  function resizePrompt(){if(!promptInput)return;promptInput.style.height='auto';promptInput.style.height=`${promptInput.scrollHeight}px`}
+  function setResponse(value){if(!responseBody)return;responseBody.replaceChildren();const text=typeof value==='string'?value.trim():'';if(!text){const p=document.createElement('span');p.className='publish-ai-wizard__response-placeholder';p.textContent='Здесь появится ответ AI';responseBody.append(p);return}const c=document.createElement('div');c.className='publish-ai-wizard__response-text';c.textContent=text;responseBody.append(c)}
+  function renderDiscovery(discovery){currentDiscovery=discovery;responseBody.replaceChildren();discovery.ideas.forEach((idea,index)=>{const item=document.createElement('div');item.className='publish-ai-wizard__idea';const title=document.createElement('strong');title.textContent=`${index+1}. ${idea.title}`;const text=document.createElement('div');text.textContent=idea.text;item.append(title,text);if(idea.date){const meta=document.createElement('div');meta.textContent=idea.date;item.append(meta)}if(idea.source){const link=document.createElement('a');link.href=idea.source.url;link.target='_blank';link.rel='noopener noreferrer';link.textContent=idea.source.name;item.append(link)}responseBody.append(item)});const choices=document.createElement('div');choices.className='publish-ai-wizard__choices';discovery.ideas.forEach((idea,index)=>{const b=document.createElement('button');b.type='button';b.textContent=String(index+1);b.addEventListener('click',()=>confirmIdea(idea,index+1));choices.append(b)});responseBody.append(choices)}
+  function setPending(pending){root.classList.toggle('is-pending',pending);if(promptButton){promptButton.type=pending?'button':'submit';promptButton.setAttribute('aria-label',pending?'Прервать генерацию':'Отправить идею')}}
+  function cancelAiMessage(){if(!activeController)return;activeController.abort();activeController=null;setPending(false);setResponse('Генерация остановлена.')}
+  async function requestAi(message,mode='text'){if(!message||activeController)return;const controller=new AbortController();activeController=controller;setPending(true);setResponse('Генерирую ответ…');try{const response=await fetch('/api/miniapp/ai/chat',{method:'POST',headers:{Authorization:`tma ${tg?.initData||''}`,'content-type':'application/json'},body:JSON.stringify({message,mode}),signal:controller.signal});const result=await response.json().catch(()=>null);if(!response.ok)throw new Error(result?.error?.message||'Не удалось получить ответ AI.');if(mode==='discovery'){if(!result?.discovery)throw new Error('AI вернул некорректные варианты.');renderDiscovery(result.discovery)}else{if(typeof result?.text!=='string'||!result.text.trim())throw new Error('AI вернул пустой ответ.');setResponse(result.text)}tg?.HapticFeedback?.notificationOccurred?.('success')}catch(error){if(error?.name!=='AbortError'){setResponse(error instanceof Error?error.message:'Не удалось получить ответ AI.');tg?.HapticFeedback?.notificationOccurred?.('error')}}finally{if(activeController===controller){activeController=null;setPending(false)}}}
+  function confirmIdea(idea,n){if(!window.confirm(`Выбрать вариант ${n}: «${idea.title}»?`))return;const prompt=`Раскрой выбранный тезис и подготовь готовый пост для публикации, сохранив предметные требования выбранной темы.\n\nЭто отдельный API-запрос, поэтому весь выбранный тезис передан ниже. Используй именно его как предмет публикации и не ссылайся на предыдущий диалог.\n\nВыбранный тезис:\n${JSON.stringify(idea,null,2)}\n\nВерни полный новый готовый пост. Не комментируй изменения и не добавляй вводных фраз.\n\n${READY_POST_FORMAT_CONTRACT}`;void requestAi(prompt,'text')}
+  function setMode(mode){const wizardMode=mode==='wizard';root.hidden=!wizardMode;composerContent.hidden=wizardMode;screen.dataset.publishMode=mode;window.dispatchEvent(new CustomEvent('cosmo-publish-mode',{detail:{mode}}))}
+  const presetButtons=[...root.querySelectorAll('.publish-ai-wizard__presets button')];presetButtons.forEach(button=>button.addEventListener('click',()=>{presetButtons.forEach(item=>item.classList.toggle('is-active',item===button));const prompt=presets[button.textContent.trim()];if(prompt)void requestAi(prompt,'discovery')}));
+  promptInput?.addEventListener('input',resizePrompt);resizePrompt();promptForm?.addEventListener('submit',event=>{event.preventDefault();const message=promptInput?.value.trim();if(!message){promptInput?.focus();return}void requestAi(`${message}\n\n${discoveryInstruction}`,'discovery')});promptButton?.addEventListener('click',event=>{if(!activeController)return;event.preventDefault();cancelAiMessage()});
+  root.querySelector('.publish-ai-wizard__manual')?.addEventListener('click',()=>{cancelAiMessage();setMode('compose');document.querySelector('#text')?.focus();window.dispatchEvent(new CustomEvent('cosmo-ai-wizard-manual'))});root.querySelector('.publish-ai-wizard__before-after')?.addEventListener('click',()=>{cancelAiMessage();legacyBeforeAfter?.click()});window.addEventListener('message',event=>{if(event.origin!==location.origin||event.data?.type!=='cosmo-before-after-close')return;if(event.data.action==='save')setMode('compose')});window.addEventListener('cosmo-ai-wizard-use-post',()=>setMode('compose'));window.addEventListener('cosmo-ai-wizard-reset',()=>{cancelAiMessage();currentDiscovery=null;setResponse('');resizePrompt();setMode('wizard')});setMode('wizard');
 })();
