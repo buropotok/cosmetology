@@ -14,6 +14,7 @@ async function loadOnboardingAndSettings(){
   await import('/onboarding-router.js');
   await import('/settings.js');
   await import('/composer-mockup.js');
+  await import('/vk-group-publish-guard.js');
 }
 
 async function loadAppShell(){
