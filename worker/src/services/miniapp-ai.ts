@@ -11,6 +11,23 @@ function getMiniAppInitData(req: Request) {
   return req.headers.get('authorization')?.match(/^tma\s+(.+)$/i)?.[1] ?? '';
 }
 
+function serializeAiError(error: unknown): unknown {
+  if (error instanceof Error) {
+    const details: Record<string, unknown> = {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+    };
+    for (const key of Object.getOwnPropertyNames(error)) {
+      if (key === 'name' || key === 'message' || key === 'stack') continue;
+      const value = (error as unknown as Record<string, unknown>)[key];
+      details[key] = value instanceof Error ? serializeAiError(value) : value;
+    }
+    return details;
+  }
+  return error;
+}
+
 function parseDiscovery(text: string) {
   const cleaned = text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
   const value = JSON.parse(cleaned) as { schemaVersion?: unknown; ideas?: unknown };
@@ -43,6 +60,7 @@ export async function generateMiniAppAiReply(req: Request, env: Env) {
   if (message.length > MAX_MESSAGE_LENGTH) throw new AppError('AI_MESSAGE_TOO_LONG', `Сообщение не должно превышать ${MAX_MESSAGE_LENGTH} символов`, 400);
   if (!env.GEMINI_API_KEY) throw new AppError('AI_NOT_CONFIGURED', 'AI пока не настроен', 503);
 
+  const model = env.AI_TEXT_MODEL?.trim() || DEFAULT_MODEL;
   const google = createGoogleGenerativeAI({ apiKey: env.GEMINI_API_KEY });
   const prompt = mode === 'discovery'
     ? `${message}\n\nВерни только JSON, строго соответствующий этой JSON Schema. Не используй Markdown или code fences. id вариантов должны идти строго idea_1 ... idea_5.\n\n${JSON.stringify(discoverySchema)}`
@@ -50,7 +68,7 @@ export async function generateMiniAppAiReply(req: Request, env: Env) {
 
   try {
     const result = await generateText({
-      model: google(env.AI_TEXT_MODEL?.trim() || DEFAULT_MODEL),
+      model: google(model),
       tools: { google_search: google.tools.googleSearch({}) },
       prompt,
     });
@@ -58,7 +76,12 @@ export async function generateMiniAppAiReply(req: Request, env: Env) {
     if (!text) throw new Error('Gemini returned an empty response');
     return mode === 'discovery' ? { discovery: parseDiscovery(text) } : { text };
   } catch (error) {
-    console.error('Mini App AI generation failed', error);
+    console.error('Mini App AI generation failed', {
+      provider: 'google',
+      model,
+      mode,
+      error: serializeAiError(error),
+    });
     throw new AppError('AI_GENERATION_FAILED', 'Не удалось получить ответ AI. Попробуйте ещё раз.', 502);
   }
 }
