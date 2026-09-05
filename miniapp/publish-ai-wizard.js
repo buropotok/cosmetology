@@ -17,6 +17,9 @@
       <button type="button">Новости</button>
       <button type="button">Мифы</button>
       <button type="button">Интересные факты</button>
+      <button type="button">Научпоп</button>
+      <button type="button">Разбор препарата</button>
+      <button type="button">Уход</button>
     </div>
     <form class="publish-ai-wizard__prompt">
       <input type="text" placeholder="Введите свою идею" aria-label="Своя идея" autocomplete="off">
