@@ -25,6 +25,9 @@ export async function generateMiniAppAiReply(req: Request, env: Env) {
   try {
     const result = await generateText({
       model: google(env.AI_TEXT_MODEL?.trim() || DEFAULT_MODEL),
+      tools: {
+        google_search: google.tools.googleSearch({}),
+      },
       prompt: message,
     });
     const text = result.text.trim();
