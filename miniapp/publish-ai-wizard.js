@@ -21,6 +21,12 @@
       <button type="button">Разбор препарата</button>
       <button type="button">Уход</button>
     </div>
+    <div class="publish-ai-wizard__response" aria-live="polite" aria-label="Ответ Cosmo Sofa AI">
+      <div class="publish-ai-wizard__response-label">Ответ Cosmo Sofa AI</div>
+      <div class="publish-ai-wizard__response-body" data-ai-response>
+        <span class="publish-ai-wizard__response-placeholder">Здесь появится ответ AI</span>
+      </div>
+    </div>
     <form class="publish-ai-wizard__prompt">
       <input type="text" placeholder="Введите свою идею" aria-label="Своя идея" autocomplete="off">
       <button type="submit" aria-label="Отправить идею">↑</button>
@@ -31,6 +37,24 @@
     </button>`;
 
   composerContent.insertAdjacentElement('beforebegin',root);
+
+  const responseBody=root.querySelector('[data-ai-response]');
+  function setResponse(value){
+    if(!responseBody)return;
+    const text=typeof value==='string'?value.trim():'';
+    responseBody.replaceChildren();
+    if(!text){
+      const placeholder=document.createElement('span');
+      placeholder.className='publish-ai-wizard__response-placeholder';
+      placeholder.textContent='Здесь появится ответ AI';
+      responseBody.append(placeholder);
+      return;
+    }
+    const content=document.createElement('div');
+    content.className='publish-ai-wizard__response-text';
+    content.textContent=text;
+    responseBody.append(content);
+  }
 
   function setMode(mode){
     const wizardMode=mode==='wizard';
@@ -58,7 +82,11 @@
     window.dispatchEvent(new CustomEvent('cosmo-ai-wizard-manual'));
   });
 
+  window.addEventListener('cosmo-ai-wizard-response',event=>setResponse(event.detail?.text));
   window.addEventListener('cosmo-ai-wizard-use-post',()=>setMode('compose'));
-  window.addEventListener('cosmo-ai-wizard-reset',()=>setMode('wizard'));
+  window.addEventListener('cosmo-ai-wizard-reset',()=>{
+    setResponse('');
+    setMode('wizard');
+  });
   setMode('wizard');
 })();
