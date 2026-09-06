@@ -41,7 +41,8 @@ export async function saveMiniAppDraft(request: Request, env: Env) {
   const platform = form.get('platform') === 'vk' ? 'vk' : 'telegram';
   const activeRaw = Number(form.get('activePhotoIndex') || 0);
   const activePhotoIndex = Number.isFinite(activeRaw) && activeRaw >= 0 ? Math.floor(activeRaw) : 0;
-  const screen = form.get('screen') === 'publish' ? 'publish' : 'ai';
+  const requestedScreen = String(form.get('screen') || '');
+  const screen = requestedScreen === 'beforeafter' ? 'beforeafter' : requestedScreen === 'publish' ? 'publish' : 'ai';
   const aiStateJson = typeof form.get('aiState') === 'string' ? String(form.get('aiState')) : '';
   if (aiStateJson.length > AI_STATE_MAX_LENGTH) throw new AppError('INVALID_AI_STATE','Состояние AI слишком большое',400);
   if (aiStateJson) { try { JSON.parse(aiStateJson); } catch { throw new AppError('INVALID_AI_STATE','Некорректное состояние AI',400); } }
