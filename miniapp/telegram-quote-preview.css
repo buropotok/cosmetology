@@ -1,0 +1,25 @@
+.publish-ai-wizard__response-body blockquote,
+.composer-tiptap-editor .tiptap blockquote{
+  position:relative!important;
+  box-sizing:border-box!important;
+  margin:10px 0!important;
+  padding:10px 12px 10px 16px!important;
+  border:0!important;
+  border-radius:10px!important;
+  background:rgba(36,129,204,.10)!important;
+  background:color-mix(in srgb,var(--tg-theme-link-color,#2481cc) 12%,var(--tg-theme-bg-color,#fff))!important;
+  white-space:normal!important;
+  overflow:hidden!important;
+}
+.publish-ai-wizard__response-body blockquote::before,
+.composer-tiptap-editor .tiptap blockquote::before{
+  content:""!important;
+  position:absolute!important;
+  inset:0 auto 0 0!important;
+  width:4px!important;
+  border-radius:10px 0 0 10px!important;
+  background:var(--tg-theme-link-color,#2481cc)!important;
+}
+.composer-tiptap-editor .tiptap blockquote p:last-child{
+  margin-bottom:0!important;
+}
