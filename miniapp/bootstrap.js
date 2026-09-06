@@ -23,7 +23,6 @@ async function loadAppShell(){
   await import('/navigation.js');
   await import('/draft-loading-overlay.js');
   await import('/ai-response-ui.js');
-  await import('/settings-button.js');
 }
 
 async function loadComposerRuntime(){

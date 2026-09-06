@@ -25,14 +25,9 @@ const retry=overlay.querySelector('.cosmo-draft-load-retry');
 const skip=overlay.querySelector('.cosmo-draft-load-skip');
 let dismissed=false;
 
-function setHomeControlsVisible(visible){
-  const settings=document.querySelector('#home-screen #open-settings');
-  if(settings)settings.hidden=!visible;
-}
 function showLoading(){
   dismissed=false;
   overlay.hidden=false;
-  setHomeControlsVisible(false);
   spinner.hidden=false;
   actions.hidden=true;
   title.textContent='Запрос ваших черновиков';
@@ -40,16 +35,12 @@ function showLoading(){
 function showError(){
   if(dismissed)return;
   overlay.hidden=false;
-  setHomeControlsVisible(false);
   spinner.hidden=true;
   actions.hidden=false;
   title.textContent='Ошибка загрузки черновиков';
   retry.focus({preventScroll:true});
 }
-function hide(){
-  overlay.hidden=true;
-  setHomeControlsVisible(true);
-}
+function hide(){overlay.hidden=true}
 function sync(state){
   if(!state||dismissed)return;
   if(state.loadStatus==='error')return showError();
