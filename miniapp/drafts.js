@@ -9,5 +9,5 @@ const store=window.CosmoDraftStoreFactory.create({state,auxState:aiState,fetchIm
 window.CosmoSofaDraft=Object.freeze({load:store.load,scheduleSave:store.scheduleSave,flush:store.flush,save:()=>store.flush('api-save'),clear:store.clear,cancelRestore:store.cancelRestore,getState:store.getState});
 document.addEventListener('visibilitychange',()=>{if(document.hidden)void store.flush('visibility-hidden')});
 window.addEventListener('pagehide',()=>{void store.flush('pagehide')});
-void store.load();
+void store.load().catch(()=>{});
 })();
