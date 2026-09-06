@@ -14,7 +14,7 @@ test('link button uses persistent editor footer and two-step modal without chang
   assert.match(source,/buttons\.push\(\{text:draft\.text,url:draft\.url\}\)/);
   assert.match(source,/buttons\[index\]=\{text:draft\.text,url:draft\.url\}/);
   assert.match(source,/buttons\.splice\(index,1\)/);
-  assert.match(source,/return\{schemaVersion:1,blocks,\.\.\.\(buttons\.length\?\{buttons:\[\.\.\.buttons\]\}:\{\}\)\}/);
+  assert.match(source,/return\{schemaVersion:2,blocks,\.\.\.\(buttons\.length\?\{buttons:\[\.\.\.buttons\]\}:\{\}\)\}/);
   assert.doesNotMatch(source,/prompt\('Текст кнопки'/);
   assert.doesNotMatch(source,/prompt\('Ссылка кнопки'/);
 });
