@@ -8,6 +8,8 @@ style.textContent=`
 `;
 document.head.append(style);
 
+document.querySelector('#flow-continue')?.replaceChildren('Продолжить работу с черновика');
+
 const overlay=document.createElement('div');
 overlay.className='cosmo-draft-load-overlay';
 overlay.setAttribute('role','dialog');
