@@ -18,7 +18,7 @@
   <circle cx="100" cy="120" r="8" fill="#FFF" opacity="0.9" filter="url(#glow)"/>
   <circle cx="420" cy="380" r="6" fill="#00F2FE" opacity="0.8" filter="url(#glow)"/>
   <circle cx="80" cy="360" r="5" fill="#FFF" opacity="0.6" filter="url(#glow)"/>
-  <path d="M400 110 L405 140 L435 145 L405 150 L400 180 L395 150 L365 145 L395 140 Z" fill="#FFF" opacity="0.95" filter="url(#glow)"/>
+  <path d="M400 95.625 C402.083 115.5 420.75 134.167 440.625 136.25 C420.75 138.333 402.083 157 400 176.875 C397.917 157 379.25 138.333 359.375 136.25 C379.25 134.167 397.917 115.5 400 95.625 Z" fill="#FFF" opacity="0.95" filter="url(#glow)"/>
   <g filter="url(#glow)">
     <path d="M90 200 C 90 150, 422 150, 422 200 L 422 340 L 90 340 Z" fill="url(#sofaGrad)"/>
     <path d="M60 295 C 60 275, 75 270, 95 270 L 253 270 L 253 340 L 85 340 C 65 340, 60 320, 60 295 Z" fill="#00F2FE"/>
