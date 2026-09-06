@@ -7,7 +7,7 @@ afterEach(()=>{vi.unstubAllGlobals();vi.restoreAllMocks()});
 
 describe('structured Telegram publishing',()=>{
   it('uses sendRichMessage for structured HTML',async()=>{
-    const fetch=vi.fn(async()=>new Response(JSON.stringify({ok:true,result:{message_id:11}}),{status:200}));
+    const fetch=vi.fn(async(_url:string,_init:RequestInit)=>new Response(JSON.stringify({ok:true,result:{message_id:11}}),{status:200}));
     vi.stubGlobal('fetch',fetch);
     const result=await publishTelegram(env,{plainText:'A',html:'A',blocks:[],richMessageHtml:'<blockquote><p>A</p></blockquote>'},undefined,'@channel');
     expect(fetch.mock.calls[0][0]).toBe('https://api.telegram.org/bottoken/sendRichMessage');
@@ -18,7 +18,7 @@ describe('structured Telegram publishing',()=>{
 
   it('publishes media separately before a Rich Message so structure is not flattened into a caption',async()=>{
     let id=20;
-    const fetch=vi.fn(async()=>new Response(JSON.stringify({ok:true,result:{message_id:id++}}),{status:200}));
+    const fetch=vi.fn(async(_url:string,_init:RequestInit)=>new Response(JSON.stringify({ok:true,result:{message_id:id++}}),{status:200}));
     vi.stubGlobal('fetch',fetch);
     const image=new File(['photo'],'post.jpg',{type:'image/jpeg'});
     const result=await publishTelegram(env,{plainText:'A',html:'A',blocks:[],richMessageHtml:'<details><summary>X</summary><p>A</p></details>'},image,'@channel');
