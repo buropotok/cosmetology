@@ -17,17 +17,20 @@ test('ready PostDocument v2 exposes primary edit and publish action',()=>{
   assert.match(transfer,/dataset\.publishMode='compose'/);
 });
 
-test('Tiptap preserves nested details blocks instead of flattening them to inline runs',()=>{
-  assert.match(tiptap,/const nodeToPostBlock=/);
-  assert.match(tiptap,/detailsBlocks=\(body\?\.content\|\|\[\]\)\.map\(nodeToPostBlock\)/);
-  assert.match(tiptap,/blocks:detailsBlocks\.length\?detailsBlocks/);
-  assert.match(tiptap,/legacyBlocks=Array\.isArray\(block\.blocks\)\?block\.blocks/);
+test('Tiptap preserves recursive quote, details and nested-list structure in PostDocument',()=>{
+  assert.match(tiptap,/function nodeToPostBlock\(node\)/);
+  assert.match(tiptap,/node\.type==='blockquote'.*map\(nodeToPostBlock\)/s);
+  assert.match(tiptap,/node\.type==='details'.*map\(nodeToPostBlock\)/s);
+  assert.match(tiptap,/item\.children=\{type:listType\(nested\),items:/);
+  assert.match(tiptap,/Array\.isArray\(block\.blocks\)\?block\.blocks\.map\(blockNode\)/);
+  assert.match(tiptap,/nested\.type==='ordered_list'\?'orderedList':'bulletList'/);
   assert.match(tiptap,/schemaVersion:2,blocks/);
 });
 
 test('AI response keeps canonical PostDocument for direct Tiptap transfer',()=>{
   assert.match(responseUi,/window\.CosmoAiPostDocument = doc \|\| null/);
   assert.match(responseUi,/cosmo-ai-post-document/);
+  assert.match(responseUi,/Array\.isArray\(block\.blocks\)/);
   assert.match(tiptap,/COSMO_DRAFT_V3/);
   assert.match(tiptap,/function postToTiptap\(doc\)/);
   assert.match(tiptap,/function restoreDraft\(value\)/);

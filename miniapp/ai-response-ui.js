@@ -37,32 +37,39 @@ function appendList(parent, block) {
     const item = Array.isArray(raw) ? { content: raw } : raw;
     const li = document.createElement('li');
     appendRuns(li, item?.content);
-    if (Array.isArray(item?.children) && item.children.length) appendList(li, { type: block.type, items: item.children });
+    const children = item?.children;
+    if (Array.isArray(children) && children.length) appendList(li, { type: block.type, items: children });
+    else if (children?.type && Array.isArray(children.items) && children.items.length) appendList(li, children);
     list.append(li);
   }
   parent.append(list);
 }
 
 function appendBlock(parent, block) {
+  if (!block || typeof block !== 'object') return;
   if (block.type === 'bullet_list' || block.type === 'ordered_list') { appendList(parent, block); return; }
-  const element = document.createElement(block.type === 'heading' ? 'h3' : block.type === 'quote' ? 'blockquote' : 'p');
+  if (block.type === 'details') {
+    const details = document.createElement('details');
+    const summary = document.createElement('summary');
+    appendRuns(summary, block.title?.length ? block.title : [{ text: 'Подробнее' }]);
+    const content = document.createElement('div');
+    for (const child of Array.isArray(block.blocks) ? block.blocks : []) appendBlock(content, child);
+    details.append(summary, content); parent.append(details); return;
+  }
+  if (block.type === 'quote') {
+    const quote = document.createElement('blockquote');
+    if (Array.isArray(block.blocks)) for (const child of block.blocks) appendBlock(quote, child);
+    else appendRuns(quote, block.content);
+    parent.append(quote); return;
+  }
+  const element = document.createElement(block.type === 'heading' ? 'h3' : 'p');
   appendRuns(element, block.content);
   parent.append(element);
 }
 
 function renderPostDocument(doc) {
   const fragment = document.createDocumentFragment();
-  for (const block of doc.blocks) {
-    if (block.type === 'details') {
-      const details = document.createElement('details');
-      const summary = document.createElement('summary');
-      appendRuns(summary, block.title?.length ? block.title : [{ text: 'Подробнее' }]);
-      const content = document.createElement('div');
-      for (const child of Array.isArray(block.blocks) ? block.blocks : []) appendBlock(content, child);
-      details.append(summary, content); fragment.append(details); continue;
-    }
-    appendBlock(fragment, block);
-  }
+  for (const block of doc.blocks) appendBlock(fragment, block);
   for (const button of Array.isArray(doc.buttons) ? doc.buttons : []) {
     if (typeof button?.url !== 'string' || !/^https?:\/\//i.test(button.url)) continue;
     const link = document.createElement('a'); link.className = 'publish-ai-wizard__post-button'; link.href = button.url; link.target = '_blank'; link.rel = 'noopener noreferrer'; link.textContent = button.text || button.url; fragment.append(link);

@@ -10,11 +10,12 @@ test('loads Telegram quote styling at bootstrap', () => {
   assert.match(bootstrap, /data-cosmo-telegram-quotes/);
 });
 
-test('styles both AI preview and Tiptap quotes as Telegram-like cards', () => {
+test('styles both AI preview and Tiptap quotes as light Telegram-like cards', () => {
   assert.match(css, /\.publish-ai-wizard__response-body blockquote/);
   assert.match(css, /\.composer-tiptap-editor \.tiptap blockquote/);
   assert.match(css, /border-radius:10px!important/);
-  assert.match(css, /background:rgba\(36,129,204,\.10\)!important/);
+  assert.match(css, /background:rgba\(36,129,204,\.07\)!important/);
+  assert.match(css, /color:#111!important/);
   assert.match(css, /width:4px!important/);
-  assert.match(css, /--tg-theme-link-color/);
+  assert.doesNotMatch(css, /--tg-theme-bg-color/);
 });

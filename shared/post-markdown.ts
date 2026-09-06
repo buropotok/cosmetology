@@ -135,7 +135,9 @@ function parseList(lines: string[], start: number): { block: PostDetailsBlock; n
       const parent = items[items.length - 1];
       if (!parent) break;
       const child: PostListItem = { content: parsePostMarkdownInline(current.text) };
-      (parent.children ??= []).push(child);
+      const children = Array.isArray(parent.children) ? parent.children : [];
+      children.push(child);
+      parent.children = children;
     }
     index += 1;
   }
