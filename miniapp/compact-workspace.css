@@ -1,10 +1,14 @@
 /* Compact working surfaces only. */
-.publish-ai-wizard{margin:2px;padding:2px}
-.publish-ai-wizard__prompt textarea{padding:2px}
-.publish-ai-wizard__response-body{padding:2px}
-.publish-ai-wizard__control-panel{padding:2px}
-@media(max-width:520px){.publish-ai-wizard{margin:2px;padding:2px}}
+.publish-ai-wizard{margin:2px;padding:14px 2px;border-radius:12px}
+.publish-ai-wizard__prompt{position:relative;display:block;margin-bottom:14px;padding:0;background:#f2f2f7;border-radius:12px;overflow:hidden}
+.publish-ai-wizard__prompt textarea{display:block;width:100%;min-height:72px;padding:14px 58px 14px 14px;background:transparent;border-radius:0}
+.publish-ai-wizard__prompt button{position:absolute;right:8px;bottom:8px;width:40px;height:40px;min-height:40px;min-width:40px;display:grid;place-items:center;border-radius:50%;padding:0}
+.publish-ai-wizard__response-body{padding:14px 2px;border-radius:10px}
+.publish-ai-wizard__control-panel{padding:14px 2px;border-radius:10px;overflow:hidden}
+@media(max-width:520px){.publish-ai-wizard{margin:2px;padding:14px 2px}}
 
 #composer-screen.approved-composer{padding-left:2px;padding-right:2px}
-#composer-screen.approved-composer .composer-editor{padding:2px}
-#composer-screen.approved-composer .composer-bodytext{padding:2px!important}
+#composer-screen.approved-composer .composer-card{border-radius:12px}
+#composer-screen.approved-composer .composer-photo-card{overflow:hidden}
+#composer-screen.approved-composer .composer-editor{padding:14px 2px}
+#composer-screen.approved-composer .composer-bodytext{padding:12px 14px!important}
