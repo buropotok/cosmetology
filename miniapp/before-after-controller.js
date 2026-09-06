@@ -13,6 +13,7 @@
   document.head.append(style);
 
   const imageInput=document.querySelector('#image');
+  const webApp=window.Telegram?.WebApp;
   let overlay=null;
 
   function ensureOverlay(){
@@ -24,6 +25,12 @@
     document.body.append(overlay);
     return overlay;
   }
+
+  function frameBridge(){
+    try{return overlay?.querySelector('iframe')?.contentWindow?.CosmoBeforeAfterBridge||null}catch{return null}
+  }
+
+  function setSaveStage(message){frameBridge()?.setStage?.(message)}
 
   function open(){
     const current=ensureOverlay();
@@ -38,29 +45,86 @@
     window.scrollTo({top:0,behavior:'instant'});
   }
 
-  function applyImage(image){
-    if(!image?.buffer)return;
-    const file=new File([image.buffer],image.name||'before-after.jpg',{type:image.mime||'image/jpeg'});
-    const manager=window.CosmoComposerImages;
-    if(manager?.replaceFiles){
-      manager.replaceFiles([file]);
-      return;
+  function authHeaders(){
+    if(!webApp?.initData)throw new Error('Telegram Mini App недоступен. Не удалось сохранить изображение.');
+    return {Authorization:`tma ${webApp.initData}`};
+  }
+
+  function draftBody(file){
+    const snapshot=window.CosmoComposerState?.getSnapshot?.()||{};
+    const aux=window.CosmoAiWizardState?.getSnapshot?.()||null;
+    const body=new FormData();
+    body.set('text',typeof snapshot.content==='string'?snapshot.content:'');
+    body.set('platform',snapshot.platform==='vk'?'vk':'telegram');
+    body.set('activePhotoIndex','0');
+    body.set('imagesChanged','1');
+    if(aux){
+      body.set('screen',aux.screen==='publish'?'publish':'ai');
+      body.set('aiState',JSON.stringify(aux));
     }
-    if(!imageInput)return;
+    body.append('images',file,file.name);
+    return body;
+  }
+
+  async function persistResult(file){
+    const response=await fetch('/api/miniapp/draft',{method:'POST',headers:authHeaders(),body:draftBody(file)});
+    const result=await response.json().catch(()=>null);
+    if(!response.ok)throw new Error(result?.error?.message||'Не удалось подготовить изображение к сохранению.');
+    const image=result?.draft?.images?.[0];
+    if(!image?.url)throw new Error('Не удалось получить ссылку для сохранения изображения.');
+    return new URL(image.url,location.origin).href;
+  }
+
+  function downloadToGallery(url,fileName){
+    if(typeof webApp?.downloadFile!=='function')return Promise.reject(new Error('В этой версии Telegram сохранение изображения в галерею недоступно.'));
+    return new Promise((resolve,reject)=>{
+      let settled=false;
+      const timeout=setTimeout(()=>{if(settled)return;settled=true;reject(new Error('Telegram не подтвердил сохранение изображения. Попробуйте ещё раз.'))},45000);
+      const finish=(error)=>{if(settled)return;settled=true;clearTimeout(timeout);error?reject(error):resolve()};
+      try{
+        webApp.downloadFile({url,file_name:fileName},accepted=>accepted?finish():finish(new Error('Сохранение изображения в галерею отменено.')));
+      }catch(error){finish(error instanceof Error?error:new Error('Не удалось сохранить изображение в галерею.'))}
+    });
+  }
+
+  function applyImageFile(file){
+    const manager=window.CosmoComposerImages;
+    if(manager?.replaceFiles){manager.replaceFiles([file]);return true}
+    if(!imageInput||typeof DataTransfer==='undefined')return false;
     const dt=new DataTransfer();
     dt.items.add(file);
     imageInput.files=dt.files;
     imageInput.dispatchEvent(new Event('change',{bubbles:true}));
+    return true;
+  }
+
+  const nextPaint=()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+
+  async function save(blob,name=`before-after-${Date.now()}.jpg`){
+    if(!blob||typeof blob.size!=='number'||blob.size<=0)throw new Error('Не удалось собрать изображение.');
+    const file=new File([blob],name,{type:blob.type||'image/jpeg',lastModified:Date.now()});
+
+    setSaveStage('Подготавливаем безопасную копию…');
+    const downloadUrl=await persistResult(file);
+
+    setSaveStage('Сохраняем копию в галерею…');
+    await downloadToGallery(downloadUrl,file.name);
+
+    setSaveStage('Добавляем изображение…');
+    if(!applyImageFile(file))throw new Error('Не удалось добавить изображение в редактор.');
+    await nextPaint();
+
+    close();
+    window.dispatchEvent(new CustomEvent('cosmo-before-after-close',{detail:{action:'save'}}));
   }
 
   window.addEventListener('message',event=>{
     const frame=overlay?.querySelector('iframe');
     if(event.origin!==location.origin||event.source!==frame?.contentWindow)return;
-    if(event.data?.type!=='cosmo-before-after-close')return;
-    if(event.data.action==='save')applyImage(event.data.image);
+    if(event.data?.type!=='cosmo-before-after-close'||event.data.action!=='back')return;
     close();
-    window.dispatchEvent(new CustomEvent('cosmo-before-after-close',{detail:{action:event.data.action}}));
+    window.dispatchEvent(new CustomEvent('cosmo-before-after-close',{detail:{action:'back'}}));
   });
 
-  window.CosmoBeforeAfter=Object.freeze({open,close});
+  window.CosmoBeforeAfter=Object.freeze({open,close,save});
 })();
