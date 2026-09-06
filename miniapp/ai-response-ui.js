@@ -7,6 +7,11 @@ if (aiResultTitle) {
 
 const responseBody = document.querySelector('[data-ai-response]');
 
+function publishPostDocument(doc) {
+  window.CosmoAiPostDocument = doc || null;
+  window.dispatchEvent(new CustomEvent('cosmo-ai-post-document', { detail: { document: doc || null } }));
+}
+
 function appendRuns(parent, runs) {
   for (const run of Array.isArray(runs) ? runs : []) {
     let node = document.createTextNode(typeof run?.text === 'string' ? run.text : '');
@@ -63,13 +68,14 @@ function renderPostDocument(doc) {
 function renderStructuredResponse() {
   if (!responseBody || responseBody.dataset.postDocumentRendered === responseBody.textContent) return;
   const raw = responseBody.textContent?.trim() || '';
-  if (!raw.startsWith('{')) return;
+  if (!raw.startsWith('{')) { publishPostDocument(null); return; }
   try {
     const doc = JSON.parse(raw);
-    if (doc?.schemaVersion !== 1 || !Array.isArray(doc.blocks)) return;
+    if (doc?.schemaVersion !== 1 || !Array.isArray(doc.blocks)) { publishPostDocument(null); return; }
     responseBody.replaceChildren(renderPostDocument(doc));
     responseBody.dataset.postDocumentRendered = responseBody.textContent || 'rendered';
-  } catch {}
+    publishPostDocument(doc);
+  } catch { publishPostDocument(null); }
 }
 
 if (responseBody) {
