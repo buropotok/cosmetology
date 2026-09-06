@@ -5,6 +5,8 @@ import vm from 'node:vm';
 
 const storeSource=await readFile(new URL('./draft-store.js',import.meta.url),'utf8');
 const overlaySource=await readFile(new URL('./draft-loading-overlay.js',import.meta.url),'utf8');
+const settingsButtonSource=await readFile(new URL('./settings-button.js',import.meta.url),'utf8');
+const settingsIconSource=await readFile(new URL('./assets/icons/settings.svg',import.meta.url),'utf8');
 const bootstrapSource=await readFile(new URL('./bootstrap.js',import.meta.url),'utf8');
 
 function createState(){
@@ -55,16 +57,18 @@ test('failed draft load becomes retryable error state',async()=>{
   assert.equal(store.getState().hasDraft,false);
 });
 
-test('draft loading UI contract and bootstrap order stay explicit',()=>{
+test('draft loading UI stays independent from Home settings controls',()=>{
   assert.match(overlaySource,/Запрос ваших черновиков/);
   assert.match(overlaySource,/Ошибка загрузки черновиков/);
   assert.match(overlaySource,/Ещё раз/);
   assert.match(overlaySource,/Пропустить/);
   assert.match(overlaySource,/Продолжить работу с черновика/);
-  assert.match(overlaySource,/function setHomeControlsVisible\(visible\)/);
-  assert.match(overlaySource,/querySelector\('#home-screen #open-settings'\)/);
-  assert.match(overlaySource,/setHomeControlsVisible\(false\)/);
-  assert.match(overlaySource,/setHomeControlsVisible\(true\)/);
+  assert.doesNotMatch(overlaySource,/setHomeControlsVisible/);
+  assert.doesNotMatch(overlaySource,/open-settings/);
+  assert.doesNotMatch(overlaySource,/cosmo-settings/);
+  assert.match(settingsButtonSource,/\/assets\/icons\/settings\.svg/);
+  assert.doesNotMatch(settingsButtonSource,/<svg/);
+  assert.match(settingsIconSource,/<svg/);
   assert.match(storeSource,/const LOAD_TIMEOUT_MS=10000/);
   const overlayImport=bootstrapSource.indexOf("import('/draft-loading-overlay.js')");
   const storeImport=bootstrapSource.indexOf("import('/draft-store.js')");
