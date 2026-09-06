@@ -61,6 +61,10 @@ test('draft loading UI contract and bootstrap order stay explicit',()=>{
   assert.match(overlaySource,/Ещё раз/);
   assert.match(overlaySource,/Пропустить/);
   assert.match(overlaySource,/Продолжить работу с черновика/);
+  assert.match(overlaySource,/function setHomeControlsVisible\(visible\)/);
+  assert.match(overlaySource,/querySelector\('#home-screen #open-settings'\)/);
+  assert.match(overlaySource,/setHomeControlsVisible\(false\)/);
+  assert.match(overlaySource,/setHomeControlsVisible\(true\)/);
   assert.match(storeSource,/const LOAD_TIMEOUT_MS=10000/);
   const overlayImport=bootstrapSource.indexOf("import('/draft-loading-overlay.js')");
   const storeImport=bootstrapSource.indexOf("import('/draft-store.js')");
