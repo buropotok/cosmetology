@@ -16,25 +16,45 @@
     },
     "run": { "type": "object", "additionalProperties": false, "properties": { "text": { "type": "string" }, "marks": { "type": "array", "items": { "$ref": "#/definitions/mark" } } }, "required": ["text"] },
     "runs": { "type": "array", "items": { "$ref": "#/definitions/run" } },
-    "nestedListItem": { "type": "object", "additionalProperties": false, "properties": { "content": { "$ref": "#/definitions/runs" } }, "required": ["content"] },
-    "listItem": { "type": "object", "additionalProperties": false, "properties": { "content": { "$ref": "#/definitions/runs" }, "children": { "type": "array", "items": { "$ref": "#/definitions/nestedListItem" } } }, "required": ["content"] },
-    "textBlock": {
-      "type": "object", "additionalProperties": false,
-      "properties": { "type": { "type": "string", "enum": ["paragraph", "heading", "quote"] }, "content": { "$ref": "#/definitions/runs" } },
-      "required": ["type", "content"]
-    },
-    "listBlock": {
+    "nestedList": {
       "type": "object", "additionalProperties": false,
       "properties": { "type": { "type": "string", "enum": ["bullet_list", "ordered_list"] }, "items": { "type": "array", "items": { "$ref": "#/definitions/listItem" } } },
       "required": ["type", "items"]
     },
-    "detailsBlock": { "oneOf": [{ "$ref": "#/definitions/textBlock" }, { "$ref": "#/definitions/listBlock" }] },
-    "details": {
+    "listItem": {
       "type": "object", "additionalProperties": false,
-      "properties": { "type": { "type": "string", "enum": ["details"] }, "title": { "$ref": "#/definitions/runs" }, "blocks": { "type": "array", "minItems": 1, "items": { "$ref": "#/definitions/detailsBlock" } }, "emoji": { "type": "string" } },
+      "properties": {
+        "content": { "$ref": "#/definitions/runs" },
+        "children": { "oneOf": [ { "type": "array", "items": { "$ref": "#/definitions/listItem" } }, { "$ref": "#/definitions/nestedList" } ] }
+      },
+      "required": ["content"]
+    },
+    "textBlock": {
+      "type": "object", "additionalProperties": false,
+      "properties": { "type": { "type": "string", "enum": ["paragraph", "heading"] }, "content": { "$ref": "#/definitions/runs" } },
+      "required": ["type", "content"]
+    },
+    "listBlock": {
+      "type": "object", "additionalProperties": false,
+      "properties": { "type": { "type": "string", "enum": ["bullet_list", "ordered_list"] }, "items": { "type": "array", "items": { "oneOf": [ { "$ref": "#/definitions/runs" }, { "$ref": "#/definitions/listItem" } ] } } },
+      "required": ["type", "items"]
+    },
+    "simpleQuote": {
+      "type": "object", "additionalProperties": false,
+      "properties": { "type": { "type": "string", "enum": ["quote"] }, "content": { "$ref": "#/definitions/runs" } },
+      "required": ["type", "content"]
+    },
+    "structuredQuote": {
+      "type": "object", "additionalProperties": false,
+      "properties": { "type": { "type": "string", "enum": ["quote"] }, "blocks": { "type": "array", "minItems": 1, "items": { "$ref": "#/definitions/block" } } },
       "required": ["type", "blocks"]
     },
-    "block": { "oneOf": [{ "$ref": "#/definitions/textBlock" }, { "$ref": "#/definitions/listBlock" }, { "$ref": "#/definitions/details" }] },
+    "details": {
+      "type": "object", "additionalProperties": false,
+      "properties": { "type": { "type": "string", "enum": ["details"] }, "title": { "$ref": "#/definitions/runs" }, "blocks": { "type": "array", "minItems": 1, "items": { "$ref": "#/definitions/block" } }, "emoji": { "type": "string" } },
+      "required": ["type", "blocks"]
+    },
+    "block": { "oneOf": [ { "$ref": "#/definitions/textBlock" }, { "$ref": "#/definitions/listBlock" }, { "$ref": "#/definitions/simpleQuote" }, { "$ref": "#/definitions/structuredQuote" }, { "$ref": "#/definitions/details" } ] },
     "button": { "type": "object", "additionalProperties": false, "properties": { "text": { "type": "string" }, "url": { "type": "string" } }, "required": ["text", "url"] }
   }
 }
