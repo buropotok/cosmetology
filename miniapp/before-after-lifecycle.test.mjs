@@ -7,6 +7,14 @@ const bridge=await readFile(new URL('./before-after-bridge.js',import.meta.url),
 const lifecycle=await readFile(new URL('./new-post-lifecycle.js',import.meta.url),'utf8');
 const bootstrap=await readFile(new URL('./bootstrap.js',import.meta.url),'utf8');
 
+function functionBody(source,name,nextName){
+  const start=source.indexOf(`function ${name}(`);
+  assert.ok(start>=0,`${name} should exist`);
+  const end=nextName?source.indexOf(`function ${nextName}(`,start):source.length;
+  assert.ok(end>start,`${name} boundary should exist`);
+  return source.slice(start,end);
+}
+
 test('Before/After workspace is cleared only by explicit new-post lifecycle',()=>{
   assert.match(controller,/addEventListener\('cosmo-new-post',clear\)/);
   assert.match(controller,/Object\.freeze\(\{open,close,clear,save\}\)/);
@@ -17,8 +25,9 @@ test('Before/After workspace is cleared only by explicit new-post lifecycle',()=
 
 test('save and close keep the Before/After iframe draft alive',()=>{
   assert.match(controller,/async function save[\s\S]+?close\(\);window\.dispatchEvent/);
-  assert.match(controller,/function close\(\)[\s\S]+?overlay\.hidden=true/);
-  assert.doesNotMatch(controller,/function close\(\)[\s\S]+?overlay\.remove\(\)/);
+  const closeBody=functionBody(controller,'close','clear');
+  assert.match(closeBody,/overlay\.hidden=true/);
+  assert.doesNotMatch(closeBody,/overlay\.remove\(\)/);
 });
 
 test('loader is transient and reset on reopen',()=>{
