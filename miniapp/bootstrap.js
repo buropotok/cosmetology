@@ -1,5 +1,14 @@
 const BOOTSTRAP_KEY='__CosmoMiniAppBootstrap';
 
+function loadWorkspaceStyles(){
+  if(document.querySelector('link[data-cosmo-workspace-spacing]'))return;
+  const link=document.createElement('link');
+  link.rel='stylesheet';
+  link.href='/compact-workspace.css';
+  link.dataset.cosmoWorkspaceSpacing='';
+  document.head.append(link);
+}
+
 async function loadPlatform(){
   await import('/telegram-gateway.js');
   await import('/app-router.js');
@@ -51,6 +60,7 @@ async function loadRuntimeIntegrations(){
 async function start(){
   // Startup phases preserve the legacy index.html dependency order while
   // keeping bootstrap as the single first-party Mini App composition root.
+  loadWorkspaceStyles();
   await loadPlatform();
   await loadOnboardingAndSettings();
   await loadAppShell();
