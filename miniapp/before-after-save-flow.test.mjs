@@ -30,7 +30,7 @@ test('Before After saves through Telegram before importing into composer',()=>{
 test('Before After bridge passes Blob directly without ArrayBuffer cloning',()=>{
   assert.doesNotMatch(bridge,/\.arrayBuffer\(/);
   assert.doesNotMatch(bridge,/image:\{buffer/);
-  assert.match(bridge,/parentApi\.save\(blob,/);
+  assert.match(bridge,/controller\.save\(blob,/);
 });
 
 test('save stages explain backup and editor import progress',()=>{
