@@ -41,14 +41,16 @@ export async function generateMiniAppImage(req: Request, env: Env) {
 
   const model = env.AI_IMAGE_MODEL?.trim() || DEFAULT_IMAGE_MODEL;
   const prompt = `${ILLUSTRATION_PROMPT}\n\nГОТОВЫЙ ТЕКСТ ПУБЛИКАЦИИ:\n${text}`;
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1/models/${encodeURIComponent(model)}:generateContent`, {
+  const response = await fetch('https://generativelanguage.googleapis.com/v1beta/interactions', {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-goog-api-key': env.GEMINI_API_KEY },
     body: JSON.stringify({
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      generationConfig: {
-        responseModalities: ['IMAGE'],
-        responseFormat: { image: { aspectRatio: 'RATIO_4_5', imageSize: 'IMAGE_SIZE_1K' } },
+      model,
+      input: prompt,
+      response_format: {
+        type: 'image',
+        aspect_ratio: '4:5',
+        image_size: '1K',
       },
     }),
   });
@@ -58,10 +60,21 @@ export async function generateMiniAppImage(req: Request, env: Env) {
     console.error('Mini App image generation failed', { model, status: response.status, error: result?.error });
     throw new AppError('AI_IMAGE_GENERATION_FAILED', 'Не удалось сгенерировать изображение. Попробуйте ещё раз.', 502);
   }
-  const parts = result?.candidates?.[0]?.content?.parts;
-  const imagePart = Array.isArray(parts) ? parts.find((part: any) => part?.inlineData?.data) : null;
-  const data = imagePart?.inlineData?.data;
-  const mimeType = imagePart?.inlineData?.mimeType || 'image/png';
+
+  const outputImage = result?.interaction?.output_image ?? result?.output_image;
+  let data = outputImage?.data;
+  let mimeType = outputImage?.mime_type || outputImage?.mimeType || 'image/png';
+
+  if (typeof data !== 'string' || !data) {
+    const steps = result?.interaction?.steps ?? result?.steps;
+    const contentBlocks = Array.isArray(steps)
+      ? steps.flatMap((step: any) => Array.isArray(step?.content) ? step.content : [])
+      : [];
+    const imageBlock = contentBlocks.find((block: any) => block?.type === 'image' && typeof block?.data === 'string' && block.data);
+    data = imageBlock?.data;
+    mimeType = imageBlock?.mime_type || imageBlock?.mimeType || mimeType;
+  }
+
   if (typeof data !== 'string' || !data) throw new AppError('AI_IMAGE_EMPTY', 'Gemini не вернул изображение. Попробуйте ещё раз.', 502);
 
   return new Response(decodeBase64(data), {
