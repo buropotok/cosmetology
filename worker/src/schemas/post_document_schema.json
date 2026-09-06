@@ -3,82 +3,38 @@
   "type": "object",
   "additionalProperties": false,
   "properties": {
-    "schemaVersion": { "type": "integer", "enum": [1] },
-    "blocks": {
-      "type": "array",
-      "minItems": 1,
-      "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "type": { "type": "string", "enum": ["paragraph", "heading", "quote", "details", "bullet_list", "ordered_list"] },
-          "content": { "$ref": "#/definitions/runs" },
-          "title": { "$ref": "#/definitions/runs" },
-          "emoji": { "type": "string" },
-          "items": {
-            "type": "array",
-            "items": { "$ref": "#/definitions/listItem" }
-          }
-        },
-        "required": ["type"]
-      }
-    },
-    "buttons": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "text": { "type": "string" },
-          "url": { "type": "string" }
-        },
-        "required": ["text", "url"]
-      }
-    }
+    "schemaVersion": { "type": "integer", "enum": [2] },
+    "blocks": { "type": "array", "minItems": 1, "items": { "$ref": "#/definitions/block" } },
+    "buttons": { "type": "array", "items": { "$ref": "#/definitions/button" } }
   },
   "required": ["schemaVersion", "blocks"],
   "definitions": {
     "mark": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "type": { "type": "string", "enum": ["bold", "italic", "underline", "strikethrough", "spoiler", "link"] },
-        "href": { "type": "string" }
-      },
+      "type": "object", "additionalProperties": false,
+      "properties": { "type": { "type": "string", "enum": ["bold", "italic", "underline", "strikethrough", "spoiler", "link"] }, "href": { "type": "string" } },
       "required": ["type"]
     },
-    "run": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "text": { "type": "string" },
-        "marks": { "type": "array", "items": { "$ref": "#/definitions/mark" } }
-      },
-      "required": ["text"]
+    "run": { "type": "object", "additionalProperties": false, "properties": { "text": { "type": "string" }, "marks": { "type": "array", "items": { "$ref": "#/definitions/mark" } } }, "required": ["text"] },
+    "runs": { "type": "array", "items": { "$ref": "#/definitions/run" } },
+    "nestedListItem": { "type": "object", "additionalProperties": false, "properties": { "content": { "$ref": "#/definitions/runs" } }, "required": ["content"] },
+    "listItem": { "type": "object", "additionalProperties": false, "properties": { "content": { "$ref": "#/definitions/runs" }, "children": { "type": "array", "items": { "$ref": "#/definitions/nestedListItem" } } }, "required": ["content"] },
+    "textBlock": {
+      "type": "object", "additionalProperties": false,
+      "properties": { "type": { "type": "string", "enum": ["paragraph", "heading", "quote"] }, "content": { "$ref": "#/definitions/runs" } },
+      "required": ["type", "content"]
     },
-    "runs": {
-      "type": "array",
-      "items": { "$ref": "#/definitions/run" }
+    "listBlock": {
+      "type": "object", "additionalProperties": false,
+      "properties": { "type": { "type": "string", "enum": ["bullet_list", "ordered_list"] }, "items": { "type": "array", "items": { "$ref": "#/definitions/listItem" } } },
+      "required": ["type", "items"]
     },
-    "nestedListItem": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "content": { "$ref": "#/definitions/runs" }
-      },
-      "required": ["content"]
+    "detailsBlock": { "oneOf": [{ "$ref": "#/definitions/textBlock" }, { "$ref": "#/definitions/listBlock" }] },
+    "details": {
+      "type": "object", "additionalProperties": false,
+      "properties": { "type": { "type": "string", "enum": ["details"] }, "title": { "$ref": "#/definitions/runs" }, "blocks": { "type": "array", "minItems": 1, "items": { "$ref": "#/definitions/detailsBlock" } }, "emoji": { "type": "string" } },
+      "required": ["type", "blocks"]
     },
-    "listItem": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "content": { "$ref": "#/definitions/runs" },
-        "children": {
-          "type": "array",
-          "items": { "$ref": "#/definitions/nestedListItem" }
-        }
-      },
-      "required": ["content"]
-    }
+    "block": { "oneOf": [{ "$ref": "#/definitions/textBlock" }, { "$ref": "#/definitions/listBlock" }, { "$ref": "#/definitions/details" }] },
+    "button": { "type": "object", "additionalProperties": false, "properties": { "text": { "type": "string" }, "url": { "type": "string" } }, "required": ["text", "url"] }
   }
 }

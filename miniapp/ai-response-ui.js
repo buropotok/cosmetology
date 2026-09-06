@@ -33,30 +33,35 @@ function appendRuns(parent, runs) {
 
 function appendList(parent, block) {
   const list = document.createElement(block.type === 'ordered_list' ? 'ol' : 'ul');
-  for (const item of Array.isArray(block.items) ? block.items : []) {
+  for (const raw of Array.isArray(block.items) ? block.items : []) {
+    const item = Array.isArray(raw) ? { content: raw } : raw;
     const li = document.createElement('li');
-    appendRuns(li, item.content);
-    if (Array.isArray(item.children) && item.children.length) appendList(li, { type: block.type, items: item.children });
+    appendRuns(li, item?.content);
+    if (Array.isArray(item?.children) && item.children.length) appendList(li, { type: block.type, items: item.children });
     list.append(li);
   }
   parent.append(list);
 }
 
+function appendBlock(parent, block) {
+  if (block.type === 'bullet_list' || block.type === 'ordered_list') { appendList(parent, block); return; }
+  const element = document.createElement(block.type === 'heading' ? 'h3' : block.type === 'quote' ? 'blockquote' : 'p');
+  appendRuns(element, block.content);
+  parent.append(element);
+}
+
 function renderPostDocument(doc) {
   const fragment = document.createDocumentFragment();
   for (const block of doc.blocks) {
-    if (block.type === 'bullet_list' || block.type === 'ordered_list') { appendList(fragment, block); continue; }
     if (block.type === 'details') {
       const details = document.createElement('details');
       const summary = document.createElement('summary');
-      appendRuns(summary, block.title);
+      appendRuns(summary, block.title?.length ? block.title : [{ text: 'Подробнее' }]);
       const content = document.createElement('div');
-      appendRuns(content, block.content);
+      for (const child of Array.isArray(block.blocks) ? block.blocks : []) appendBlock(content, child);
       details.append(summary, content); fragment.append(details); continue;
     }
-    const element = document.createElement(block.type === 'heading' ? 'h3' : block.type === 'quote' ? 'blockquote' : 'p');
-    appendRuns(element, block.content);
-    fragment.append(element);
+    appendBlock(fragment, block);
   }
   for (const button of Array.isArray(doc.buttons) ? doc.buttons : []) {
     if (typeof button?.url !== 'string' || !/^https?:\/\//i.test(button.url)) continue;
@@ -71,7 +76,7 @@ function renderStructuredResponse() {
   if (!raw.startsWith('{')) { publishPostDocument(null); return; }
   try {
     const doc = JSON.parse(raw);
-    if (doc?.schemaVersion !== 1 || !Array.isArray(doc.blocks)) { publishPostDocument(null); return; }
+    if (doc?.schemaVersion !== 2 || !Array.isArray(doc.blocks)) { publishPostDocument(null); return; }
     responseBody.replaceChildren(renderPostDocument(doc));
     responseBody.dataset.postDocumentRendered = responseBody.textContent || 'rendered';
     publishPostDocument(doc);
