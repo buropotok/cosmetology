@@ -13,7 +13,7 @@
   controlPanel.append(action);
 
   function setDocument(doc){
-    currentDocument=doc?.schemaVersion===1&&Array.isArray(doc.blocks)?doc:null;
+    currentDocument=doc?.schemaVersion===2&&Array.isArray(doc.blocks)?doc:null;
     action.hidden=!currentDocument;
   }
 
