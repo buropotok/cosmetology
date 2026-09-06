@@ -1,11 +1,30 @@
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
-import { generateText } from 'ai';
+import { generateText, jsonSchema, Output, stepCountIs } from 'ai';
 import discoverySchema from '../schemas/discovery_schema.json';
+import postDocumentSchema from '../schemas/post_document_schema.json';
+import type { PostDocument } from '../../../shared/post-document';
+import { isPostDocument } from '../../../shared/post-document';
 import { AppError, type Env } from '../types';
 import { validateTelegramMiniAppInitData } from './telegram-miniapp-auth';
 
 const DEFAULT_MODEL = 'gemini-2.5-flash';
 const MAX_MESSAGE_LENGTH = 12000;
+
+const POST_DOCUMENT_SYSTEM_PROMPT = `Ты создаёшь готовую публикацию для косметологического кабинета в формате PostDocument.
+
+Используй структуру документа осмысленно:
+- heading — заголовок публикации.
+- paragraph — основной текст. Пиши короткими читаемыми абзацами.
+- bold — выделяй внутри текста только ключевые слова, выводы и важные утверждения. Не выделяй большие фрагменты без необходимости.
+- quote — отдельный важный тезис или формулировка, которую полезно визуально отделить от основного текста.
+- details — дополнительное подробное пояснение, которое не обязательно видеть сразу. title — короткое название раскрываемого блока.
+- bullet_list и ordered_list — только для настоящих перечислений и последовательностей.
+- italic, underline, strikethrough и spoiler используй только когда это действительно оправдано смыслом.
+- link — только для существующей реальной http/https ссылки. Для mark type=link обязательно указывай href. Для остальных marks href не указывай.
+- buttons — CTA-кнопки. Создавай кнопку только если известен реальный http/https URL. Не придумывай URL.
+
+Не пиши служебные пояснения о формате или интерфейсе: например «в Telegram будет кнопкой», «здесь нужно выделить жирным» и подобные комментарии. Сразу выражай это структурой PostDocument.
+Не добавляй факты, которых нет в исходных данных или которые нельзя обосновать результатами поиска. Возвращай только готовую публикацию.`;
 
 function getMiniAppInitData(req: Request) {
   return req.headers.get('authorization')?.match(/^tma\s+(.+)$/i)?.[1] ?? '';
@@ -49,6 +68,14 @@ function parseDiscovery(text: string) {
   return value;
 }
 
+const postDocumentOutputSchema = jsonSchema<PostDocument>(postDocumentSchema as any, {
+  validate(value) {
+    return isPostDocument(value)
+      ? { success: true, value }
+      : { success: false, error: new Error('Invalid PostDocument response') };
+  },
+});
+
 export async function generateMiniAppAiReply(req: Request, env: Env) {
   await validateTelegramMiniAppInitData(getMiniAppInitData(req), env.TELEGRAM_BOT_TOKEN);
 
@@ -67,14 +94,31 @@ export async function generateMiniAppAiReply(req: Request, env: Env) {
     : message;
 
   try {
+    if (mode === 'discovery') {
+      const result = await generateText({
+        model: google(model),
+        tools: { google_search: google.tools.googleSearch({}) },
+        prompt,
+      });
+      const text = result.text.trim();
+      if (!text) throw new Error('Gemini returned an empty response');
+      return { discovery: parseDiscovery(text) };
+    }
+
     const result = await generateText({
       model: google(model),
       tools: { google_search: google.tools.googleSearch({}) },
+      output: Output.object({
+        schema: postDocumentOutputSchema,
+        name: 'PostDocument',
+        description: 'Готовая публикация в каноническом формате PostDocument',
+      }),
+      stopWhen: stepCountIs(4),
+      system: POST_DOCUMENT_SYSTEM_PROMPT,
       prompt,
     });
-    const text = result.text.trim();
-    if (!text) throw new Error('Gemini returned an empty response');
-    return mode === 'discovery' ? { discovery: parseDiscovery(text) } : { text };
+    if (!result.output || !isPostDocument(result.output)) throw new Error('Gemini returned an invalid PostDocument');
+    return { text: JSON.stringify(result.output, null, 2) };
   } catch (error) {
     console.error('Mini App AI generation failed', {
       provider: 'google',
