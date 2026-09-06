@@ -1,12 +1,20 @@
 const BOOTSTRAP_KEY='__CosmoMiniAppBootstrap';
 
 function loadWorkspaceStyles(){
-  if(document.querySelector('link[data-cosmo-workspace-spacing]'))return;
-  const link=document.createElement('link');
-  link.rel='stylesheet';
-  link.href='/compact-workspace.css';
-  link.dataset.cosmoWorkspaceSpacing='';
-  document.head.append(link);
+  if(!document.querySelector('link[data-cosmo-workspace-spacing]')){
+    const link=document.createElement('link');
+    link.rel='stylesheet';
+    link.href='/compact-workspace.css';
+    link.dataset.cosmoWorkspaceSpacing='';
+    document.head.append(link);
+  }
+  if(!document.querySelector('link[data-cosmo-telegram-quotes]')){
+    const quoteLink=document.createElement('link');
+    quoteLink.rel='stylesheet';
+    quoteLink.href='/telegram-quote-preview.css';
+    quoteLink.dataset.cosmoTelegramQuotes='';
+    document.head.append(quoteLink);
+  }
 }
 
 async function loadPlatform(){
