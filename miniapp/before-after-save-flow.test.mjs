@@ -15,16 +15,15 @@ test('Before After shows a blocking save loader',()=>{
   assert.match(bridge,/showLoader\(\)/);
 });
 
-test('Before After saves through Telegram before importing into composer',()=>{
+test('Before After persists to R2 before importing into composer',()=>{
   const saveStart=controller.indexOf('async function save(');
   const saveBody=controller.slice(saveStart,controller.indexOf("window.addEventListener('message'",saveStart));
   const persistAt=saveBody.indexOf('persistResult(file)');
-  const downloadAt=saveBody.indexOf('downloadToGallery(downloadUrl,file.name)');
   const importAt=saveBody.indexOf('applyImageFile(file)');
-  assert.ok(persistAt>=0,'result should be persisted to obtain a Telegram-downloadable URL');
-  assert.ok(downloadAt>persistAt,'Telegram download should start after durable URL preparation');
-  assert.ok(importAt>downloadAt,'composer import must happen only after Telegram accepts the download');
-  assert.match(controller,/webApp\.downloadFile\(/);
+  assert.ok(persistAt>=0,'result should be persisted before composer import');
+  assert.ok(importAt>persistAt,'composer import must happen only after durable server persistence');
+  assert.doesNotMatch(controller,/webApp\.downloadFile\(/);
+  assert.doesNotMatch(controller,/downloadToGallery/);
 });
 
 test('Before After bridge passes Blob directly without ArrayBuffer cloning',()=>{
@@ -33,8 +32,8 @@ test('Before After bridge passes Blob directly without ArrayBuffer cloning',()=>
   assert.match(bridge,/controller\.save\(blob,/);
 });
 
-test('save stages explain backup and editor import progress',()=>{
-  assert.match(controller,/Сохраняем копию в галерею/);
+test('save stages explain durable save and editor import progress',()=>{
+  assert.match(controller,/Сохраняем изображение/);
   assert.match(controller,/Добавляем изображение/);
-  assert.match(controller,/Подготавливаем безопасную копию/);
+  assert.doesNotMatch(controller,/Сохраняем копию в галерею/);
 });
