@@ -28,6 +28,7 @@ async function loadOnboardingAndSettings(){
 
 async function loadAppShell(){
   await import('/before-after-controller.js');
+  await import('/new-post-lifecycle.js');
   await import('/publish-ai-wizard.js');
   await import('/navigation.js');
   await import('/draft-loading-overlay.js');
@@ -58,8 +59,6 @@ async function loadRuntimeIntegrations(){
 }
 
 async function start(){
-  // Startup phases preserve the legacy index.html dependency order while
-  // keeping bootstrap as the single first-party Mini App composition root.
   loadWorkspaceStyles();
   await loadPlatform();
   await loadOnboardingAndSettings();
