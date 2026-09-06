@@ -48,7 +48,7 @@ export async function generateMiniAppImage(req: Request, env: Env) {
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
       generationConfig: {
         responseModalities: ['IMAGE'],
-        responseFormat: { image: { aspectRatio: '4:5', imageSize: '1K' } },
+        responseFormat: { image: { aspectRatio: 'RATIO_4_5', imageSize: 'IMAGE_SIZE_1K' } },
       },
     }),
   });
