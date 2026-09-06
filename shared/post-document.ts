@@ -42,15 +42,27 @@ export function deserializePostDocument(value: unknown, fallback = ''): PostDocu
 }
 
 const runText=(runs:TextRun[]|undefined)=>runs?.map(run=>run.text).join('')??'';
-function itemText(item:TextRun[]|PostListItem,type:'bullet_list'|'ordered_list',depth=0,index=0):string{const value:Array<TextRun[]|PostListItem>=Array.isArray(item)?[]:[];void value;const normalized=Array.isArray(item)?{content:item}:item;const prefix=type==='ordered_list'?`${index+1}. `:'• ';let text=`${'  '.repeat(depth)}${prefix}${runText(normalized.content)}`;const children=normalized.children;if(Array.isArray(children))text+='\n'+children.map((child,i)=>itemText(child,type,depth+1,i)).join('\n');else if(children?.items?.length)text+='\n'+children.items.map((child,i)=>itemText(child,children.type,depth+1,i)).join('\n');return text}
-function blockText(block:PostBlock):string{if(block.type==='paragraph'||block.type==='heading')return runText(block.content);if(block.type==='bullet_list'||block.type==='ordered_list')return block.items.map((item,index)=>itemText(item,block.type,0,index)).join('\n');if(block.type==='quote')return block.content!==undefined?runText(block.content):(block.blocks??[]).map(blockText).join('\n');return `${runText(block.title)}${block.title?.length?'\n':''}${block.blocks.map(blockText).join('\n')}`}
+function itemText(item:TextRun[]|PostListItem,type:'bullet_list'|'ordered_list',depth=0,index=0):string{const normalized=Array.isArray(item)?{content:item}:item;const prefix=type==='ordered_list'?`${index+1}. `:'• ';let value=`${'  '.repeat(depth)}${prefix}${runText(normalized.content)}`;const children=normalized.children;if(Array.isArray(children)&&children.length)value+='\n'+children.map((child,i)=>itemText(child,type,depth+1,i)).join('\n');else if(children&&!Array.isArray(children)&&children.items.length)value+='\n'+children.items.map((child,i)=>itemText(child,children.type,depth+1,i)).join('\n');return value}
+function blockText(block:PostBlock):string{
+  if(block.type==='paragraph'||block.type==='heading')return runText(block.content);
+  if(block.type==='bullet_list'||block.type==='ordered_list')return block.items.map((item,index)=>itemText(item,block.type,0,index)).join('\n');
+  if(block.type==='quote')return block.content!==undefined?runText(block.content):(block.blocks??[]).map(blockText).join('\n');
+  if(block.type==='details')return `${runText(block.title)}${block.title?.length?'\n':''}${block.blocks.map(blockText).join('\n')}`;
+  return '';
+}
 export function documentText(document: PostDocument): string {
   return document.blocks.map(blockText).join('\n');
 }
 
 const runsHaveSpoiler=(runs:TextRun[]|undefined)=>!!runs?.some(run=>run.marks?.some(mark=>mark.type==='spoiler'));
 function itemHasSpoiler(item:TextRun[]|PostListItem):boolean{if(Array.isArray(item))return runsHaveSpoiler(item);if(runsHaveSpoiler(item.content))return true;const children=item.children;if(Array.isArray(children))return children.some(itemHasSpoiler);return !!children?.items.some(itemHasSpoiler)}
-function blockHasTelegramFormatting(block:PostBlock):boolean{if(block.type==='details'||(block.type==='quote'&&block.blocks!==undefined))return true;if(block.type==='paragraph'||block.type==='heading')return runsHaveSpoiler(block.content);if(block.type==='quote')return runsHaveSpoiler(block.content);if(block.type==='bullet_list'||block.type==='ordered_list')return true;return block.blocks.some(blockHasTelegramFormatting)}
+function blockHasTelegramFormatting(block:PostBlock):boolean{
+  if(block.type==='details')return true;
+  if(block.type==='quote')return block.blocks!==undefined||runsHaveSpoiler(block.content);
+  if(block.type==='paragraph'||block.type==='heading')return runsHaveSpoiler(block.content);
+  if(block.type==='bullet_list'||block.type==='ordered_list')return true;
+  return false;
+}
 export function hasTelegramSpecificFormatting(document: PostDocument) {
   return document.blocks.some(blockHasTelegramFormatting);
 }
