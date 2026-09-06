@@ -1,0 +1,10 @@
+/* Compact working surfaces only. Settings and onboarding are intentionally out of scope. */
+.publish-ai-wizard{margin:2px;padding:2px}
+.publish-ai-wizard__prompt textarea{padding:2px}
+.publish-ai-wizard__response-body{padding:2px}
+.publish-ai-wizard__control-panel{padding:2px}
+@media(max-width:520px){.publish-ai-wizard{margin:2px;padding:2px}}
+
+#composer-screen.approved-composer{padding-left:2px;padding-right:2px}
+#composer-screen.approved-composer .composer-editor{padding:2px}
+#composer-screen.approved-composer .composer-bodytext{padding:2px!important}
