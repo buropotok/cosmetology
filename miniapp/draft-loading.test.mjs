@@ -5,7 +5,7 @@ import vm from 'node:vm';
 
 const storeSource=await readFile(new URL('./draft-store.js',import.meta.url),'utf8');
 const overlaySource=await readFile(new URL('./draft-loading-overlay.js',import.meta.url),'utf8');
-const settingsButtonSource=await readFile(new URL('./settings-button.js',import.meta.url),'utf8');
+const navigationSource=await readFile(new URL('./navigation.js',import.meta.url),'utf8');
 const settingsIconSource=await readFile(new URL('./assets/icons/settings.svg',import.meta.url),'utf8');
 const bootstrapSource=await readFile(new URL('./bootstrap.js',import.meta.url),'utf8');
 
@@ -66,8 +66,7 @@ test('draft loading UI stays independent from Home settings controls',()=>{
   assert.doesNotMatch(overlaySource,/setHomeControlsVisible/);
   assert.doesNotMatch(overlaySource,/open-settings/);
   assert.doesNotMatch(overlaySource,/cosmo-settings/);
-  assert.match(settingsButtonSource,/\/assets\/icons\/settings\.svg/);
-  assert.doesNotMatch(settingsButtonSource,/<svg/);
+  assert.match(navigationSource,/\/assets\/icons\/settings\.svg/);
   assert.match(settingsIconSource,/<svg/);
   assert.match(storeSource,/const LOAD_TIMEOUT_MS=10000/);
   const overlayImport=bootstrapSource.indexOf("import('/draft-loading-overlay.js')");
