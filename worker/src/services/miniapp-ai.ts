@@ -13,6 +13,7 @@ const MAX_MESSAGE_LENGTH = 12000;
 const POST_DOCUMENT_SYSTEM_PROMPT = `Ты преобразуешь уже подготовленную публикацию для косметологического кабинета в формат PostDocument.
 
 Сохраняй фактическое содержание исходной публикации. Не проводи новый поиск и не добавляй новые факты.
+Готовая публикация должна содержать не более 200 слов суммарно во всех текстовых полях PostDocument.
 Используй структуру документа осмысленно:
 - heading — заголовок публикации.
 - paragraph — основной текст. Пиши короткими читаемыми абзацами.
@@ -103,7 +104,7 @@ export async function generateMiniAppAiReply(req: Request, env: Env) {
       model: google(model),
       output: Output.object({ schema: postDocumentOutputSchema, name: 'PostDocument', description: 'Готовая публикация в каноническом формате PostDocument' }),
       system: POST_DOCUMENT_SYSTEM_PROMPT,
-      prompt: `Преобразуй следующую готовую публикацию в PostDocument, сохранив её содержание:\n\n${groundedText}`,
+      prompt: `Преобразуй следующую готовую публикацию в PostDocument, сохранив её содержание и сократив при необходимости до 200 слов максимум:\n\n${groundedText}`,
     });
     if (!structured.output || !isPostDocument(structured.output)) throw new Error('Gemini returned an invalid PostDocument');
     return { text: JSON.stringify(structured.output, null, 2) };
