@@ -1,31 +1,45 @@
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
-import { generateText, jsonSchema, Output } from 'ai';
+import { generateText } from 'ai';
 import discoverySchema from '../schemas/discovery_schema.json';
-import postDocumentSchema from '../schemas/post_document_schema.json';
-import type { PostDocument } from '../../../shared/post-document';
 import { isPostDocument } from '../../../shared/post-document';
+import { parsePostMarkdown } from '../../../shared/post-markdown';
 import { AppError, type Env } from '../types';
 import { validateTelegramMiniAppInitData } from './telegram-miniapp-auth';
 
 const DEFAULT_MODEL = 'gemini-2.5-flash';
 const MAX_MESSAGE_LENGTH = 12000;
 
-const POST_DOCUMENT_SYSTEM_PROMPT = `Ты преобразуешь уже подготовленную публикацию для косметологического кабинета в формат PostDocument.
+const POST_MARKDOWN_SYSTEM_PROMPT = `Ты преобразуешь уже подготовленную публикацию для косметологического кабинета в компактный PostMarkdown.
 
 Сохраняй фактическое содержание исходной публикации. Не проводи новый поиск и не добавляй новые факты.
-Готовая публикация должна содержать не более 200 слов суммарно во всех текстовых полях PostDocument.
-Используй структуру документа осмысленно:
-- heading — заголовок публикации.
-- paragraph — основной текст. Пиши короткими читаемыми абзацами.
-- bold — выделяй внутри текста только ключевые слова, выводы и важные утверждения. Не выделяй большие фрагменты без необходимости.
-- quote — отдельный важный тезис или формулировка, которую полезно визуально отделить от основного текста.
-- details — дополнительное подробное пояснение, которое не обязательно видеть сразу. title — короткое название раскрываемого блока.
-- bullet_list и ordered_list — только для настоящих перечислений и последовательностей.
-- italic, underline, strikethrough и spoiler используй только когда это действительно оправдано смыслом.
-- link — только для существующей реальной http/https ссылки. Для mark type=link обязательно указывай href. Для остальных marks href не указывай.
-- buttons — CTA-кнопки. Создавай кнопку только если в исходной публикации есть реальный http/https URL. Не придумывай URL.
+Готовая публикация должна содержать не более 200 слов.
+Верни только сам PostMarkdown: без JSON, schemaVersion, служебных пояснений и code fences.
 
-Служебные пояснения интерфейса вроде «в Telegram будет кнопкой» или «в Telegram текст будет раскрываемым» не включай в публикацию: выражай их смысл структурой PostDocument.`;
+Разрешённый формат:
+- # Заголовок — heading. Используй только один уровень заголовка: #.
+- Обычный текст, разделённый пустыми строками — paragraph. Пиши короткими читаемыми абзацами.
+- > Текст — quote.
+- - Пункт — bullet list.
+- 1. Пункт — ordered list.
+- Вложенный список допустим максимум на один уровень; используй тот же тип списка и отступ в два пробела.
+- **текст** — bold. Выделяй только ключевые слова, выводы и важные утверждения.
+- *текст* — italic.
+- ~~текст~~ — strikethrough.
+- ||текст|| — spoiler.
+- [текст](https://example.com) — обычная inline-ссылка. Используй только существующий реальный http/https URL; не придумывай URL.
+
+Дополнительный раскрываемый блок:
+:::details Короткий заголовок
+Текст, списки, цитаты или заголовок внутри блока.
+:::
+Не вкладывай details внутрь details.
+
+CTA-кнопки, если они нужны, записывай только в самом конце публикации, каждая на отдельной строке:
+[[Название кнопки]](https://example.com)
+После первой кнопки разрешены только другие кнопки. Создавай кнопку только если реальный http/https URL уже присутствует в исходной публикации. Не придумывай URL.
+
+Не используй underline в AI-разметке. Он остаётся доступен пользователю в редакторе.
+Служебные пояснения интерфейса вроде «в Telegram будет кнопкой» или «в Telegram текст будет раскрываемым» не включай в публикацию: выражай их смысл самой разметкой.`;
 
 function getMiniAppInitData(req: Request) {
   return req.headers.get('authorization')?.match(/^tma\s+(.+)$/i)?.[1] ?? '';
@@ -65,12 +79,6 @@ function parseDiscovery(text: string) {
   return value;
 }
 
-const postDocumentOutputSchema = jsonSchema<PostDocument>(postDocumentSchema as any, {
-  validate(value) {
-    return isPostDocument(value) ? { success: true, value } : { success: false, error: new Error('Invalid PostDocument response') };
-  },
-});
-
 export async function generateMiniAppAiReply(req: Request, env: Env) {
   await validateTelegramMiniAppInitData(getMiniAppInitData(req), env.TELEGRAM_BOT_TOKEN);
   const body = await req.json().catch(() => null) as { message?: unknown; mode?: unknown } | null;
@@ -100,14 +108,16 @@ export async function generateMiniAppAiReply(req: Request, env: Env) {
     const groundedText = grounded.text.trim();
     if (!groundedText) throw new Error('Gemini returned an empty grounded response');
 
-    const structured = await generateText({
+    const formatted = await generateText({
       model: google(model),
-      output: Output.object({ schema: postDocumentOutputSchema, name: 'PostDocument', description: 'Готовая публикация в каноническом формате PostDocument' }),
-      system: POST_DOCUMENT_SYSTEM_PROMPT,
-      prompt: `Преобразуй следующую готовую публикацию в PostDocument, сохранив её содержание и сократив при необходимости до 200 слов максимум:\n\n${groundedText}`,
+      system: POST_MARKDOWN_SYSTEM_PROMPT,
+      prompt: `Преобразуй следующую готовую публикацию в PostMarkdown, сохранив её содержание и сократив при необходимости до 200 слов максимум:\n\n${groundedText}`,
     });
-    if (!structured.output || !isPostDocument(structured.output)) throw new Error('Gemini returned an invalid PostDocument');
-    return { text: JSON.stringify(structured.output, null, 2) };
+    const markdown = formatted.text.trim();
+    if (!markdown) throw new Error('Gemini returned an empty PostMarkdown response');
+    const document = parsePostMarkdown(markdown);
+    if (!isPostDocument(document)) throw new Error('Gemini returned invalid PostMarkdown');
+    return { text: JSON.stringify(document, null, 2) };
   } catch (error) {
     console.error('Mini App AI generation failed', { provider: 'google', model, mode, error: serializeAiError(error) });
     throw new AppError('AI_GENERATION_FAILED', 'Не удалось получить ответ AI. Попробуйте ещё раз.', 502);
