@@ -21,8 +21,7 @@ export async function setAiGenerationStatus(env: Env, userId: string, kind: AiGe
   await env.DB.prepare(`
     INSERT INTO miniapp_ai_generation_status(user_id,kind,status,started_at,finished_at,error_code,updated_at)
     VALUES(?,?,?,CASE WHEN ? THEN CURRENT_TIMESTAMP ELSE NULL END,CASE WHEN ? THEN CURRENT_TIMESTAMP ELSE NULL END,?,CURRENT_TIMESTAMP)
-    ON CONFLICT(user_id) DO UPDATE SET
-      kind=excluded.kind,
+    ON CONFLICT(user_id,kind) DO UPDATE SET
       status=excluded.status,
       started_at=CASE WHEN ? THEN CURRENT_TIMESTAMP ELSE miniapp_ai_generation_status.started_at END,
       finished_at=CASE WHEN ? THEN CURRENT_TIMESTAMP WHEN ? THEN NULL ELSE miniapp_ai_generation_status.finished_at END,
