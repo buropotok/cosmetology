@@ -25,10 +25,15 @@ test('AI interface opens only after explicit AI choice',()=>{
   assert.ok(bootstrap.indexOf("import('/new-post-entry.js')")<bootstrap.indexOf("import('/navigation.js')"));
 });
 
-test('manual and before-after choices route to existing flows',()=>{
-  assert.match(entry,/wizard\.querySelector\('\.publish-ai-wizard__manual'\)/);
+test('manual and before-after choices route directly from entry screen',()=>{
+  assert.match(entry,/function openManual\(\)[\s\S]*composerContent\.hidden=false;screen\.dataset\.publishMode='compose'/);
+  assert.doesNotMatch(entry,/wizard\.querySelector\('\.publish-ai-wizard__manual'\)/);
   assert.match(entry,/window\.CosmoBeforeAfter\?\.open\?\.\(\)/);
   assert.match(entry,/cosmo-before-after-close[^\n]*action==='back'\)showEntry\(\)/);
+});
+
+test('duplicate manual and before-after actions are removed from AI screen',()=>{
+  assert.match(entry,/wizard\.querySelectorAll\('\.publish-ai-wizard__manual,\.publish-ai-wizard__before-after'\)\.forEach\(node=>node\.remove\(\)\)/);
 });
 
 test('choice buttons use requested icons, blue styling and centered labels',()=>{
@@ -36,7 +41,8 @@ test('choice buttons use requested icons, blue styling and centered labels',()=>
   assert.doesNotMatch(entry,/data-new-post-choice="ai"><img src="\/assets\/icons\/cosmo-sofa\.svg"/);
   assert.match(entry,/\.new-post-entry__button\{[^}]*justify-content:center[^}]*background:#2d8fd3[^}]*text-align:center/);
   assert.match(entry,/\.new-post-entry__icon\{[^}]*position:absolute[^}]*left:18px/);
-  assert.doesNotMatch(entry,/new-post-entry__button--before-after\{background:#fff/);
+  assert.match(entry,/\.new-post-entry__pair img\{[^}]*filter:brightness\(0\) invert\(1\)/);
+  assert.match(entry,/data-new-post-choice="before-after"[\s\S]*account-box\.svg[\s\S]*account-box\.svg/);
   assert.match(entry,/\.new-post-entry__title\{[^}]*text-align:center/);
   assert.match(entry,/\.new-post-entry__subtitle\{[^}]*text-align:center/);
 });

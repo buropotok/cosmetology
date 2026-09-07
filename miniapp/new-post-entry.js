@@ -4,6 +4,8 @@
   const composerContent=document.querySelector('#composer-content');
   if(!screen||!wizard||!composerContent||document.querySelector('#new-post-entry'))return;
 
+  wizard.querySelectorAll('.publish-ai-wizard__manual,.publish-ai-wizard__before-after').forEach(node=>node.remove());
+
   const style=document.createElement('style');
   style.textContent=`
   .new-post-entry{margin:16px;padding:18px;border-radius:18px;background:#fff;box-shadow:0 8px 30px rgba(0,0,0,.08);color:#1c1c1e;text-align:center}
@@ -17,7 +19,7 @@
   .new-post-entry__icon img{width:24px;height:24px;display:block}
   .new-post-entry__button--manual .new-post-entry__icon img{width:23px;height:23px}
   .new-post-entry__pair{gap:1px;width:34px}
-  .new-post-entry__pair img{width:17px;height:17px}
+  .new-post-entry__pair img{width:17px;height:17px;filter:brightness(0) invert(1)}
   @media(max-width:520px){.new-post-entry{margin:12px;padding:15px}.new-post-entry__button{min-height:54px;padding:12px 52px}.new-post-entry__icon{left:15px}}
   `;
   document.head.append(style);
@@ -47,10 +49,9 @@
   }
   function openManual(){
     hideEntry();
-    const manual=wizard.querySelector('.publish-ai-wizard__manual');
-    if(manual){manual.click();return}
     wizard.hidden=true;composerContent.hidden=false;screen.dataset.publishMode='compose';
     window.dispatchEvent(new CustomEvent('cosmo-publish-mode',{detail:{mode:'compose'}}));
+    window.dispatchEvent(new CustomEvent('cosmo-ai-wizard-manual'));
     document.querySelector('#text')?.focus();
   }
   function openBeforeAfter(){
