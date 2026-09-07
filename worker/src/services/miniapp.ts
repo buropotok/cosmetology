@@ -1,5 +1,5 @@
 import { AppError, type Env } from '../types';
-import { publishTelegramWithToken } from './telegram';
+import { publishTelegramWithToken, sendTelegramReturnToAppWithToken } from './telegram';
 import { validateTelegramMiniAppInitData } from './telegram-miniapp-auth';
 import { resolveOrCreateTelegramIdentity } from './telegram-identity';
 import { getManagedBotStateForUser } from './managed-bot-onboarding';
@@ -46,6 +46,6 @@ export async function previewFromMiniApp(request: Request, env: Env) {
   const { account } = await miniAppAccount(request, env); const target = await getManagedPreviewTarget(env, account.userId); if (!target) throw new AppError('MANAGED_TELEGRAM_PREVIEW_NOT_READY', 'Откройте личный чат с персональным ботом и нажмите Start.', 409);
   const { text, images } = await readMiniAppPublication(request);
   const token = await decryptManagedBotToken(target.telegram_bot_id, { ciphertext: target.token_ciphertext, iv: target.token_iv, keyVersion: target.token_key_version }, env);
-  try { return { ok: true, publication: await publishTelegramWithToken(token, text, images, target.telegram_chat_id) }; }
+  try { const publication = await publishTelegramWithToken(token, text, images, target.telegram_chat_id); await sendTelegramReturnToAppWithToken(token,target.telegram_chat_id,env.MINIAPP_URL); return { ok: true, publication }; }
   catch (error) { if (error instanceof AppError) throw error; throw new AppError('TELEGRAM_PREVIEW_FAILED', 'Не удалось отправить предпросмотр. Откройте личный чат с персональным ботом и нажмите Start.', 409); }
 }
