@@ -52,13 +52,7 @@
         window.Telegram?.WebApp?.showAlert?.('Не удалось загрузить публикацию в редактор. Попробуйте ещё раз.');
         return;
       }
-      const screen=document.querySelector('#composer-screen');
-      const wizard=document.querySelector('#publish-ai-wizard');
-      const composerContent=document.querySelector('#composer-content');
-      if(wizard)wizard.hidden=true;
-      if(composerContent)composerContent.hidden=false;
-      if(screen)screen.dataset.publishMode='compose';
-      window.dispatchEvent(new CustomEvent('cosmo-publish-mode',{detail:{mode:'compose'}}));
+      window.CosmoComposerView?.showEditor?.({focus:false});
       window.CosmoRichEditor?.element?.focus?.();
       await window.CosmoSofaDraft?.flush?.('ai-post-to-editor');
     }finally{

@@ -4,7 +4,7 @@ import {readFile} from 'node:fs/promises';
 
 const controller=await readFile(new URL('./before-after-controller.js',import.meta.url),'utf8');
 const bridge=await readFile(new URL('./before-after-bridge.js',import.meta.url),'utf8');
-const lifecycle=await readFile(new URL('./new-post-lifecycle.js',import.meta.url),'utf8');
+const navigation=await readFile(new URL('./navigation.js',import.meta.url),'utf8');
 const bootstrap=await readFile(new URL('./bootstrap.js',import.meta.url),'utf8');
 
 function functionBody(source,name,nextName){
@@ -15,12 +15,14 @@ function functionBody(source,name,nextName){
   return source.slice(start,end);
 }
 
-test('Before/After workspace is cleared only by explicit new-post lifecycle',()=>{
+test('Before/After workspace is cleared only by committed New Post flow',()=>{
   assert.match(controller,/addEventListener\('cosmo-new-post',clear\)/);
   assert.match(controller,/Object\.freeze\(\{open,close,clear,save,saveDraft\}\)/);
   assert.doesNotMatch(controller,/cosmo-before-after-close[^\n]+clear/);
-  assert.match(lifecycle,/#flow-new,#flow-manual/);
-  assert.match(lifecycle,/cosmo-new-post/);
+  assert.match(navigation,/async function openNewPost\(\)/);
+  assert.match(navigation,/cosmo-new-post/);
+  assert.match(navigation,/source:'flow-new'/);
+  assert.doesNotMatch(bootstrap,/new-post-lifecycle\.js/);
 });
 
 test('save and close keep the Before/After iframe draft alive',()=>{
@@ -39,5 +41,5 @@ test('loader is transient and reset on reopen',()=>{
 
 test('Before/After identifies its draft mode explicitly',()=>{
   assert.match(controller,/body\.set\('screen','beforeafter'\)/);
-  assert.match(bootstrap,/import\('\/new-post-lifecycle\.js'\)/);
+  assert.match(navigation,/state\?\.screen==='beforeafter'/);
 });

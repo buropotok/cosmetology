@@ -2,7 +2,7 @@
   const screen=document.querySelector('#composer-screen');
   const wizard=document.querySelector('#publish-ai-wizard');
   const composerContent=document.querySelector('#composer-content');
-  if(!screen||!wizard||!composerContent||document.querySelector('#new-post-entry'))return;
+  if(!screen||!wizard||!composerContent||window.CosmoComposerView)return;
 
   wizard.querySelectorAll('.publish-ai-wizard__manual,.publish-ai-wizard__before-after').forEach(node=>node.remove());
 
@@ -24,52 +24,65 @@
   `;
   document.head.append(style);
 
-  const entry=document.createElement('section');
-  entry.id='new-post-entry';
-  entry.className='new-post-entry';
-  entry.hidden=true;
-  entry.setAttribute('aria-label','Создание нового поста');
-  entry.innerHTML=`<h2 class="new-post-entry__title">Новый пост</h2><p class="new-post-entry__subtitle">Выберите способ создания публикации</p><div class="new-post-entry__actions"><button type="button" class="new-post-entry__button" data-new-post-choice="ai"><span class="new-post-entry__icon new-post-entry__icon--ai" aria-hidden="true">✨</span><span>Создать пост с помощью AI</span></button><button type="button" class="new-post-entry__button new-post-entry__button--manual" data-new-post-choice="manual"><span class="new-post-entry__icon" aria-hidden="true"><img src="/assets/icons/manual-edit.svg" alt=""></span><span>Создать пост вручную с нуля</span></button><button type="button" class="new-post-entry__button new-post-entry__button--before-after" data-new-post-choice="before-after"><span class="new-post-entry__icon new-post-entry__pair" aria-hidden="true"><img src="/assets/icons/account-box.svg" alt=""><img src="/assets/icons/account-box.svg" alt=""></span><span>ДО / ПОСЛЕ</span></button></div>`;
-  wizard.insertAdjacentElement('beforebegin',entry);
+  const controls=document.createElement('section');
+  controls.id='new-post-entry';
+  controls.className='new-post-entry';
+  controls.hidden=true;
+  controls.setAttribute('aria-label','Создание нового поста');
+  controls.innerHTML=`<h2 class="new-post-entry__title">Новый пост</h2><p class="new-post-entry__subtitle">Выберите способ создания публикации</p><div class="new-post-entry__actions"><button type="button" class="new-post-entry__button" data-new-post-choice="ai"><span class="new-post-entry__icon new-post-entry__icon--ai" aria-hidden="true">✨</span><span>Создать пост с помощью AI</span></button><button type="button" class="new-post-entry__button new-post-entry__button--manual" data-new-post-choice="manual"><span class="new-post-entry__icon" aria-hidden="true"><img src="/assets/icons/manual-edit.svg" alt=""></span><span>Создать пост вручную с нуля</span></button><button type="button" class="new-post-entry__button new-post-entry__button--before-after" data-new-post-choice="before-after"><span class="new-post-entry__icon new-post-entry__pair" aria-hidden="true"><img src="/assets/icons/account-box.svg" alt=""><img src="/assets/icons/account-box.svg" alt=""></span><span>ДО / ПОСЛЕ</span></button></div>`;
+  wizard.insertAdjacentElement('beforebegin',controls);
+
+  function publishMode(mode){
+    screen.dataset.publishMode=mode;
+    window.dispatchEvent(new CustomEvent('cosmo-publish-mode',{detail:{mode}}));
+  }
 
   function showEntry(){
     wizard.hidden=true;
     composerContent.hidden=true;
-    entry.hidden=false;
-    screen.dataset.publishMode='entry';
-    window.dispatchEvent(new CustomEvent('cosmo-publish-mode',{detail:{mode:'entry'}}));
+    controls.hidden=false;
+    publishMode('entry');
   }
-  function hideEntry(){entry.hidden=true}
-  function openAi(){
-    hideEntry();
+
+  function showAi(){
+    controls.hidden=true;
     const state=window.CosmoAiWizardState;
-    if(state?.restore&&state?.getSnapshot){state.restore({...state.getSnapshot(),screen:'ai'});return}
-    wizard.hidden=false;composerContent.hidden=true;screen.dataset.publishMode='wizard';
-    window.dispatchEvent(new CustomEvent('cosmo-publish-mode',{detail:{mode:'wizard'}}));
+    if(state?.restore&&state?.getSnapshot){
+      state.restore({...state.getSnapshot(),screen:'ai'});
+      return;
+    }
+    wizard.hidden=false;
+    composerContent.hidden=true;
+    publishMode('wizard');
   }
-  function openManual(){
-    hideEntry();
-    wizard.hidden=true;composerContent.hidden=false;screen.dataset.publishMode='compose';
-    window.dispatchEvent(new CustomEvent('cosmo-publish-mode',{detail:{mode:'compose'}}));
-    window.dispatchEvent(new CustomEvent('cosmo-ai-wizard-manual'));
-    document.querySelector('#text')?.focus();
+
+  function showEditor({manual=false,focus=true}={}){
+    controls.hidden=true;
+    wizard.hidden=true;
+    composerContent.hidden=false;
+    publishMode('compose');
+    if(manual)window.dispatchEvent(new CustomEvent('cosmo-ai-wizard-manual'));
+    if(focus)queueMicrotask(()=>document.querySelector('#text')?.focus());
   }
+
   function openBeforeAfter(){
-    hideEntry();
+    controls.hidden=true;
     window.CosmoBeforeAfter?.open?.();
   }
 
-  entry.addEventListener('click',event=>{
+  controls.addEventListener('click',event=>{
     const button=event.target.closest?.('[data-new-post-choice]');
     if(!button)return;
     const choice=button.dataset.newPostChoice;
-    if(choice==='ai')openAi();
-    else if(choice==='manual')openManual();
+    if(choice==='ai')showAi();
+    else if(choice==='manual')showEditor({manual:true});
     else if(choice==='before-after')openBeforeAfter();
   });
 
-  window.addEventListener('cosmo-ai-wizard-reset',()=>queueMicrotask(showEntry));
-  window.addEventListener('cosmo-publish-mode',event=>{if(event.detail?.mode!=='entry')hideEntry()});
-  window.addEventListener('cosmo-before-after-close',event=>{if(event.detail?.action==='back')showEntry();else if(event.detail?.action==='save')hideEntry()});
-  window.CosmoNewPostEntry=Object.freeze({show:showEntry,hide:hideEntry});
+  window.addEventListener('cosmo-before-after-close',event=>{
+    if(event.detail?.action==='back')showEntry();
+    else if(event.detail?.action==='save')showEditor({focus:false});
+  });
+
+  window.CosmoComposerView=Object.freeze({showEntry,showAi,showEditor,openBeforeAfter});
 })();

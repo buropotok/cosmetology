@@ -37,7 +37,6 @@ async function loadOnboardingAndSettings(){
 
 async function loadAppShell(){
   await import('/before-after-controller.js');
-  await import('/new-post-lifecycle.js');
   await import('/publish-ai-wizard.js');
   await import('/new-post-entry.js');
   await import('/navigation.js');
@@ -57,7 +56,6 @@ async function loadComposerRuntime(){
   await import('/composer-state.js');
   await import('/draft-store.js');
   await import('/drafts.js');
-  await import('/draft-resume-router.js');
   await import('/composer-actions.js');
   await import('/onboarding-flow.js');
 }
