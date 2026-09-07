@@ -100,9 +100,8 @@ export async function generateMiniAppAiReply(req: Request, env: Env) {
       const result = await generateText({ model: google(model), tools: { google_search: google.tools.googleSearch({}) }, prompt });
       const text = result.text.trim();
       if (!text) throw new Error('Gemini returned an empty response');
-      const discovery = parseDiscovery(text);
       await setAiGenerationStatus(env, userId, kind, 'succeeded');
-      return { discovery };
+      return { discovery: parseDiscovery(text) };
     }
 
     const grounded = await generateText({
