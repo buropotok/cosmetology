@@ -17,12 +17,28 @@ const mockText='Увлажнение кожи — это не только кр�
 let latestAiText=mockText;
 ai.innerHTML=`<header class="cosmo-flow-nav"><button id="flow-ai-back" class="cosmo-flow-back" type="button">‹ Назад</button><h1>Новый пост</h1><button class="cosmo-flow-settings cosmo-settings-button" type="button" aria-label="Настройки"></button></header><div class="cosmo-ai-intro"><strong>Что публикуем сегодня?</strong><span>Выберите тему или напишите свою</span></div><section class="cosmo-ai-card"><div class="cosmo-ai-head"><div class="cosmo-ai-avatar">✦</div><div><strong>Cosmo Sofa AI</strong><span>Подготовит идею, текст и изображение</span></div></div><div class="cosmo-ai-chips"><button class="cosmo-ai-chip active" type="button">✨ Идея дня</button><button class="cosmo-ai-chip" type="button">Новости</button><button class="cosmo-ai-chip" type="button">Мифы</button><button class="cosmo-ai-chip" type="button">Интересные факты</button><button class="cosmo-ai-chip" type="button">Научпоп</button><button class="cosmo-ai-chip" type="button">Разбор препарата</button><button class="cosmo-ai-chip" type="button">Уход</button></div><div class="cosmo-ai-prompt"><input type="text" value="Как правильно поддерживать увлажнение кожи?" aria-label="Тема публикации" enterkeyhint="send" autocomplete="off"><button type="button" aria-label="Отправить запрос">↑</button></div><div class="cosmo-ai-test"><input id="ai-test-input" type="text" placeholder="ТЕСТ: введите сообщение" autocomplete="off"><button id="ai-test-send" type="button">Отправить</button></div><button id="flow-manual" class="cosmo-secondary cosmo-manual" type="button">Ручное создание публикации</button></section><section class="cosmo-ai-result"><div class="cosmo-ai-image"><svg id="mock-ai-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 460"><rect width="800" height="460" fill="#e8f1f6"/><circle cx="400" cy="230" r="90" fill="#c8dce2"/></svg></div><div class="cosmo-ai-copy"><h3>Как поддерживать увлажнение кожи</h3><p>${mockText}</p></div></section><button id="flow-edit" class="cosmo-primary" type="button">Редактировать и опубликовать</button><p class="cosmo-ai-note">Демонстрационный AI-результат</p>`;
 document.querySelector('main')?.prepend(ai);document.querySelector('main')?.prepend(home);
-const continueButton=home.querySelector('#flow-continue');function syncDraftState(state=window.CosmoSofaDraft?.getState?.()){if(!state)return;continueButton.hidden=!state.hasDraft;const loading=document.querySelector('#cosmo-draft-loading');if(loading)loading.hidden=!state.restoring;imageInput.disabled=Boolean(state.restoring)}window.addEventListener('cosmo-draft-state',e=>syncDraftState(e.detail));syncDraftState();
+const continueButton=home.querySelector('#flow-continue');
+function syncDraftState(state=window.CosmoSofaDraft?.getState?.()){
+  if(!state){continueButton.hidden=true;return}
+  continueButton.hidden=state.loadStatus!=='ready'||!state.hasDraft;
+  const loading=document.querySelector('#cosmo-draft-loading');if(loading)loading.hidden=!state.restoring;imageInput.disabled=Boolean(state.restoring)
+}
+window.addEventListener('cosmo-draft-state',e=>syncDraftState(e.detail));syncDraftState();
 const previewArea=document.querySelector('#preview-wrap')||document.querySelector('.composer-media')||imageInput.parentElement;if(previewArea){const cs=getComputedStyle(previewArea);if(cs.position==='static')previewArea.style.position='relative';const loading=document.createElement('div');loading.id='cosmo-draft-loading';loading.className='cosmo-draft-loading';loading.innerHTML='<span class="cosmo-draft-spinner" aria-hidden="true"></span><span>Загрузка черновика</span>';previewArea.append(loading);syncDraftState()}
 const nav=composer.querySelector('.composer-nav');if(nav&&!nav.querySelector('#flow-composer-back')){const back=document.createElement('button');back.id='flow-composer-back';back.className='cosmo-composer-back';back.type='button';back.setAttribute('aria-label','На главную');back.textContent='‹';nav.prepend(back);back.addEventListener('click',()=>router.show('home'))}
 
-async function openNewPost(){
-  const draft=window.CosmoSofaDraft;
+function popup(options){
+  if(tg?.showPopup)return new Promise(resolve=>tg.showPopup(options,id=>resolve(id)));
+  return Promise.resolve(window.confirm(options.message)?'continue':'cancel');
+}
+async function confirmDraftReplacement(){
+  const id=await popup({title:'Новый пост',message:'Ваш черновик будет удален!',buttons:[{id:'cancel',type:'cancel',text:'Отмена'},{id:'continue',type:'destructive',text:'Продолжить'}]});
+  return id==='continue';
+}
+async function showDraftLoadError(){
+  await popup({title:'Черновик недоступен',message:'Не удалось проверить сохранённый черновик. Попробуйте ещё раз.',buttons:[{id:'ok',type:'ok',text:'ОК'}]});
+}
+async function commitNewPost(draft){
   if(draft?.clear)await draft.clear();
   else draft?.cancelRestore?.();
   window.dispatchEvent(new CustomEvent('cosmo-new-post',{detail:{source:'flow-new'}}));
@@ -30,14 +46,30 @@ async function openNewPost(){
   router.show('composer');
   window.CosmoComposerView?.showEntry?.();
 }
+let newPostInFlight=false;
+async function openNewPost(){
+  if(newPostInFlight)return;
+  newPostInFlight=true;
+  const button=home.querySelector('#flow-new');button.disabled=true;
+  try{
+    const draft=window.CosmoSofaDraft;
+    if(!draft){await commitNewPost(draft);return}
+    let state;
+    try{state=draft.whenReady?await draft.whenReady():draft.getState?.()}catch{await showDraftLoadError();return}
+    if(!state||state.loadStatus!=='ready'){await showDraftLoadError();return}
+    if(state.hasDraft&&!(await confirmDraftReplacement()))return;
+    await commitNewPost(draft);
+  }finally{newPostInFlight=false;button.disabled=false}
+}
 function resumeDraft(){
   const state=window.CosmoSofaDraft?.getState?.();
-  if(state?.screen==='beforeafter'){
+  if(state?.loadStatus!=='ready'||!state.hasDraft)return;
+  if(state.screen==='beforeafter'){
     window.CosmoBeforeAfter?.open?.();
     return;
   }
   router.show('composer');
-  if(state?.screen==='ai')window.CosmoComposerView?.showAi?.();
+  if(state.screen==='ai')window.CosmoComposerView?.showAi?.();
   else window.CosmoComposerView?.showEditor?.({focus:false});
 }
 home.querySelector('#flow-new').addEventListener('click',()=>{void openNewPost()});
