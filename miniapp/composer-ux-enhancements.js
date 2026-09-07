@@ -24,6 +24,19 @@
     document.head.append(style);
   }
 
+  function activeGenerationCopy(){
+    const active=[...document.querySelectorAll('#publish-ai-wizard .publish-ai-wizard__presets button')]
+      .find(button=>button.classList.contains('is-active'))?.textContent.trim()||'';
+    return active==='Новости'?'Ищем актуальные новости':'Идёт генерация';
+  }
+
+  function cancelWizardGeneration(){
+    const button=document.querySelector('#publish-ai-wizard.is-pending .publish-ai-wizard__prompt button');
+    if(!button)return false;
+    button.click();
+    return true;
+  }
+
   function ensureModal(){
     if(generationModal)return generationModal;
     const overlay=document.createElement('div');
@@ -36,6 +49,7 @@
     const action=overlay.querySelector('.cosmo-ai-generation-action');
     action.addEventListener('click',()=>{
       if(overlay.dataset.state==='error'){hideGenerationModal();return}
+      if(cancelWizardGeneration()){hideGenerationModal();return}
       generationController?.abort();
     });
     document.body.append(overlay);
@@ -47,7 +61,7 @@
     const modal=ensureModal();
     generationController=controller;
     modal.dataset.state='loading';
-    modal.querySelector('[data-generation-copy]').textContent='Идёт генерация';
+    modal.querySelector('[data-generation-copy]').textContent=activeGenerationCopy();
     modal.querySelector('.cosmo-ai-generation-action').textContent='Отмена';
     modal.hidden=false;
   }
