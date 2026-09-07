@@ -5,7 +5,7 @@ import {readFile} from 'node:fs/promises';
 const controller=await readFile(new URL('./before-after-controller.js',import.meta.url),'utf8');
 const store=await readFile(new URL('./draft-store.js',import.meta.url),'utf8');
 const drafts=await readFile(new URL('./drafts.js',import.meta.url),'utf8');
-const resume=await readFile(new URL('./draft-resume-router.js',import.meta.url),'utf8');
+const navigation=await readFile(new URL('./navigation.js',import.meta.url),'utf8');
 const bootstrap=await readFile(new URL('./bootstrap.js',import.meta.url),'utf8');
 const worker=await readFile(new URL('../worker/src/services/miniapp-drafts.ts',import.meta.url),'utf8');
 
@@ -22,10 +22,10 @@ test('opening Before/After marks the draft without clearing it',()=>{
   assert.doesNotMatch(controller,/function open\(\)[\s\S]*?\.clear\(/);
 });
 
-test('Continue routes a Before/After draft back to the module',()=>{
-  assert.match(resume,/#flow-continue/);
-  assert.match(resume,/state\?\.screen!=='beforeafter'/);
-  assert.match(resume,/CosmoBeforeAfter\?\.open/);
-  assert.match(resume,/stopImmediatePropagation/);
-  assert.match(bootstrap,/import\('\/draft-resume-router\.js'\)/);
+test('Continue routes a Before/After draft centrally from Home navigation',()=>{
+  assert.match(navigation,/function resumeDraft\(\)/);
+  assert.match(navigation,/state\?\.screen==='beforeafter'/);
+  assert.match(navigation,/CosmoBeforeAfter\?\.open\?\.\(\)/);
+  assert.match(navigation,/continueButton\.addEventListener\('click',resumeDraft\)/);
+  assert.doesNotMatch(bootstrap,/draft-resume-router\.js/);
 });
