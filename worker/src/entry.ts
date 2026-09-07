@@ -2,6 +2,7 @@ import worker from './index';
 import { createVkHandoff, getVkHandoff, getVkHandoffImage, uploadVkHandoffImage } from './services/vk-handoff';
 import { createVkOnboardingHandoff, getVkOnboardingHandoff, selectVkOnboardingGroup } from './services/vk-onboarding';
 import { getMiniAppDraft, saveMiniAppDraft, getMiniAppDraftImage } from './services/miniapp-drafts';
+import { saveBeforeAfterAsset, removeBeforeAfterAsset, swapBeforeAfterAssets } from './services/before-after-assets';
 import { generateMiniAppAiReply } from './services/miniapp-ai';
 import { getMiniAppNewsGenerationStatus } from './services/ai-generation-status';
 import { generateMiniAppImage } from './services/miniapp-image-generation';
@@ -47,6 +48,9 @@ export default { async fetch(req: Request, env: Env, ctx: ExecutionContext) {
     if (req.method === 'POST' && url.pathname === '/api/miniapp/vk-link') return json(await sendVkLinkBackup(req,env));
     if (req.method === 'GET' && url.pathname === '/api/miniapp/draft') return json(await getMiniAppDraft(req,env));
     if (req.method === 'POST' && url.pathname === '/api/miniapp/draft') return json(await saveMiniAppDraft(req,env));
+    if (req.method === 'POST' && url.pathname === '/api/miniapp/before-after/asset') return json(await saveBeforeAfterAsset(req,env),201);
+    if (req.method === 'POST' && url.pathname === '/api/miniapp/before-after/remove') return json(await removeBeforeAfterAsset(req,env));
+    if (req.method === 'POST' && url.pathname === '/api/miniapp/before-after/swap') return json(await swapBeforeAfterAssets(req,env));
     const draftImage=url.pathname.match(/^\/api\/miniapp\/draft\/image\/(.+)$/);if(req.method==='GET'&&draftImage)return getMiniAppDraftImage(req,env,decodeURIComponent(draftImage[1]));
     if(req.method==='GET'&&(url.pathname==='/admin'||url.pathname==='/admin/'))return new Response(adminHtml(),{headers:{'content-type':'text/html; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff'}});
     if(req.method==='GET'&&url.pathname==='/api/admin/users')return json(await listAdminUsers(req,env));
