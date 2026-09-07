@@ -34,5 +34,5 @@ export async function setAiGenerationStatus(env: Env, userId: string, kind: AiGe
 export async function getMiniAppNewsGenerationStatus(request: Request, env: Env) {
   const { userId } = await resolveMiniAppAiUser(request, env);
   const row = await env.DB.prepare(`SELECT kind,status,started_at AS startedAt,finished_at AS finishedAt,error_code AS errorCode,updated_at AS updatedAt FROM miniapp_ai_generation_status WHERE user_id=? AND kind='news'`).bind(userId).first<{kind:AiGenerationKind;status:AiGenerationState;startedAt:string|null;finishedAt:string|null;errorCode:string|null;updatedAt:string}>();
-  return row ?? { kind: 'news', status: 'succeeded', startedAt: null, finishedAt: null, errorCode: null, updatedAt: null };
+  return row ?? { kind: 'news', status: 'idle', startedAt: null, finishedAt: null, errorCode: null, updatedAt: null };
 }
