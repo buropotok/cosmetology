@@ -1,7 +1,7 @@
 import { AppError, type Env } from '../types';
 import { validateTelegramMiniAppInitData } from './telegram-miniapp-auth';
 import { resolveOrCreateTelegramIdentity } from './telegram-identity';
-import { setTelegramWebhookWithToken } from './telegram';
+import { setTelegramWebhookWithToken, sendTelegramReturnToAppWithToken } from './telegram';
 
 const PAIRING_TTL_SECONDS = 10 * 60;
 const WEBHOOK_PATH = '/api/telegram/managed/';
@@ -50,7 +50,6 @@ type IncomingWebhookRow = { telegram_bot_id: string; secret_hash: string };
 type PrivateOwnerRow={user_id:string};
 function startPayload(text: unknown) { if (typeof text !== 'string') return null; return text.match(/^\/start(?:@[A-Za-z0-9_]+)?\s+([A-Za-z0-9_-]{16,64})$/)?.[1] ?? null; }
 function isPlainStart(text:unknown){return typeof text==='string'&&/^\/start(?:@[A-Za-z0-9_]+)?\s*$/.test(text)}
-async function sendManagedBotReturn(token:string,chatId:string){const body=new FormData();body.set('chat_id',chatId);body.set('text','ВЕРНИТЕСЬ В ПРОГРАММУ COSMO SOFA. ВЫ ВСЕГДА МОЖЕТЕ ЭТО СДЕЛАТЬ НАЖАВ НА КНОПКУ ВНИЗУ ЭКРАНА.');const r=await fetch(`https://api.telegram.org/bot${token}/sendMessage`,{method:'POST',body});if(!r.ok)console.error({event:'managed_bot_return_message_failed',status:r.status})}
 export async function managedBotWebhook(request: Request, env: Env, webhookId: string) {
   const route = await env.DB.prepare(`SELECT telegram_bot_id,secret_hash FROM telegram_managed_bot_webhooks WHERE webhook_id=? AND status='active'`).bind(webhookId).first<IncomingWebhookRow>();
   if (!route) throw new AppError('MANAGED_BOT_WEBHOOK_UNAUTHORIZED', 'Webhook не авторизован', 401);
@@ -66,7 +65,7 @@ export async function managedBotWebhook(request: Request, env: Env, webhookId: s
   const message = update?.message, nonce = startPayload(message?.text), chatType = message?.chat?.type, chatId = message?.chat?.id != null ? String(message.chat.id) : null, telegramUserId = message?.from?.id != null ? String(message.from.id) : null;
   if(chatType==='private'&&chatId&&telegramUserId&&isPlainStart(message?.text)){
     const owner=await env.DB.prepare(`SELECT mb.user_id FROM telegram_managed_bots mb JOIN telegram_identities ti ON ti.user_id=mb.user_id AND ti.telegram_user_id=? WHERE mb.telegram_bot_id=? AND mb.status='active' LIMIT 1`).bind(telegramUserId,route.telegram_bot_id).first<PrivateOwnerRow>();
-    if(owner){await env.DB.prepare(`INSERT INTO telegram_managed_bot_private_chats(user_id,telegram_bot_id,telegram_chat_id,telegram_user_id,status,updated_at) VALUES(?,?,?,?,'active',CURRENT_TIMESTAMP) ON CONFLICT(user_id,telegram_bot_id) DO UPDATE SET telegram_chat_id=excluded.telegram_chat_id,telegram_user_id=excluded.telegram_user_id,status='active',updated_at=CURRENT_TIMESTAMP`).bind(owner.user_id,route.telegram_bot_id,chatId,telegramUserId).run();const credential=await env.DB.prepare(`SELECT token_ciphertext,token_iv,token_key_version FROM telegram_managed_bots WHERE telegram_bot_id=? AND user_id=?`).bind(route.telegram_bot_id,owner.user_id).first<{token_ciphertext:string;token_iv:string;token_key_version:number}>();if(credential){const {decryptManagedBotToken}=await import('./managed-bot-crypto');const token=await decryptManagedBotToken(route.telegram_bot_id,{ciphertext:credential.token_ciphertext,iv:credential.token_iv,keyVersion:credential.token_key_version},env);await sendManagedBotReturn(token,chatId)}console.log({event:'telegram_managed_bot_private_chat_ready',managedBotId:route.telegram_bot_id,userId:owner.user_id})}
+    if(owner){await env.DB.prepare(`INSERT INTO telegram_managed_bot_private_chats(user_id,telegram_bot_id,telegram_chat_id,telegram_user_id,status,updated_at) VALUES(?,?,?,?,'active',CURRENT_TIMESTAMP) ON CONFLICT(user_id,telegram_bot_id) DO UPDATE SET telegram_chat_id=excluded.telegram_chat_id,telegram_user_id=excluded.telegram_user_id,status='active',updated_at=CURRENT_TIMESTAMP`).bind(owner.user_id,route.telegram_bot_id,chatId,telegramUserId).run();const credential=await env.DB.prepare(`SELECT token_ciphertext,token_iv,token_key_version FROM telegram_managed_bots WHERE telegram_bot_id=? AND user_id=?`).bind(route.telegram_bot_id,owner.user_id).first<{token_ciphertext:string;token_iv:string;token_key_version:number}>();if(credential){const {decryptManagedBotToken}=await import('./managed-bot-crypto');const token=await decryptManagedBotToken(route.telegram_bot_id,{ciphertext:credential.token_ciphertext,iv:credential.token_iv,keyVersion:credential.token_key_version},env);await sendTelegramReturnToAppWithToken(token,chatId,env.MINIAPP_URL)}console.log({event:'telegram_managed_bot_private_chat_ready',managedBotId:route.telegram_bot_id,userId:owner.user_id})}
     return {ok:true};
   }
   if (!nonce || !chatId || !telegramUserId || (chatType !== 'group' && chatType !== 'supergroup')) return { ok: true };
