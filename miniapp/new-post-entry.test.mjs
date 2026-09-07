@@ -24,8 +24,8 @@ test('AI interface opens only after explicit AI choice',()=>{
   assert.match(entry,/if\(choice==='ai'\)showAi\(\)/);
   assert.match(entry,/function showAi\(\)/);
   assert.match(entry,/state\.restore\(\{\.\.\.state\.getSnapshot\(\),screen:'ai'\}\)/);
+  assert.ok(bootstrap.indexOf("import('/navigation.js')")<bootstrap.indexOf("import('/publish-ai-wizard.js')"));
   assert.ok(bootstrap.indexOf("import('/publish-ai-wizard.js')")<bootstrap.indexOf("import('/new-post-entry.js')"));
-  assert.ok(bootstrap.indexOf("import('/new-post-entry.js')")<bootstrap.indexOf("import('/navigation.js')"));
 });
 
 test('manual and before-after choices stay inside the Composer view',()=>{
