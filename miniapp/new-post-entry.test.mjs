@@ -31,6 +31,16 @@ test('manual and before-after choices route to existing flows',()=>{
   assert.match(entry,/cosmo-before-after-close[^\n]*action==='back'\)showEntry\(\)/);
 });
 
+test('choice buttons use requested icons, blue styling and centered labels',()=>{
+  assert.match(entry,/new-post-entry__icon--ai[^>]*[^<]*>✨<\/span>/);
+  assert.doesNotMatch(entry,/data-new-post-choice="ai"><img src="\/assets\/icons\/cosmo-sofa\.svg"/);
+  assert.match(entry,/\.new-post-entry__button\{[^}]*justify-content:center[^}]*background:#2d8fd3[^}]*text-align:center/);
+  assert.match(entry,/\.new-post-entry__icon\{[^}]*position:absolute[^}]*left:18px/);
+  assert.doesNotMatch(entry,/new-post-entry__button--before-after\{background:#fff/);
+  assert.match(entry,/\.new-post-entry__title\{[^}]*text-align:center/);
+  assert.match(entry,/\.new-post-entry__subtitle\{[^}]*text-align:center/);
+});
+
 test('existing pencil artwork is unchanged except for white stroke color',()=>{
   assert.match(pencil,/stroke="#fff"/);
   assert.match(pencil,/M3 20\.5h5\.2L19 9\.7/);
