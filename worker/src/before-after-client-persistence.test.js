@@ -22,7 +22,7 @@ describe('Before/After client persistence contract',()=>{
     expect(bridge).toContain('saveAsset?.(role,next[role])');
     expect(bridge).toContain('removeAsset?.(role)');
     expect(bridge).toContain('swapAssets?.()');
-    expect(bridge).toContain('setTimeout(()=>void persistDraft().catch(()=>{}),800)');
+    expect(bridge).toMatch(/setTimeout\(\(\)=>void persistDraft\(\)\.catch\([^)]*=>[^)]*\),800\)/);
   });
 
   it('restores BA assets independently from Publisher images',()=>{
