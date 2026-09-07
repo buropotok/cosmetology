@@ -58,6 +58,7 @@ async function loadComposerRuntime(){
   await import('/draft-store.js');
   await import('/drafts.js');
   await import('/draft-resume-router.js');
+  await import('/new-post-draft-confirm.js');
   await import('/composer-actions.js');
   await import('/onboarding-flow.js');
 }
