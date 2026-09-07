@@ -66,11 +66,16 @@ test('Before After resize tracks pointer on window and commits once at end',()=>
   assert.doesNotMatch(ios.slice(moveStart,moveEnd),/requestAnimationFrame/);
 });
 
-test('Before After back closes immediately and persists in background',()=>{
+test('Before After action buttons do not force draft persistence',()=>{
   const backBranch=bridge.match(/if\(button\.id==='back'\)\{([^}]*)\}/)?.[1]||'';
-  const closeAt=backBranch.indexOf("close('back')");
-  const persistAt=backBranch.indexOf('persistDraft()');
-  assert.ok(closeAt>=0,'back should close the editor');
-  assert.ok(persistAt>closeAt,'draft persistence must not block back navigation');
-  assert.doesNotMatch(backBranch,/await persistDraft/);
+  assert.match(backBranch,/clearTimeout\(saveTimer\)/,'back should cancel a pending autosave');
+  assert.match(backBranch,/close\('back'\)/,'back should close the editor');
+  assert.doesNotMatch(backBranch,/persistDraft\(/,'back must not force draft persistence');
+
+  const saveStart=bridge.indexOf('async function save()');
+  const saveEnd=bridge.indexOf("window.addEventListener('cosmo-before-after-change'",saveStart);
+  const saveBody=bridge.slice(saveStart,saveEnd);
+  assert.match(saveBody,/clearTimeout\(saveTimer\)/,'save should cancel a pending autosave');
+  assert.doesNotMatch(saveBody,/persistDraft\(/,'save must not force BA draft persistence');
+  assert.match(saveBody,/controller\.save\(blob,/,'save should still pass the composite to Publisher');
 });
