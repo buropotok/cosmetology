@@ -8,7 +8,7 @@ import { generateMiniAppImage } from './services/miniapp-image-generation';
 import { validateTelegramMiniAppInitData } from './services/telegram-miniapp-auth';
 import { resolveOrCreateTelegramIdentity } from './services/telegram-identity';
 import { decryptManagedBotToken } from './services/managed-bot-crypto';
-import { deleteTelegramMessageWithToken, sendTelegramVkBackupWithToken } from './services/telegram';
+import { deleteTelegramMessageWithToken, getTelegramBotMeWithToken, sendTelegramVkBackupWithToken } from './services/telegram';
 import { adminHtml, listAdminUsers, deleteAdminTelegramBot, deleteAdminTelegramGroup, deleteAdminVkGroup, deleteAdminUser } from './admin';
 import { AppError, type Env } from './types';
 
@@ -26,14 +26,16 @@ async function sendVkLinkBackup(req: Request, env: Env) {
   const target=await env.DB.prepare(`SELECT mb.telegram_bot_id,pc.telegram_chat_id,mb.token_ciphertext,mb.token_iv,mb.token_key_version FROM telegram_managed_bots mb JOIN telegram_managed_bot_private_chats pc ON pc.telegram_bot_id=mb.telegram_bot_id AND pc.user_id=mb.user_id AND pc.status='active' JOIN telegram_managed_bot_webhooks wh ON wh.telegram_bot_id=mb.telegram_bot_id AND wh.status='active' WHERE mb.user_id=? AND mb.status='active' AND mb.token_ciphertext IS NOT NULL AND mb.token_iv IS NOT NULL ORDER BY mb.updated_at DESC LIMIT 1`).bind(account.userId).first<VkBackupTarget>();
   if(!target)throw new AppError('MANAGED_TELEGRAM_PREVIEW_NOT_READY','Откройте личный чат с персональным ботом и нажмите Start.',409);
   const token=await decryptManagedBotToken(target.telegram_bot_id,{ciphertext:target.token_ciphertext,iv:target.token_iv,keyVersion:target.token_key_version},env);
+  const bot=await getTelegramBotMeWithToken(token);
+  if(!bot.username)throw new AppError('TELEGRAM_ERROR','У персонального бота отсутствует username',502);
   const vkUrl = `https://m.vk.ru/new_post/-${groupId}?redirect_url=${encodeURIComponent(`https://m.vk.ru/club${groupId}`)}&creation_entry_point=group_wall_button&screen=group`;
   const chatId=target.telegram_chat_id;
   const previous = await env.DB.prepare('SELECT message_id AS messageId,telegram_chat_id AS chatId FROM vk_backup_messages WHERE user_id=?').bind(account.userId).first<{ messageId: number;chatId:string }>();
   if (previous?.messageId&&previous.chatId===chatId) await deleteTelegramMessageWithToken(token,chatId,previous.messageId).catch(()=>null);
   const sent:any=await sendTelegramVkBackupWithToken(token,chatId,vkUrl);
-  if(!sent?.message_id)throw new AppError('TELEGRAM_ERROR','Не удалось отправить резервную ссылку',502);
+  if(!sent?.message_id)throw new AppError('TELEGRAM_ERROR','Не удалось отправить ссылку публикации',502);
   await env.DB.prepare('INSERT INTO vk_backup_messages(user_id,telegram_chat_id,message_id,updated_at) VALUES(?,?,?,CURRENT_TIMESTAMP) ON CONFLICT(user_id) DO UPDATE SET telegram_chat_id=excluded.telegram_chat_id,message_id=excluded.message_id,updated_at=CURRENT_TIMESTAMP').bind(account.userId, chatId, sent.message_id).run();
-  return { ok: true, vkUrl };
+  return { ok: true, vkUrl, managedBotUrl:`https://t.me/${bot.username}` };
 }
 
 export default { async fetch(req: Request, env: Env, ctx: ExecutionContext) {
@@ -59,7 +61,7 @@ export default { async fetch(req: Request, env: Env, ctx: ExecutionContext) {
     if(req.method==='POST'&&url.pathname==='/api/miniapp/vk-handoff')return json(await createVkHandoff(req,env,ctx),201);
     const handoffMatch=url.pathname.match(/^\/api\/vk-handoff\/([A-Za-z0-9_-]+)$/);if(req.method==='GET'&&handoffMatch)return json(await getVkHandoff(env,handoffMatch[1],url.origin));
     const handoffUploadMatch=url.pathname.match(/^\/api\/vk-handoff-upload\/([A-Za-z0-9_-]+)$/);if(req.method==='POST'&&handoffUploadMatch)return json(await uploadVkHandoffImage(env,handoffUploadMatch[1],req));
-    const handoffImageMatch=url.pathname.match(/^\/api\/vk-handoff-image\/([A-Za-z0-9_-]+)$/);if(req.method==='GET'&&handoffImageMatch){const object=await getVkHandoffImage(env,handoffMatch![1]);if(!object)return new Response('Not found',{status:404});const headers=new Headers();object.writeHttpMetadata(headers);headers.set('etag',object.httpEtag);headers.set('cache-control','public, max-age=300');headers.set('x-content-type-options','nosniff');return new Response(object.body,{headers})}
+    const handoffImageMatch=url.pathname.match(/^\/api\/vk-handoff-image\/([A-Za-z0-9_-]+)$/);if(req.method==='GET'&&handoffImageMatch){const object=await getVkHandoffImage(env,handoffImageMatch[1]);if(!object)return new Response('Not found',{status:404});const headers=new Headers();object.writeHttpMetadata(headers);headers.set('etag',object.httpEtag);headers.set('cache-control','public, max-age=300');headers.set('x-content-type-options','nosniff');return new Response(object.body,{headers})}
     return worker.fetch(req,env);
   } catch(error){const err=error instanceof AppError?error:new AppError('INTERNAL_ERROR','Внутренняя ошибка сервера');if(!(error instanceof AppError))console.error(error);const cors=url.pathname.startsWith('/api/vk-onboarding/')?onboardingCors:{};return json({error:{code:err.code,message:err.message}},err.status,cors)}
 }};
