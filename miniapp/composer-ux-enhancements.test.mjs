@@ -11,10 +11,18 @@ test('rich editor exposes the requested uppercase empty-state placeholder',()=>{
   assert.match(ux,/!editor\.textContent\?\.trim\(\)/);
 });
 
-test('AI generation modal has animated dots and cancel aborts the active request',()=>{
-  assert.match(ux,/Идёт генерация/);
+test('AI generation modal uses news-specific copy and animated dots',()=>{
+  assert.match(ux,/active==='Новости'\?'Ищем актуальные новости':'Идёт генерация'/);
   assert.match(ux,/cosmo-ai-generation-dot/);
   assert.match(ux,/@keyframes cosmo-ai-dot/);
+  assert.match(ux,/modal\.querySelector\('\[data-generation-copy\]'\)\.textContent=activeGenerationCopy\(\)/);
+});
+
+test('modal cancel routes through the wizard cancellation state before transport fallback',()=>{
+  assert.match(ux,/function cancelWizardGeneration\(\)/);
+  assert.match(ux,/#publish-ai-wizard\.is-pending \.publish-ai-wizard__prompt button/);
+  assert.match(ux,/button\.click\(\)/);
+  assert.match(ux,/if\(cancelWizardGeneration\(\)\)\{hideGenerationModal\(\);return\}/);
   assert.match(ux,/generationController\?\.abort\(\)/);
   assert.match(ux,/new AbortController\(\)/);
   assert.match(ux,/signal:controller\.signal/);
