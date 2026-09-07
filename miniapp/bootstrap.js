@@ -15,6 +15,7 @@ function loadWorkspaceStyles(){
     quoteLink.dataset.cosmoTelegramQuotes='';
     document.head.append(quoteLink);
   }
+  document.head.insertAdjacentHTML('beforeend','<style>.cosmo-home-mark{width:228px!important;height:228px!important}</style>');
 }
 
 async function loadPlatform(){
