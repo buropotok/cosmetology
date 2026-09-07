@@ -31,7 +31,11 @@ export async function getMiniAppDraft(request: Request, env: Env) {
   try { beforeAfterState = beforeAfterStateJson ? JSON.parse(beforeAfterStateJson) : null; } catch { beforeAfterState = null; }
   const images = await env.DB.prepare('SELECT position, r2_key AS key, file_name AS fileName, content_type AS contentType, size_bytes AS size FROM miniapp_draft_images WHERE user_id=? ORDER BY position').bind(account.userId).all<{position:number;key:string;fileName:string|null;contentType:string|null;size:number}>();
   const mapped=[]; for(const image of images.results || []) mapped.push({ ...image, url: await signedDownloadUrl(env,image.key) });
-  return { draft: { ...rest, aiState, beforeAfterState, images: mapped } };
+  const ba = await env.DB.prepare(`SELECT refs.before_asset_id AS beforeId,refs.after_asset_id AS afterId,b.r2_key AS beforeKey,b.file_name AS beforeFileName,b.content_type AS beforeContentType,b.size_bytes AS beforeSize,a.r2_key AS afterKey,a.file_name AS afterFileName,a.content_type AS afterContentType,a.size_bytes AS afterSize FROM miniapp_before_after_assets refs LEFT JOIN media_assets b ON b.id=refs.before_asset_id AND b.user_id=refs.user_id LEFT JOIN media_assets a ON a.id=refs.after_asset_id AND a.user_id=refs.user_id WHERE refs.user_id=?`).bind(account.userId).first<{beforeId:string|null;afterId:string|null;beforeKey:string|null;beforeFileName:string|null;beforeContentType:string|null;beforeSize:number|null;afterKey:string|null;afterFileName:string|null;afterContentType:string|null;afterSize:number|null}>();
+  const beforeAfterImages:{role:'before'|'after';assetId:string;key:string;fileName:string|null;contentType:string|null;size:number;url:string}[]=[];
+  if(ba?.beforeId&&ba.beforeKey)beforeAfterImages.push({role:'before',assetId:ba.beforeId,key:ba.beforeKey,fileName:ba.beforeFileName,contentType:ba.beforeContentType,size:Number(ba.beforeSize||0),url:await signedDownloadUrl(env,ba.beforeKey)});
+  if(ba?.afterId&&ba.afterKey)beforeAfterImages.push({role:'after',assetId:ba.afterId,key:ba.afterKey,fileName:ba.afterFileName,contentType:ba.afterContentType,size:Number(ba.afterSize||0),url:await signedDownloadUrl(env,ba.afterKey)});
+  return { draft: { ...rest, aiState, beforeAfterState, images: mapped, beforeAfterImages } };
 }
 
 export async function saveMiniAppDraft(request: Request, env: Env) {
@@ -85,9 +89,11 @@ export async function getMiniAppDraftImage(request: Request, env: Env, key: stri
     if(signature.length!==expected.length){throw new AppError('INVALID_DOWNLOAD_LINK','Некорректная ссылка на изображение',403)}
     let diff=0; for(let i=0;i<signature.length;i++) diff|=signature.charCodeAt(i)^expected.charCodeAt(i); if(diff!==0) throw new AppError('INVALID_DOWNLOAD_LINK','Некорректная ссылка на изображение',403);
     owned=await env.DB.prepare('SELECT file_name AS fileName, content_type AS contentType FROM miniapp_draft_images WHERE r2_key=? LIMIT 1').bind(key).first<{fileName:string|null;contentType:string|null}>();
+    if(!owned)owned=await env.DB.prepare('SELECT file_name AS fileName, content_type AS contentType FROM media_assets WHERE r2_key=? LIMIT 1').bind(key).first<{fileName:string|null;contentType:string|null}>();
   } else {
     const account = await accountFor(request, env);
     owned=await env.DB.prepare('SELECT file_name AS fileName, content_type AS contentType FROM miniapp_draft_images WHERE user_id=? AND r2_key=? LIMIT 1').bind(account.userId,key).first<{fileName:string|null;contentType:string|null}>();
+    if(!owned)owned=await env.DB.prepare('SELECT file_name AS fileName, content_type AS contentType FROM media_assets WHERE user_id=? AND r2_key=? LIMIT 1').bind(account.userId,key).first<{fileName:string|null;contentType:string|null}>();
   }
   if (!owned) throw new AppError('NOT_FOUND','Изображение не найдено',404);
   const object = await env.IMAGES.get(key);
