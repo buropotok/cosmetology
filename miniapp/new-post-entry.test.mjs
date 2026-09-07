@@ -3,31 +3,35 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 
 const entry=await readFile(new URL('./new-post-entry.js',import.meta.url),'utf8');
+const navigation=await readFile(new URL('./navigation.js',import.meta.url),'utf8');
 const bootstrap=await readFile(new URL('./bootstrap.js',import.meta.url),'utf8');
 const pencil=await readFile(new URL('./assets/icons/manual-edit.svg',import.meta.url),'utf8');
 
-test('new post reset opens a choice screen before the AI wizard',()=>{
+test('Home new-post flow opens the Composer choice screen',()=>{
   assert.match(entry,/data-new-post-choice="ai"/);
   assert.match(entry,/Создать пост с помощью AI/);
   assert.match(entry,/data-new-post-choice="manual"/);
   assert.match(entry,/Создать пост вручную с нуля/);
   assert.match(entry,/data-new-post-choice="before-after"/);
   assert.match(entry,/ДО \/ ПОСЛЕ/);
-  assert.match(entry,/cosmo-ai-wizard-reset[^\n]*queueMicrotask\(showEntry\)/);
-  assert.match(entry,/wizard\.hidden=true;\s*composerContent\.hidden=true;\s*entry\.hidden=false/);
+  assert.match(navigation,/async function openNewPost\(\)/);
+  assert.match(navigation,/cosmo-ai-wizard-reset/);
+  assert.match(navigation,/router\.show\('composer'\);\s*window\.CosmoComposerView\?\.showEntry\?\.\(\)/);
+  assert.match(entry,/function showEntry\(\)[\s\S]*wizard\.hidden=true;\s*composerContent\.hidden=true;\s*controls\.hidden=false;\s*publishMode\('entry'\)/);
 });
 
 test('AI interface opens only after explicit AI choice',()=>{
-  assert.match(entry,/if\(choice==='ai'\)openAi\(\)/);
-  assert.match(entry,/function openAi\(\)/);
+  assert.match(entry,/if\(choice==='ai'\)showAi\(\)/);
+  assert.match(entry,/function showAi\(\)/);
   assert.match(entry,/state\.restore\(\{\.\.\.state\.getSnapshot\(\),screen:'ai'\}\)/);
   assert.ok(bootstrap.indexOf("import('/publish-ai-wizard.js')")<bootstrap.indexOf("import('/new-post-entry.js')"));
   assert.ok(bootstrap.indexOf("import('/new-post-entry.js')")<bootstrap.indexOf("import('/navigation.js')"));
 });
 
-test('manual and before-after choices route directly from entry screen',()=>{
-  assert.match(entry,/function openManual\(\)[\s\S]*composerContent\.hidden=false;screen\.dataset\.publishMode='compose'/);
-  assert.doesNotMatch(entry,/wizard\.querySelector\('\.publish-ai-wizard__manual'\)/);
+test('manual and before-after choices stay inside the Composer view',()=>{
+  assert.match(entry,/function showEditor\(\{manual=false,focus=true\}=\{\}\)[\s\S]*composerContent\.hidden=false;\s*publishMode\('compose'\)/);
+  assert.match(entry,/if\(choice==='manual'\)showEditor\(\{manual:true\}\)/);
+  assert.match(entry,/else if\(choice==='before-after'\)openBeforeAfter\(\)/);
   assert.match(entry,/window\.CosmoBeforeAfter\?\.open\?\.\(\)/);
   assert.match(entry,/cosmo-before-after-close[^\n]*action==='back'\)showEntry\(\)/);
 });
