@@ -39,6 +39,7 @@ async function loadAppShell(){
   await import('/before-after-controller.js');
   await import('/new-post-lifecycle.js');
   await import('/publish-ai-wizard.js');
+  await import('/new-post-entry.js');
   await import('/navigation.js');
   await import('/draft-loading-overlay.js');
   await import('/ai-response-ui.js');
