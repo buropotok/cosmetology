@@ -92,20 +92,20 @@ describe('Managed Bot token transport diagnostics',()=>{
     const error=vi.spyOn(console,'error').mockImplementation(()=>undefined);
     vi.stubGlobal('fetch',vi.fn(async()=>new Response(responseBody,{status:502,headers:{'content-type':'text/plain'}})));
     const {getTelegramBotMeWithToken}=await import('./telegram');
-    await expect(getTelegramBotMeWithToken(managedToken)).rejects.toMatchObject({code:'TELEGRAM_ERROR',status:502});
+    await expect(getTelegramBotMeWithToken(managedToken)).rejects.toMatchObject({code:'TELEGRAM_ERROR',status:502,message:'Telegram API: HTTP 502; method=getMe; ответ не является JSON'});
     expect(error).toHaveBeenCalledWith({event:'telegram_bot_api_response_parse_error',method:'getMe',httpStatus:502,contentType:'text/plain',responseLength:responseBody.length});
     const logged=JSON.stringify(error.mock.calls);
     expect(logged).not.toContain(responseBody);
     expect(logged).not.toContain(managedToken);
   });
 
-  it('logs only safe Telegram error metadata and keeps the token out of logs',async()=>{
+  it('returns safe Telegram API details to the caller and keeps the token redacted',async()=>{
     const managedToken='8771271779:never-log-this';
     const error=vi.spyOn(console,'error').mockImplementation(()=>undefined);
-    vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify({ok:false,error_code:401,description:`Unauthorized ${managedToken}`}),{status:401})));
+    vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify({ok:false,error_code:400,description:`Bad Request: invalid photo ${managedToken}`}),{status:400})));
     const {getTelegramBotMeWithToken}=await import('./telegram');
-    await expect(getTelegramBotMeWithToken(managedToken)).rejects.toMatchObject({code:'TELEGRAM_ERROR',status:502});
-    expect(error).toHaveBeenCalledWith({event:'telegram_bot_api_error',method:'getMe',errorCode:401,description:'Unauthorized [REDACTED]'});
+    await expect(getTelegramBotMeWithToken(managedToken)).rejects.toMatchObject({code:'TELEGRAM_ERROR',status:502,message:'Telegram API error: HTTP 400; method=getMe; error_code=400; description=Bad Request: invalid photo [REDACTED]'});
+    expect(error).toHaveBeenCalledWith({event:'telegram_bot_api_error',method:'getMe',httpStatus:400,errorCode:400,description:'Bad Request: invalid photo [REDACTED]'});
     expect(JSON.stringify(error.mock.calls)).not.toContain(managedToken);
   });
 });
