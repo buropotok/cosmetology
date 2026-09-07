@@ -17,7 +17,7 @@ function functionBody(source,name,nextName){
 
 test('Before/After workspace is cleared only by committed New Post flow',()=>{
   assert.match(controller,/addEventListener\('cosmo-new-post',clear\)/);
-  assert.match(controller,/Object\.freeze\(\{open,close,clear,save,saveDraft\}\)/);
+  assert.match(controller,/Object\.freeze\(\{open,close,clear,save,saveDraft,saveAsset,removeAsset,swapAssets\}\)/);
   assert.doesNotMatch(controller,/cosmo-before-after-close[^\n]+clear/);
   assert.match(navigation,/async function openNewPost\(\)/);
   assert.match(navigation,/cosmo-new-post/);
