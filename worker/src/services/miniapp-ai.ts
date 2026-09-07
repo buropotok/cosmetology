@@ -4,7 +4,7 @@ import discoverySchema from '../schemas/discovery_schema.json';
 import { isPostDocument } from '../../../shared/post-document';
 import { parsePostMarkdown } from '../../../shared/post-markdown';
 import { AppError, type Env } from '../types';
-import { validateTelegramMiniAppInitData } from './telegram-miniapp-auth';
+import { resolveMiniAppAiUser, setAiGenerationStatus, type AiGenerationKind } from './ai-generation-status';
 
 const DEFAULT_MODEL = 'gemini-2.5-flash';
 const MAX_MESSAGE_LENGTH = 12000;
@@ -41,10 +41,6 @@ CTA-кнопки, если они нужны, записывай только в
 Не используй underline в AI-разметке. Он остаётся доступен пользователю в редакторе.
 Служебные пояснения интерфейса вроде «в Telegram будет кнопкой» или «в Telegram текст будет раскрываемым» не включай в публикацию: выражай их смысл самой разметкой.`;
 
-function getMiniAppInitData(req: Request) {
-  return req.headers.get('authorization')?.match(/^tma\s+(.+)$/i)?.[1] ?? '';
-}
-
 function serializeAiError(error: unknown): unknown {
   if (error instanceof Error) {
     const details: Record<string, unknown> = { name: error.name, message: error.message, stack: error.stack };
@@ -79,8 +75,12 @@ function parseDiscovery(text: string) {
   return value;
 }
 
+function generationKind(message: string): AiGenerationKind {
+  return /актуальн(?:ые|ых) новост|\bновост(?:и|ей)\b/i.test(message) ? 'news' : 'general';
+}
+
 export async function generateMiniAppAiReply(req: Request, env: Env) {
-  await validateTelegramMiniAppInitData(getMiniAppInitData(req), env.TELEGRAM_BOT_TOKEN);
+  const { userId } = await resolveMiniAppAiUser(req, env);
   const body = await req.json().catch(() => null) as { message?: unknown; mode?: unknown } | null;
   const message = typeof body?.message === 'string' ? body.message.trim() : '';
   const mode = body?.mode === 'discovery' ? 'discovery' : 'text';
@@ -88,15 +88,19 @@ export async function generateMiniAppAiReply(req: Request, env: Env) {
   if (message.length > MAX_MESSAGE_LENGTH) throw new AppError('AI_MESSAGE_TOO_LONG', `Сообщение не должно превышать ${MAX_MESSAGE_LENGTH} символов`, 400);
   if (!env.GEMINI_API_KEY) throw new AppError('AI_NOT_CONFIGURED', 'AI пока не настроен', 503);
 
+  const kind = generationKind(message);
+  await setAiGenerationStatus(env, userId, kind, 'queued');
   const model = env.AI_TEXT_MODEL?.trim() || DEFAULT_MODEL;
   const google = createGoogleGenerativeAI({ apiKey: env.GEMINI_API_KEY });
   const prompt = mode === 'discovery' ? `${message}\n\nВерни только JSON, строго соответствующий этой JSON Schema. Не используй Markdown или code fences. id вариантов должны идти строго idea_1 ... idea_5.\n\n${JSON.stringify(discoverySchema)}` : message;
 
   try {
+    await setAiGenerationStatus(env, userId, kind, 'running');
     if (mode === 'discovery') {
       const result = await generateText({ model: google(model), tools: { google_search: google.tools.googleSearch({}) }, prompt });
       const text = result.text.trim();
       if (!text) throw new Error('Gemini returned an empty response');
+      await setAiGenerationStatus(env, userId, kind, 'succeeded');
       return { discovery: parseDiscovery(text) };
     }
 
@@ -117,8 +121,10 @@ export async function generateMiniAppAiReply(req: Request, env: Env) {
     if (!markdown) throw new Error('Gemini returned an empty PostMarkdown response');
     const document = parsePostMarkdown(markdown);
     if (!isPostDocument(document)) throw new Error('Gemini returned invalid PostMarkdown');
+    await setAiGenerationStatus(env, userId, kind, 'succeeded');
     return { text: JSON.stringify(document, null, 2) };
   } catch (error) {
+    await setAiGenerationStatus(env, userId, kind, 'failed', 'AI_GENERATION_FAILED').catch(statusError => console.error('Failed to persist AI generation failure', statusError));
     console.error('Mini App AI generation failed', { provider: 'google', model, mode, error: serializeAiError(error) });
     throw new AppError('AI_GENERATION_FAILED', 'Не удалось получить ответ AI. Попробуйте ещё раз.', 502);
   }
