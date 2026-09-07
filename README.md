@@ -1,8 +1,8 @@
 # Cosmo Sofa — Telegram Mini App
 
-Cosmo Sofa — Telegram Mini App для подготовки и публикации контента косметологического кабинета. Приложение работает непосредственно внутри Telegram: пользователь открывает Mini App, создаёт или редактирует публикацию, добавляет изображения, использует AI-сценарии подготовки контента и отправляет готовый материал в подключённую Telegram-группу. В проекте также поддерживается публикация во ВКонтакте.
+Cosmo Sofa — Telegram Mini App для подготовки и публикации контента косметологического кабинета. Основной интерфейс работает внутри Telegram: пользователь создаёт и редактирует публикации, добавляет изображения, использует AI-сценарии и публикует материалы в Telegram. Для подключения и публикации во ВКонтакте проект использует отдельный VK Mini App, размещённый в Yandex Cloud.
 
-Главный пользовательский продукт этого репозитория — `miniapp/`. Chrome Extension, сохранившийся в `extension/`, является отдельным legacy/companion flow и не требуется для работы Telegram Mini App.
+Главный пользовательский продукт — `miniapp/`. Chrome Extension в `extension/` является отдельным legacy/companion flow и не требуется для работы Telegram Mini App.
 
 ## Что умеет Mini App
 
@@ -14,17 +14,20 @@ Cosmo Sofa — Telegram Mini App для подготовки и публикац
 - содержит AI-flow для подготовки и редактирования публикаций;
 - подключает персонального Telegram-бота и группу для публикаций;
 - публикует текст и изображения в Telegram;
-- поддерживает VK как дополнительный канал публикации;
-- хранит состояние, подключения и историю на backend.
+- подключает VK-группу через отдельный VK Mini App;
+- передаёт публикацию из Cloudflare-контура в Yandex Cloud для VK-flow;
+- хранит основное состояние пользователя, подключения и историю в Cloudflare backend.
 
 ## Архитектура
+
+Проект использует два связанных инфраструктурных контура: Cloudflare для основного Telegram Mini App и состояния приложения, и Yandex Cloud для VK Mini App и VK-specific операций.
 
 ```text
 Telegram
   │
   │ Telegram.WebApp.initData
   ▼
-miniapp/                         Telegram Mini App UI
+miniapp/ — Telegram Mini App UI
   │
   │ HTTPS /api/miniapp/*
   ▼
@@ -32,14 +35,27 @@ Cloudflare Worker
   ├─ Telegram auth / initData validation
   ├─ account + onboarding
   ├─ drafts / publishing API
-  ├─ Telegram Bot API
-  ├─ Managed Bots
-  ├─ VK integration
+  ├─ Telegram Bot API / Managed Bots
   ├─ D1 — users, identities, connections, posts, drafts
-  └─ R2 — images
+  ├─ R2 — source images
+  │
+  │ user context / VK onboarding / publication handoff
+  ▼
+Yandex Cloud
+  ├─ API Gateway
+  ├─ serverless VK backend
+  ├─ Yandex Object Storage — replicated publication artifacts/images
+  └─ VK Mini App
+        │
+        ├─ VK Bridge authentication
+        ├─ groups.get — группы, которыми управляет пользователь
+        ├─ выбор VK-группы → callback в Cloudflare
+        └─ VK publishing flow
 ```
 
-`miniapp/` публикуется как Cloudflare Worker Static Assets. API и статика работают на одном origin. Production Mini App URL задаётся переменной `MINIAPP_URL` в `worker/wrangler.jsonc`.
+`miniapp/` публикуется как Cloudflare Worker Static Assets. Telegram Mini App API и статика работают на одном origin. Production URL задаётся через `MINIAPP_URL` в `worker/wrangler.jsonc`.
+
+Cloudflare Worker знает адрес Yandex VK-контура через `YANDEX_VK_BASE_URL`. Это не просто внешний VK API: Yandex Cloud является отдельной частью runtime-архитектуры проекта.
 
 ## Telegram authentication
 
@@ -63,8 +79,6 @@ Worker проверяет подпись server-side. Новый Telegram user �
 
 ## Telegram publishing flow
 
-Базовый flow подключения группы:
-
 ```text
 Mini App
   → создать pairing code
@@ -75,15 +89,75 @@ Mini App
   → публикация из Mini App
 ```
 
-Pairing code одноразовый и имеет TTL. Destination публикации определяется только server-side по verified Telegram identity.
+Pairing code одноразовый и имеет TTL. Destination определяется server-side по verified Telegram identity.
 
 Проект также содержит Managed Bot flow: пользователь может подключить персонального Telegram-бота, а затем выбрать группу через `startgroup` deep link. Credentials managed bot хранятся в D1 только в зашифрованном виде AES-256-GCM; plaintext token не сохраняется.
 
-Подробный Telegram setup и security model находятся в `docs/telegram-miniapp-setup.md`.
+Подробный Telegram setup и security model: `docs/telegram-miniapp-setup.md`.
+
+## VK Mini App и Yandex Cloud
+
+VK-интеграция построена как отдельный Mini App flow, а не как прямой вызов VK API из Cloudflare Worker.
+
+Код контура находится в `yandex/vk/`:
+
+```text
+yandex/vk/
+  ├─ miniapp/    VK Mini App frontend
+  ├─ function/   serverless backend для VK/artifact flow
+  └─ gateway/    конфигурация Yandex API Gateway
+```
+
+### Подключение VK-группы
+
+Telegram Mini App инициирует VK onboarding и передаёт одноразовый handoff/connect context. Пользователь открывает VK Mini App, размещённый в Yandex Cloud. VK Mini App выполняет `VKWebAppInit`, получает VK authorization через VK Bridge и запрашивает `groups.get` с `filter=admin`, то есть показывает группы, которыми пользователь может управлять.
+
+После выбора группы VK Mini App передаёт в callback Cloudflare-контура VK user context и выбранную группу (`vkUserId`, `groupId`, `groupName`, `screenName`). Таким образом, VK identity/group selection связываются с уже существующим пользователем Cosmo Sofa в основном Cloudflare backend.
+
+```text
+Telegram user / Cosmo Sofa account
+        │
+        ▼
+Cloudflare Worker
+        │ one-time connect context
+        ▼
+VK Mini App @ Yandex Cloud
+        │ VK Bridge + groups.get
+        ▼
+VK user выбирает группу
+        │ callback: VK user + selected group
+        ▼
+Cloudflare Worker
+        │
+        └─ сохраняет связь пользователя с VK destination
+```
+
+### Публикация в VK
+
+Cloudflare остаётся source of truth для публикации и исходных изображений. Для VK-публикации формируется временный artifact/handoff. Yandex backend получает metadata публикации и забирает изображения из Cloudflare R2, после чего хранит реплику в Yandex Object Storage.
+
+```text
+Cloudflare D1/R2
+  │ publication artifact + temporary handoff
+  ▼
+Yandex Cloud Function
+  │ replicate images
+  ▼
+Yandex Object Storage
+  │
+  ▼
+VK Mini App
+  ├─ получает artifact
+  ├─ получает VK access token через VK Bridge
+  ├─ загружает изображения через VK wall upload flow
+  └─ открывает/выполняет публикацию в выбранную VK-группу
+```
+
+Yandex backend валидирует handoff, ограничивает типы/размер изображений и разрешённые VK upload URL. Handoff является временным транспортным механизмом; постоянная пользовательская модель остаётся в Cloudflare-контуре.
 
 ## Mini App frontend
 
-`miniapp/` — самостоятельный frontend без обязательной сборки framework bundle. Точка входа:
+`miniapp/` — основной Telegram frontend без обязательной сборки framework bundle:
 
 ```text
 miniapp/index.html
@@ -94,32 +168,29 @@ miniapp/index.html
 
 Основные зоны frontend:
 
-- `bootstrap.js` — последовательная загрузка runtime;
+- `bootstrap.js` — загрузка runtime;
 - `app.js`, `app-router.js`, `navigation.js` — shell и навигация;
-- `onboarding-*` — первый вход и подключение сервисов;
-- `composer-*` — редактор публикации, изображения и действия;
-- `draft-*` — сохранение и восстановление черновиков;
+- `onboarding-*` — первый вход и подключения;
+- `composer-*` — редактор публикации и изображения;
+- `draft-*` — черновики;
 - `ai-*` / `publish-ai-*` — AI generation/editing flow;
-- `before-after-*` — работа с контентом «до/после»;
-- `settings.js` — состояние подключений Telegram/VK;
-- `assets/` — изображения и SVG-иконки Mini App.
+- `before-after-*` — контент «до/после»;
+- `settings.js` — состояние Telegram/VK подключений;
+- `assets/` — изображения и SVG-иконки.
 
-Telegram Web App SDK подключается непосредственно в `miniapp/index.html`.
+VK Mini App имеет отдельный frontend в `yandex/vk/miniapp/` и использует VK Bridge.
 
-## Backend
+## Backend и инфраструктура
 
-Backend находится в `worker/` и разворачивается как Cloudflare Worker.
+### Cloudflare
 
-Основные инфраструктурные компоненты:
+- **Cloudflare Workers** — основной HTTP API и business logic;
+- **Static Assets** — Telegram Mini App `miniapp/`;
+- **D1** — аккаунты, identities, connections, managed bots, destinations, posts и drafts;
+- **R2** — исходные изображения и handoff source для VK;
+- **Telegram Bot API** — onboarding и публикация.
 
-- **Cloudflare Workers** — HTTP API и server-side business logic;
-- **Static Assets** — раздача `miniapp/`;
-- **D1** — аккаунты, Telegram identities, connections, managed bots, destinations, posts и drafts;
-- **R2** — изображения;
-- **Telegram Bot API** — onboarding и публикация;
-- **VK API** — дополнительный publishing channel.
-
-Ключевые Mini App endpoints включают:
+Ключевые Mini App endpoints:
 
 ```text
 GET  /api/miniapp/me
@@ -128,40 +199,42 @@ POST /api/miniapp/publish
 POST /api/miniapp/telegram/managed-bot/group-link
 ```
 
-В репозитории также есть диагностические и onboarding endpoints для Managed Bots. Их контракт и security requirements описаны в `docs/telegram-miniapp-setup.md`.
+### Yandex Cloud
+
+Yandex-контур обслуживает VK-specific часть системы:
+
+- hosting/runtime VK Mini App;
+- API Gateway;
+- serverless function для artifact replication и VK upload/publishing helpers;
+- Object Storage для временной российской реплики изображений публикации;
+- обмен onboarding/publishing context с Cloudflare Worker.
+
+Cloudflare и Yandex — части одной системы, а не независимые приложения.
 
 ## Структура репозитория
 
 ```text
 miniapp/       Telegram Mini App frontend
-worker/        Cloudflare Worker, API, D1/R2, Telegram/VK integrations
+worker/        Cloudflare Worker, D1/R2, Telegram и cross-cloud orchestration
+yandex/vk/     VK Mini App + Yandex Cloud Function/API Gateway
 shared/        общие контракты
 scripts/       operational/setup scripts
-docs/          документация по Telegram и инфраструктуре
+docs/          документация
 extension/     отдельный Chrome Extension flow
 site/          вспомогательные web assets
 ```
 
-Mini App и Worker являются основной runtime-парой проекта:
+Основной runtime:
 
 ```text
-miniapp/ ↔ worker/
+Telegram → Telegram Mini App → Cloudflare
+                               ↕
+                         Yandex Cloud → VK Mini App → VK
 ```
 
 ## Требования
 
-Для разработки и deployment нужны:
-
-- Node.js 20+;
-- npm;
-- Cloudflare account;
-- Wrangler;
-- D1 database;
-- R2 bucket;
-- Telegram bot token;
-- Telegram webhook secret;
-- encryption key для Managed Bots;
-- при использовании VK — соответствующие VK credentials/integration.
+Для разработки и deployment нужны Node.js 20+, npm, Cloudflare account/Wrangler, D1, R2, Telegram bot credentials, encryption key для Managed Bots, а для VK-контура — VK Mini App configuration и Yandex Cloud resources (Function, API Gateway и Object Storage).
 
 ## Cloudflare setup
 
@@ -173,7 +246,7 @@ npx wrangler d1 create cosmetology-publisher
 npx wrangler r2 bucket create cosmetology-publisher-images
 ```
 
-Bindings D1/R2 и `MINIAPP_URL` настраиваются в `worker/wrangler.jsonc`. Секреты не должны попадать в Git.
+Bindings D1/R2, `MINIAPP_URL` и `YANDEX_VK_BASE_URL` настраиваются в `worker/wrangler.jsonc`. Секреты не должны попадать в Git.
 
 Минимальный набор Telegram secrets:
 
@@ -181,32 +254,12 @@ Bindings D1/R2 и `MINIAPP_URL` настраиваются в `worker/wrangler.j
 npx wrangler secret put TELEGRAM_BOT_TOKEN
 npx wrangler secret put TELEGRAM_WEBHOOK_SECRET
 npx wrangler secret put PAIRING_CODE_SECRET
-```
-
-Для Managed Bots необходим отдельный 32-byte AES key:
-
-```bash
 openssl rand -base64 32 | npx wrangler secret put MANAGED_BOT_ENCRYPTION_KEY
-```
-
-После настройки:
-
-```bash
-npm run db:migrate
-npm run deploy
 ```
 
 ## Настройка Telegram Mini App
 
-Production URL Mini App должен быть HTTPS URL Worker, например:
-
-```text
-https://<worker>.<subdomain>.workers.dev/
-```
-
-Он задаётся как `MINIAPP_URL` и используется для `/start` и Telegram menu button.
-
-Menu button можно установить скриптом из корня репозитория:
+Production URL Mini App — HTTPS URL Worker. Он задаётся как `MINIAPP_URL` и используется для `/start` и Telegram menu button.
 
 ```bash
 TELEGRAM_BOT_TOKEN='…' \
@@ -214,32 +267,21 @@ MINIAPP_URL='https://<worker>.<subdomain>.workers.dev/' \
 node scripts/set-telegram-menu-button.mjs
 ```
 
-Полная процедура первого входа, подключения группы, webhook и Managed Bot onboarding: `docs/telegram-miniapp-setup.md`.
-
 ## Локальная разработка
-
-Установить зависимости:
 
 ```bash
 npm install
-```
-
-Для Worker:
-
-```bash
 cd worker
 cp .dev.vars.example .dev.vars
 npm run db:migrate:local
 npm run dev
 ```
 
-Wrangler создаёт локальное состояние D1/R2 в `.wrangler/`.
-
-Mini App использует Telegram `initData`, поэтому полноценную authentication/publishing проверку следует выполнять из реального Telegram WebView или с контролируемым тестовым окружением. Не подменяйте production authentication доверенными client-side user identifiers.
+Полноценные Telegram и VK authentication/publishing flows следует проверять внутри соответствующих Telegram/VK WebView, поскольку identity и authorization поступают от платформенных SDK.
 
 ## Проверки
 
-Перед merge рекомендуется выполнять:
+Перед merge:
 
 ```bash
 npm install
@@ -248,22 +290,11 @@ npm test
 npm run build
 ```
 
-В `miniapp/` и `worker/src/` есть отдельные тесты для bootstrap, routing, onboarding, composer, drafts, AI flows и Telegram-related backend behavior.
-
-Для Telegram flow дополнительно вручную проверяются:
-
-1. первый вход новым Telegram account;
-2. создание internal account;
-3. подключение группы;
-4. публикация текста;
-5. публикация изображений;
-6. сохранение/возврат в draft flow;
-7. удаление или отключение бота от группы;
-8. невозможность использовать чужой/просроченный pairing payload.
+Кроме автоматических тестов вручную проверяются Telegram onboarding/publishing, VK onboarding через `groups.get`, корректная привязка выбранной VK-группы к пользователю Cloudflare, handoff Cloudflare → Yandex, репликация изображений и публикация через VK Mini App.
 
 ## Deployment
 
-Обычный deployment Worker:
+Cloudflare Worker:
 
 ```bash
 cd worker
@@ -272,31 +303,29 @@ npm run db:migrate
 npm run deploy
 ```
 
-`worker/wrangler.jsonc` указывает `../miniapp` как Static Assets directory, поэтому frontend Mini App и backend Worker разворачиваются как единое приложение.
+`worker/wrangler.jsonc` указывает `../miniapp` как Static Assets directory, поэтому Telegram frontend и основной backend разворачиваются вместе.
 
-Если миграций нет, `db:migrate` можно пропустить.
+VK-контур разворачивается отдельно в Yandex Cloud из компонентов `yandex/vk/`; его публичный API base URL передаётся Cloudflare через `YANDEX_VK_BASE_URL`.
 
 ## Security
 
-Критические правила проекта:
-
 - Telegram identity доверяется только после server-side проверки `initData`;
-- destination определяется на сервере, а не принимается как доверенный `chat_id` от клиента;
-- pairing codes одноразовые и ограничены по времени;
+- Telegram destination определяется server-side;
+- pairing codes и cross-cloud handoff tokens одноразовые/временные;
 - webhook проверяется secret token;
-- bot tokens и encryption keys хранятся только в secrets/encrypted storage;
+- bot tokens и encryption keys не хранятся в Git;
 - Managed Bot token шифруется AES-256-GCM перед записью в D1;
-- raw credentials, webhook secrets и pairing nonce не должны логироваться;
-- R2 bucket не используется как публичный directory listing.
+- VK access token получается внутри VK Mini App через VK Bridge и не является постоянной Cloudflare identity;
+- Cloudflare ↔ Yandex служебный обмен защищается отдельной server-to-server авторизацией;
+- Yandex принимает R2 source URL только из разрешённого Cloudflare R2 домена и VK upload URL только с разрешённых VK hosts;
+- raw credentials и handoff secrets не должны логироваться.
 
 ## Дополнительные компоненты
 
-`extension/` содержит более ранний/параллельный Chrome Extension workflow для работы с ChatGPT и публикации через тот же backend. Он остаётся частью репозитория, но **не является обязательной частью Telegram Mini App** и не участвует в Telegram-native authentication flow.
+`extension/` содержит более ранний/параллельный Chrome Extension workflow. Он остаётся частью репозитория, но не является обязательной частью Telegram-native flow.
 
-При разработке нового пользовательского функционала основным контекстом проекта следует считать:
+При разработке нового функционала основной контекст проекта:
 
 ```text
-Telegram → Mini App → Cloudflare Worker → Telegram/VK
+Telegram → Mini App → Cloudflare ↔ Yandex Cloud → VK Mini App → VK
 ```
-
-а не Chrome Extension workflow.
