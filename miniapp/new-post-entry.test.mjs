@@ -33,7 +33,7 @@ test('manual and before-after choices stay inside the Composer view',()=>{
   assert.match(entry,/if\(choice==='manual'\)showEditor\(\{manual:true\}\)/);
   assert.match(entry,/else if\(choice==='before-after'\)openBeforeAfter\(\)/);
   assert.match(entry,/window\.CosmoBeforeAfter\?\.open\?\.\(\)/);
-  assert.match(entry,/cosmo-before-after-close[^\n]*action==='back'\)showEntry\(\)/);
+  assert.match(entry,/window\.addEventListener\('cosmo-before-after-close',event=>\{\s*if\(event\.detail\?\.action==='back'\)showEntry\(\);\s*else if\(event\.detail\?\.action==='save'\)showEditor\(\{focus:false\}\)/);
 });
 
 test('duplicate manual and before-after actions are removed from AI screen',()=>{
