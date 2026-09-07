@@ -38,7 +38,7 @@ describe('Mini App bootstrap',()=>{
     expect(app).toContain("vkButton('Да',true)");expect(app).toContain("vkButton('Нет',true)");expect(app).toContain("vkButton('Отмена')");
     expect(app).toContain("const {vkUrl}=await prepareVkLink('direct')");expect(app).toContain("const {managedBotUrl}=await prepareVkLink('managed_bot')");expect(app).toContain('webApp.openTelegramLink(managedBotUrl)');
     expect(app).toContain("body:JSON.stringify({delivery})");expect(app).toContain("delivery==='managed_bot'&&!result?.managedBotUrl");
-    expect(app).toContain("flow?.intent?.action==='publish_vk'");expect(app).toContain("window.addEventListener('focus',()=>resumeVkPublishIntent())");
+    expect(app).not.toContain('resumeVkPublishIntent');expect(app).not.toContain("window.addEventListener('focus'");expect(app).not.toContain("document.addEventListener('visibilitychange'");
     expect(app).toContain('await completeVkPublishIntent();overlay.remove();webApp.openLink(vkUrl');expect(app).toContain('await completeVkPublishIntent();overlay.remove();webApp.openTelegramLink(managedBotUrl)');expect(app).toContain('await cancelVkPublishIntent();overlay.remove()');expect(app).not.toContain('post_id');
   });
   it('does not load the removed VK diagnostics harness',()=>{const app=miniappFile('app.js'),bootstrap=miniappFile('bootstrap.js');expect(app).not.toContain('vk-diagnostics.js');expect(bootstrap).not.toContain('vk-diagnostics.js');expect(app).not.toContain('CosmoVkDiagnostics')});
