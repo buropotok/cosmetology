@@ -22,6 +22,7 @@ async function loadPlatform(){
   await import('/telegram-gateway.js');
   await import('/app-router.js');
   await import('/app.js');
+  await import('/navigation.js');
   await import('/account-state.js');
 }
 
@@ -41,7 +42,6 @@ async function loadAppShell(){
   await import('/publish-ai-wizard.js');
   await import('/ai-generation-status.js');
   await import('/new-post-entry.js');
-  await import('/navigation.js');
   await import('/draft-loading-overlay.js');
   await import('/ai-response-ui.js');
 }
@@ -71,6 +71,23 @@ async function loadRuntimeIntegrations(){
   ]);
 }
 
+function revealBootstrapFallback(error){
+  console.error('[bootstrap] Mini App startup failed',error);
+  const home=document.getElementById('home-screen');
+  if(home){
+    home.hidden=false;
+    document.body.dataset.cosmoRoute='home';
+    return;
+  }
+  const composer=document.getElementById('composer-screen');
+  if(composer){
+    composer.hidden=false;
+    document.body.dataset.cosmoRoute='composer';
+    const status=document.getElementById('status');
+    if(status)status.textContent='Часть интерфейса не загрузилась. Перезапустите приложение.';
+  }
+}
+
 async function start(){
   loadWorkspaceStyles();
   await loadPlatform();
@@ -81,5 +98,8 @@ async function start(){
   return Object.freeze({ready:true});
 }
 
-window[BOOTSTRAP_KEY]??=start();
+window[BOOTSTRAP_KEY]??=start().catch(error=>{
+  revealBootstrapFallback(error);
+  throw error;
+});
 window.CosmoMiniAppReady=window[BOOTSTRAP_KEY];
