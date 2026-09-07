@@ -8,7 +8,7 @@ const fetchImpl=window.CosmoDiagnosticsFetch.create({fetchImpl:window.fetch.bind
 const store=window.CosmoDraftStoreFactory.create({state,auxState:aiState,fetchImpl,authHeaders:()=>({Authorization:`tma ${tg.initData}`}),log});
 const initialLoad=store.load();
 const whenReady=()=>initialLoad.then(()=>store.getState());
-window.CosmoSofaDraft=Object.freeze({load:store.load,whenReady,scheduleSave:store.scheduleSave,flush:store.flush,save:()=>store.flush('api-save'),clear:store.clear,cancelRestore:store.cancelRestore,getState:store.getState,setScreen:store.setScreen,setBeforeAfterState:store.setBeforeAfterState,getBeforeAfterDraft:()=>({state:store.getState().beforeAfterState,images:state.getSnapshot().images.slice(0,2)})});
+window.CosmoSofaDraft=Object.freeze({load:store.load,whenReady,scheduleSave:store.scheduleSave,flush:store.flush,save:()=>store.flush('api-save'),clear:store.clear,cancelRestore:store.cancelRestore,getState:store.getState,setScreen:store.setScreen,setBeforeAfterState:store.setBeforeAfterState,getBeforeAfterDraft:()=>{const current=store.getState(),byRole=new Map((current.beforeAfterImages||[]).map(item=>[item.role,item.file])),images=[];for(const role of ['before','after']){const index=current.beforeAfterState?.[role]?.imageIndex,file=byRole.get(role);if(Number.isInteger(index)&&index>=0&&file)images[index]=file}return{state:current.beforeAfterState,images}}});
 document.addEventListener('visibilitychange',()=>{if(document.hidden)void store.flush('visibility-hidden')});
 window.addEventListener('pagehide',()=>{void store.flush('pagehide')});
 void initialLoad.catch(()=>{});
