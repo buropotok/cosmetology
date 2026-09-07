@@ -14,7 +14,7 @@ test('ready PostDocument v2 exposes primary edit and publish action',()=>{
   assert.match(transfer,/version:3,document:doc/);
   assert.match(transfer,/await waitForEditor\(\)/);
   assert.match(transfer,/editor\.restoreDraft\(value\)/);
-  assert.match(transfer,/dataset\.publishMode='compose'/);
+  assert.match(transfer,/CosmoComposerView\?\.showEditor\?\.\(\{focus:false\}\)/);
 });
 
 test('Tiptap preserves recursive quote, details and nested-list structure in PostDocument',()=>{
