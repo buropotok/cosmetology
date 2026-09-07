@@ -17,19 +17,22 @@ const json = (body: unknown, status = 200, extra: HeadersInit = {}) => new Respo
 const onboardingCors = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'content-type', 'access-control-allow-methods': 'GET, POST, OPTIONS' };
 
 type VkBackupTarget={telegram_bot_id:string;telegram_chat_id:string;token_ciphertext:string;token_iv:string;token_key_version:number};
-async function sendVkLinkBackup(req: Request, env: Env) {
+async function prepareVkLink(req: Request, env: Env) {
   const initData = req.headers.get('authorization')?.match(/^tma\s+(.+)$/i)?.[1] ?? '';
   const validated = await validateTelegramMiniAppInitData(initData, env.TELEGRAM_BOT_TOKEN);
   const account = await resolveOrCreateTelegramIdentity(env, String(validated.user.id));
   const group = await env.DB.prepare('SELECT group_id AS groupId FROM user_vk_group WHERE user_id=?').bind(account.userId).first<{ groupId: number }>();
   const groupId = Number(group?.groupId);
   if (!Number.isSafeInteger(groupId) || groupId <= 0) throw new AppError('VK_GROUP_NOT_CONNECTED', 'Группа VK не подключена', 409);
+  const vkUrl = `https://m.vk.ru/new_post/-${groupId}?redirect_url=${encodeURIComponent(`https://m.vk.ru/club${groupId}`)}&creation_entry_point=group_wall_button&screen=group`;
+  let body:any={};try{body=await req.json()}catch{}
+  const delivery=body?.delivery==='managed_bot'?'managed_bot':'direct';
+  if(delivery==='direct')return {ok:true,vkUrl};
   const target=await env.DB.prepare(`SELECT mb.telegram_bot_id,pc.telegram_chat_id,mb.token_ciphertext,mb.token_iv,mb.token_key_version FROM telegram_managed_bots mb JOIN telegram_managed_bot_private_chats pc ON pc.telegram_bot_id=mb.telegram_bot_id AND pc.user_id=mb.user_id AND pc.status='active' JOIN telegram_managed_bot_webhooks wh ON wh.telegram_bot_id=mb.telegram_bot_id AND wh.status='active' WHERE mb.user_id=? AND mb.status='active' AND mb.token_ciphertext IS NOT NULL AND mb.token_iv IS NOT NULL ORDER BY mb.updated_at DESC LIMIT 1`).bind(account.userId).first<VkBackupTarget>();
   if(!target)throw new AppError('MANAGED_TELEGRAM_PREVIEW_NOT_READY','Откройте личный чат с персональным ботом и нажмите Start.',409);
   const token=await decryptManagedBotToken(target.telegram_bot_id,{ciphertext:target.token_ciphertext,iv:target.token_iv,keyVersion:target.token_key_version},env);
   const bot=await getTelegramBotMeWithToken(token);
   if(!bot.username)throw new AppError('TELEGRAM_ERROR','У персонального бота отсутствует username',502);
-  const vkUrl = `https://m.vk.ru/new_post/-${groupId}?redirect_url=${encodeURIComponent(`https://m.vk.ru/club${groupId}`)}&creation_entry_point=group_wall_button&screen=group`;
   const chatId=target.telegram_chat_id;
   const previous = await env.DB.prepare('SELECT message_id AS messageId,telegram_chat_id AS chatId FROM vk_backup_messages WHERE user_id=?').bind(account.userId).first<{ messageId: number;chatId:string }>();
   if (previous?.messageId&&previous.chatId===chatId) await deleteTelegramMessageWithToken(token,chatId,previous.messageId).catch(()=>null);
@@ -45,7 +48,7 @@ export default { async fetch(req: Request, env: Env, ctx: ExecutionContext) {
     if (req.method === 'POST' && url.pathname === '/api/miniapp/ai/chat') return json(await generateMiniAppAiReply(req, env));
     if (req.method === 'GET' && url.pathname === '/api/miniapp/news/status') return json(await getMiniAppNewsGenerationStatus(req, env));
     if (req.method === 'POST' && url.pathname === '/api/miniapp/ai/image') return generateMiniAppImage(req, env);
-    if (req.method === 'POST' && url.pathname === '/api/miniapp/vk-link') return json(await sendVkLinkBackup(req,env));
+    if (req.method === 'POST' && url.pathname === '/api/miniapp/vk-link') return json(await prepareVkLink(req,env));
     if (req.method === 'GET' && url.pathname === '/api/miniapp/draft') return json(await getMiniAppDraft(req,env));
     if (req.method === 'POST' && url.pathname === '/api/miniapp/draft') return json(await saveMiniAppDraft(req,env));
     if (req.method === 'POST' && url.pathname === '/api/miniapp/before-after/asset') return json(await saveBeforeAfterAsset(req,env),201);

@@ -36,7 +36,8 @@ describe('Mini App bootstrap',()=>{
     expect(app).toContain("createVkPublishIntent=()=>vkIntent('/api/miniapp/onboarding-intent',{action:'publish_vk'})");
     expect(app).toContain("title.textContent='VPN отключён?'");
     expect(app).toContain("vkButton('Да',true)");expect(app).toContain("vkButton('Нет',true)");expect(app).toContain("vkButton('Отмена')");
-    expect(app).toContain("const {managedBotUrl}=await prepareVkLink()");expect(app).toContain('webApp.openTelegramLink(managedBotUrl)');
+    expect(app).toContain("const {vkUrl}=await prepareVkLink('direct')");expect(app).toContain("const {managedBotUrl}=await prepareVkLink('managed_bot')");expect(app).toContain('webApp.openTelegramLink(managedBotUrl)');
+    expect(app).toContain("body:JSON.stringify({delivery})");expect(app).toContain("delivery==='managed_bot'&&!result?.managedBotUrl");
     expect(app).toContain("flow?.intent?.action==='publish_vk'");expect(app).toContain("window.addEventListener('focus',()=>resumeVkPublishIntent())");
     expect(app).toContain('await completeVkPublishIntent();overlay.remove();webApp.openLink(vkUrl');expect(app).toContain('await completeVkPublishIntent();overlay.remove();webApp.openTelegramLink(managedBotUrl)');expect(app).toContain('await cancelVkPublishIntent();overlay.remove()');expect(app).not.toContain('post_id');
   });

@@ -14,8 +14,11 @@ describe('protected VK publishing preparation',()=>{
     expect(entry).toContain("url.pathname === '/api/miniapp/draft'");
   });
 
-  it('keeps the separate VK link endpoint available for later restoration',()=>{
+  it('keeps the separate VK link endpoint with direct and managed-bot delivery modes',()=>{
     expect(entry).toContain("url.pathname === '/api/miniapp/vk-link'");
-    expect(entry).toContain('sendVkLinkBackup');
+    expect(entry).toContain('prepareVkLink');
+    expect(entry).toContain("body?.delivery==='managed_bot'?'managed_bot':'direct'");
+    expect(entry).toContain("if(delivery==='direct')return {ok:true,vkUrl}");
+    expect(entry).toContain('sendTelegramVkBackupWithToken(token,chatId,vkUrl)');
   });
 });
