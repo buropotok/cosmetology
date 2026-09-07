@@ -41,5 +41,5 @@ test('loader is transient and reset on reopen',()=>{
 
 test('Before/After identifies its draft mode explicitly',()=>{
   assert.match(controller,/body\.set\('screen','beforeafter'\)/);
-  assert.match(navigation,/state\?\.screen==='beforeafter'/);
+  assert.match(navigation,/state\.screen==='beforeafter'/);
 });
