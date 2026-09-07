@@ -15,13 +15,7 @@ function loadWorkspaceStyles(){
     quoteLink.dataset.cosmoTelegramQuotes='';
     document.head.append(quoteLink);
   }
-  if(!document.querySelector('link[data-cosmo-home-hero-size]')){
-    const heroSizeLink=document.createElement('link');
-    heroSizeLink.rel='stylesheet';
-    heroSizeLink.href='/home-hero-size.css';
-    heroSizeLink.dataset.cosmoHomeHeroSize='';
-    document.head.append(heroSizeLink);
-  }
+  document.head.insertAdjacentHTML('beforeend','<style>.cosmo-home-mark{width:228px!important;height:228px!important}</style>');
 }
 
 async function loadPlatform(){
