@@ -48,10 +48,13 @@ test('Before After uses native label activation for photo picking without an iOS
   assert.match(entry,/if \(!event\.target\?\.closest\?\.\('label\[for="file"\]'\)\) file\.click\(\)/);
 });
 
-test('Before After delete action is visible and owned by the entry component',()=>{
+test('Before After delete action is visible, owned by the entry component, and clear of the bottom resize hit zone',()=>{
   assert.match(html,/data-delete-photo="before"[^>]*>Удалить</);
   assert.match(html,/data-delete-photo="after"[^>]*>Удалить</);
-  assert.match(css,/\.delete-photo\{[^}]*background:var\(--danger/);
+  const deleteRule=css.match(/\.delete-photo\{([^}]*)\}/)?.[1]||'';
+  assert.match(deleteRule,/background:var\(--danger/);
+  assert.match(deleteRule,/top:10px/,'delete control must stay away from the bottom resize handle');
+  assert.doesNotMatch(deleteRule,/bottom:/,'delete control must not overlap the bottom resize hit zone');
   assert.match(entry,/document\.querySelectorAll\('\[data-delete-photo\]'\)/);
   assert.match(entry,/state\.photos\[role\] = null/);
 });
