@@ -16,6 +16,15 @@ describe('Before/After client persistence contract',()=>{
     expect(controller).toContain("fetch('/api/miniapp/before-after/swap'");
   });
 
+  it('uses the dedicated Telegram-authenticated remove endpoint',()=>{
+    const controller=source('before-after-controller.js');
+    const removeAsset=controller.match(/async function removeAsset\(role\)\{(.+?)\n  async function swapAssets/s)?.[1]||'';
+    expect(removeAsset).toContain("fetch('/api/miniapp/before-after/remove'");
+    expect(removeAsset).toContain("method:'POST'");
+    expect(removeAsset).toContain('authHeaders()');
+    expect(removeAsset).not.toContain("method:'DELETE'");
+  });
+
   it('persists changed roles immediately and debounces state-only changes',()=>{
     const bridge=source('before-after-bridge.js');
     expect(bridge).toContain('persistSemanticChange');
