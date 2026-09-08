@@ -22,10 +22,11 @@ test('opening Before/After marks the draft without clearing it',()=>{
   assert.doesNotMatch(controller,/function open\(\)[\s\S]*?\.clear\(/);
 });
 
-test('Continue routes a Before/After draft centrally from Home navigation',()=>{
+test('Continue routes a Before/After draft centrally through logical navigation',()=>{
   assert.match(navigation,/async function resumeDraft\(\)/);
   assert.match(navigation,/state\.screen==='beforeafter'/);
-  assert.match(navigation,/CosmoBeforeAfter\?\.open\?\.\(\)/);
+  assert.match(navigation,/navigation\.reset\(\[STATES\.HOME,STATES\.MENU,STATES\.BEFORE_AFTER\]\)/);
+  assert.doesNotMatch(navigation,/state\.screen==='beforeafter'[\s\S]{0,160}CosmoBeforeAfter\?\.open/);
   assert.match(navigation,/continueButton\.addEventListener\('click',\(\)=>\{void resumeDraft\(\)\}\)/);
   assert.doesNotMatch(bootstrap,/draft-resume-router\.js/);
 });
