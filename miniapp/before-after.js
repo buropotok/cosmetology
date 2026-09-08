@@ -22,7 +22,7 @@ const composite = createComposite({ slots, photos: state.photos, compositeResult
 let editor;
 const watermarks = createWatermarks({ $, carousel: wmCarousel, fileInput: wmFile, state, getEditor: () => editor, composite, authHeaders, loadImage, showError, onRender: render });
 editor = createEditor({ $, editor: editorElement, stage, editImage, wmImage, rotation, opacity, opacityControl, photos: state.photos, state, geometry, composite, loadImage, onRender: render });
-const resize = createResize({ handle: cropHandle, slots, state, composite, onRender: render });
+const resize = createResize({ handle: cropHandle, slots, state, geometry, composite, onRender: render });
 
 function render() {
   slots.dataset.layout = state.layout;
@@ -44,8 +44,9 @@ function render() {
   state.notify();
 }
 function applyRatio(value) {
+  const anchors = geometry.captureViewportAnchors();
   state.selectedRatio = value; state.cropHeight = null; slots.style.height = ''; slots.style.aspectRatio = value; composite.clearCommitted();
-  requestAnimationFrame(render);
+  requestAnimationFrame(() => { geometry.preserveViewportAnchors(anchors); render(); });
 }
 function restoreLayoutStyles() {
   if (state.selectedRatio === 'custom' && state.cropHeight) { slots.style.aspectRatio = 'auto'; slots.style.height = `${state.cropHeight}px`; }
