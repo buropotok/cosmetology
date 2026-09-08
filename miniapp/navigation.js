@@ -13,7 +13,7 @@ style.textContent=`
 `;
 document.head.append(style);
 
-const home=document.createElement('section');home.id='home-screen';home.className='cosmo-flow-screen';home.innerHTML=`<header class="cosmo-flow-nav"><span class="cosmo-logo" aria-hidden="true"></span><h1>Cosmo Sofa</h1><button class="cosmo-flow-settings cosmo-settings-button" type="button" aria-label="Настройки"></button></header><div class="cosmo-home-hero"><div class="cosmo-home-mark" aria-hidden="true"></div><h2>Создайте публикацию</h2><p>Подготовьте новый материал или вернитесь к сохранённому черновику.</p></div><div class="cosmo-flow-actions"><button id="flow-new" class="cosmo-primary" type="button">Новый пост</button><button id="flow-continue" class="cosmo-secondary" type="button" hidden>Продолжить работу</button></div>`;
+const home=document.createElement('section');home.id='home-screen';home.className='cosmo-flow-screen';home.innerHTML=`<header class="cosmo-flow-nav"><span class="cosmo-logo" aria-hidden="true"></span><h1>Cosmo Sofa</h1><button class="cosmo-flow-settings cosmo-settings-button" type="button" aria-label="Настройки"></button></header><div class="cosmo-home-hero"><div class="cosmo-home-mark" aria-hidden="true"></div><h2>Создайте публикацию</h2><p>Подготовьте новый материал или вернитесь к сохранённому черновику.</p></div><div class="cosmo-flow-actions"><button id="flow-new" class="cosmo-primary" type="button">Новый пост</button><button id="flow-continue" class="cosmo-secondary" type="button">Продолжить</button></div>`;
 const ai=document.createElement('section');ai.id='ai-screen';ai.className='cosmo-flow-screen';ai.hidden=true;
 const mockText='Увлажнение кожи — это не только крем. На уровень влаги влияют состояние защитного барьера, мягкое очищение и правильно подобранный домашний уход. Если кожа регулярно стянута после умывания, стоит обратить внимание не на количество средств, а на их состав и последовательность применения.';
 let latestAiText=mockText;
@@ -21,9 +21,7 @@ ai.innerHTML=`<header class="cosmo-flow-nav"><button id="flow-ai-back" class="co
 document.querySelector('main')?.prepend(ai);document.querySelector('main')?.prepend(home);
 const continueButton=home.querySelector('#flow-continue');
 function syncDraftState(state=window.CosmoSofaDraft?.getState?.()){
-  if(!state){continueButton.hidden=true;return}
-  continueButton.hidden=state.loadStatus!=='ready'||!state.hasDraft;
-  const loading=document.querySelector('#cosmo-draft-loading');if(loading)loading.hidden=!state.restoring;imageInput.disabled=Boolean(state.restoring)
+  const loading=document.querySelector('#cosmo-draft-loading');if(loading)loading.hidden=!state?.restoring;imageInput.disabled=Boolean(state?.restoring)
 }
 window.addEventListener('cosmo-draft-state',e=>syncDraftState(e.detail));syncDraftState();
 const previewArea=document.querySelector('#preview-wrap')||document.querySelector('.composer-media')||imageInput.parentElement;if(previewArea){const cs=getComputedStyle(previewArea);if(cs.position==='static')previewArea.style.position='relative';const loading=document.createElement('div');loading.id='cosmo-draft-loading';loading.className='cosmo-draft-loading';loading.innerHTML='<span class="cosmo-draft-spinner" aria-hidden="true"></span><span>Загрузка черновика</span>';previewArea.append(loading);syncDraftState()}
@@ -118,10 +116,25 @@ async function openNewPost(){
     await commitNewPost(draft);
   }finally{newPostInFlight=false;button.disabled=false}
 }
+let resumeInFlight=false;
 async function resumeDraft(){
-  const state=window.CosmoSofaDraft?.getState?.();
-  if(state?.loadStatus!=='ready'||!state.hasDraft)return;
-  await navigation.reset([STATES.HOME,STATES.MENU]);
+  if(resumeInFlight)return;
+  const draft=window.CosmoSofaDraft,overlay=window.CosmoDraftLoadingOverlay;
+  if(!draft?.load)return;
+  resumeInFlight=true;continueButton.disabled=true;overlay?.showLoading?.();
+  try{
+    let restored;
+    try{restored=await draft.load()}catch{overlay?.hide?.();await showDraftLoadError();return}
+    const state=draft.getState?.();
+    if(!restored||!state?.hasDraft){
+      if(overlay?.showEmpty)await overlay.showEmpty();
+      else await popup({title:'Сессия не найдена',message:'Нет сохранённых сессий!',buttons:[{id:'continue',type:'ok',text:'Продолжить'}]});
+      continueButton.hidden=true;
+      return;
+    }
+    overlay?.hide?.();
+    await navigation.reset([STATES.HOME,STATES.MENU]);
+  }finally{resumeInFlight=false;continueButton.disabled=false}
 }
 home.querySelector('#flow-new').addEventListener('click',()=>{void openNewPost()});
 continueButton.addEventListener('click',()=>{void resumeDraft()});
