@@ -31,34 +31,57 @@ export function createBeforeAfterState({ loadImage, onChange }) {
   }
 
   async function restorePhoto(fileValue, saved) {
-    if (!fileValue || !saved) return null;
     const url = URL.createObjectURL(fileValue);
-    const img = await loadImage(url);
-    return {
-      file: fileValue, url, img,
-      x: Number(saved.x) || 0, y: Number(saved.y) || 0,
-      scale: Number(saved.scale) || 1, rotation: Number(saved.rotation) || 0,
-      fitted: saved.fitted !== false,
-    };
+    try {
+      const img = await loadImage(url);
+      return {
+        file: fileValue, url, img,
+        x: Number(saved.x) || 0, y: Number(saved.y) || 0,
+        scale: Number(saved.scale) || 1, rotation: Number(saved.rotation) || 0,
+        fitted: saved.fitted !== false,
+      };
+    } catch (error) {
+      URL.revokeObjectURL(url);
+      throw error;
+    }
   }
 
   async function restore(saved, files = [], findWatermark) {
-    if (!saved || typeof saved !== 'object') return;
+    if (!saved || typeof saved !== 'object') return false;
     restoring = true;
+    const nextPhotos = { before: null, after: null };
     try {
       for (const role of ['before', 'after']) {
+        const savedPhoto = saved[role];
+        if (!savedPhoto) continue;
+        const index = savedPhoto.imageIndex;
+        if (!Number.isInteger(index) || index < 0 || !files[index]) {
+          throw new Error(`Missing ${role} image for Before/After restore`);
+        }
+        nextPhotos[role] = await restorePhoto(files[index], savedPhoto);
+      }
+
+      const nextLayout = saved.layout === 'vertical' ? 'vertical' : 'horizontal';
+      const nextRatio = typeof saved.ratio === 'string' ? saved.ratio : '16/9';
+      const nextCropHeight = saved.cropHeight == null ? null : Number.isFinite(Number(saved.cropHeight)) ? Number(saved.cropHeight) : null;
+      const nextWatermarkState = saved.watermarkState && typeof saved.watermarkState === 'object'
+        ? { ...watermarkState, ...saved.watermarkState }
+        : { ...watermarkState };
+      const nextWatermark = saved.watermark?.id ? findWatermark?.(saved.watermark.id) || null : null;
+
+      for (const role of ['before', 'after']) {
         if (photos[role]?.url) URL.revokeObjectURL(photos[role].url);
-        photos[role] = null;
+        photos[role] = nextPhotos[role];
       }
-      layout = saved.layout === 'vertical' ? 'vertical' : 'horizontal';
-      selectedRatio = typeof saved.ratio === 'string' ? saved.ratio : '16/9';
-      cropHeight = Number.isFinite(Number(saved.cropHeight)) ? Number(saved.cropHeight) : null;
-      photos.before = await restorePhoto(files[saved.before?.imageIndex], saved.before);
-      photos.after = await restorePhoto(files[saved.after?.imageIndex], saved.after);
-      if (saved.watermarkState && typeof saved.watermarkState === 'object') {
-        watermarkState = { ...watermarkState, ...saved.watermarkState };
-      }
-      selectedWatermark = saved.watermark?.id ? findWatermark?.(saved.watermark.id) || null : null;
+      layout = nextLayout;
+      selectedRatio = nextRatio;
+      cropHeight = nextCropHeight;
+      watermarkState = nextWatermarkState;
+      selectedWatermark = nextWatermark;
+      return true;
+    } catch (error) {
+      for (const role of ['before', 'after']) if (nextPhotos[role]?.url) URL.revokeObjectURL(nextPhotos[role].url);
+      throw error;
     } finally {
       restoring = false;
     }

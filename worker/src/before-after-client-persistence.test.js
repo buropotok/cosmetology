@@ -25,6 +25,16 @@ describe('Before/After client persistence contract',()=>{
     expect(removeAsset).not.toContain("method:'DELETE'");
   });
 
+  it('updates the local BA file cache only after durable asset operations succeed',()=>{
+    const controller=source('before-after-controller.js'),drafts=source('drafts.js');
+    expect(controller).toContain('setBeforeAfterImage?.(role,file)');
+    expect(controller).toContain('setBeforeAfterImage?.(role,null)');
+    expect(controller).toContain('swapBeforeAfterImages?.()');
+    expect(drafts).toContain('function setBeforeAfterImage(role,file)');
+    expect(drafts).toContain('function swapBeforeAfterImages()');
+    expect(drafts).toContain('file=beforeAfterFiles.get(role)');
+  });
+
   it('persists changed roles immediately and debounces state-only changes',()=>{
     const bridge=source('before-after-bridge.js');
     expect(bridge).toContain('persistSemanticChange');
@@ -43,6 +53,7 @@ describe('Before/After client persistence contract',()=>{
     expect(store).toContain('draft.beforeAfterImages');
     expect(store).toContain('beforeAfterImages.push({role:item.role,file:new File');
     expect(drafts).toContain('current.beforeAfterImages');
+    expect(drafts).toContain('beforeAfterFiles.get(role)');
     expect(drafts).not.toContain('state.getSnapshot().images.slice(0,2)');
   });
 

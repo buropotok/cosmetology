@@ -12,9 +12,10 @@ test('Continue stays hidden until draft state is ready and present',()=>{
 });
 
 test('draft API exposes one shared initial readiness promise',()=>{
-  assert.match(drafts,/const initialLoad=store\.load\(\)/);
+  assert.match(drafts,/async function load\(\)\{const result=await store\.load\(\);beforeAfterFilesInitialized=false;return result\}/);
+  assert.match(drafts,/const initialLoad=load\(\)/);
   assert.match(drafts,/const whenReady=\(\)=>initialLoad\.then\(\(\)=>store\.getState\(\)\)/);
-  assert.match(drafts,/Object\.freeze\(\{load:store\.load,whenReady,/);
+  assert.match(drafts,/Object\.freeze\(\{load,whenReady,/);
   assert.doesNotMatch(drafts,/whenReady[^\n]*store\.load\(\)/);
 });
 
