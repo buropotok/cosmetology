@@ -99,7 +99,7 @@ function decorate(){
    const current=[...previews.querySelectorAll('img')];
    const index=current.indexOf(img);
    const selected=index>=0?files[index]:null;
-   if(selected)window.CosmoBeforeAfter?.openSolo?.(selected,index);
+   if(selected)window.CosmoBeforeAfter?.open?.({mode:'solo',file:selected,index});
   });
   const del=document.createElement('button');
   del.type='button';
