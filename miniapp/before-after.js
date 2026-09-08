@@ -14,7 +14,7 @@ const authHeaders = () => webApp?.initData ? { Authorization: `tma ${webApp.init
 const loadImage = src => new Promise((resolve, reject) => { const image = new Image(); image.onload = () => resolve(image); image.onerror = reject; image.src = src; });
 const showError = message => { $('error').textContent = message || ''; };
 const transformFor = photo => `translate(calc(-50% + ${photo.x}px),calc(-50% + ${photo.y}px)) scale(${photo.scale}) rotate(${photo.rotation}deg)`;
-const previewWatermark = document.createElement('img'); previewWatermark.id = 'previewWatermark'; previewWatermark.alt = ''; previewWatermark.hidden = true; slots.append(previewWatermark);
+const previewWatermark = document.createElement('img'); previewWatermark.id = 'previewWatermark'; previewWatermark.alt = ''; previewWatermark.hidden = true; previewWatermark.draggable = false; previewWatermark.style.cssText = 'position:absolute;left:50%;top:50%;max-width:none;transform-origin:center;z-index:5;pointer-events:none;user-select:none;-webkit-user-drag:none;filter:grayscale(1)'; slots.append(previewWatermark);
 
 const state = createBeforeAfterState({ loadImage, onChange: () => window.dispatchEvent(new CustomEvent('cosmo-before-after-change')) });
 const geometry = createGeometry({ slots, editor: editorElement, stage, photos: state.photos });
