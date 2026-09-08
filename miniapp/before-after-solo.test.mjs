@@ -4,20 +4,23 @@ import fs from 'node:fs';
 
 const read = name => fs.readFileSync(new URL(name, import.meta.url), 'utf8');
 
-test('composer images expose an indexed replacement contract and open solo editor from a thumbnail', () => {
+test('composer images expose indexed replacement and request solo mode from the existing Before After entry', () => {
   const source = read('./composer-image-manager.js');
   assert.match(source, /function replaceAt\(index,file\)/);
-  assert.match(source, /openSolo\?\.\(selected,index\)/);
+  assert.match(source, /CosmoBeforeAfter\?\.open\?\.\(\{mode:'solo',file:selected,index\}\)/);
   assert.match(source, /replaceAt,/);
 });
 
-test('Before After controller keeps dual default and provides isolated solo session', () => {
+test('Before After controller keeps its public API stable while open accepts an isolated solo request', () => {
   const source = read('./before-after-controller.js');
   assert.match(source, /currentMode='dual'/);
-  assert.match(source, /function openSolo\(file,index\)/);
+  assert.match(source, /function open\(\)/);
+  assert.match(source, /request\?\.mode==='solo'/);
   assert.match(source, /ensureOverlay\('solo'\)/);
   assert.match(source, /manager\.replaceAt\(soloIndex,file\)/);
   assert.match(source, /currentMode==='solo'/);
+  assert.match(source, /Object\.freeze\(\{open,close,clear,save,saveDraft,saveAsset,removeAsset,swapAssets\}\)/);
+  assert.doesNotMatch(source, /Object\.freeze\(\{[^}]*openSolo/);
 });
 
 test('solo bridge does not persist Before After draft state', () => {
