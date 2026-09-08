@@ -9,14 +9,15 @@ test('New Post entry is not part of the startup bootstrap path',()=>{
   assert.doesNotMatch(bootstrap,/import\(['"]\/new-post-entry\.js['"]\)/);
 });
 
-test('navigation lazy-loads New Post entry only through the New Post lifecycle',()=>{
+test('navigation lazy-loads New Post entry through the New Post lifecycle',()=>{
   assert.match(navigation,/async function loadNewPostEntry\(\)/);
   assert.match(navigation,/import\(['"]\/new-post-entry\.js['"]\)/);
-  assert.match(navigation,/const composerView=await loadNewPostEntry\(\)/);
+  assert.match(navigation,/const composerView=await getNewPostEntryOrReport\(\)/);
 });
 
-test('New Post load failure is contained to the feature',()=>{
+test('New Post load failure is contained and retryable',()=>{
   assert.match(navigation,/New Post entry failed to load/);
   assert.match(navigation,/showNewPostLoadError/);
+  assert.match(navigation,/newPostEntryPromise=undefined/);
   assert.match(navigation,/router\.show\(['"]home['"],\{notify:false\}\)/);
 });
