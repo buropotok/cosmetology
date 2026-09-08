@@ -63,7 +63,7 @@ export function createBeforeAfterState({ loadImage, onChange }) {
 
       const nextLayout = saved.layout === 'vertical' ? 'vertical' : 'horizontal';
       const nextRatio = typeof saved.ratio === 'string' ? saved.ratio : '16/9';
-      const nextCropHeight = Number.isFinite(Number(saved.cropHeight)) ? Number(saved.cropHeight) : null;
+      const nextCropHeight = saved.cropHeight == null ? null : Number.isFinite(Number(saved.cropHeight)) ? Number(saved.cropHeight) : null;
       const nextWatermarkState = saved.watermarkState && typeof saved.watermarkState === 'object'
         ? { ...watermarkState, ...saved.watermarkState }
         : { ...watermarkState };
