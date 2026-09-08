@@ -33,7 +33,6 @@
   async function removeAsset(role){const response=await fetch('/api/miniapp/before-after/remove',{method:'POST',headers:{...authHeaders(),'content-type':'application/json'},body:JSON.stringify({role})}),result=await response.json().catch(()=>null);if(!response.ok)throw new Error(result?.error?.message||'Не удалось удалить фото из черновика.');window.CosmoSofaDraft?.setBeforeAfterImage?.(role,null);return result}
   async function swapAssets(){const response=await fetch('/api/miniapp/before-after/swap',{method:'POST',headers:authHeaders()}),result=await response.json().catch(()=>null);if(!response.ok)throw new Error(result?.error?.message||'Не удалось поменять фото местами.');window.CosmoSofaDraft?.swapBeforeAfterImages?.();return result}
   function applyImageFile(file){const manager=window.CosmoComposerImages;if(manager?.addFiles){if((manager.getFiles?.().length||0)>=10)return false;manager.addFiles([file]);return manager.getFiles?.().includes(file)??true}if(!imageInput||typeof DataTransfer==='undefined')return false;const current=Array.from(imageInput.files||[]).slice(0,10);if(current.length>=10)return false;const dt=new DataTransfer();current.forEach(item=>dt.items.add(item));dt.items.add(file);imageInput.files=dt.files;imageInput.dispatchEvent(new Event('change',{bubbles:true}));return true}
-  function replaceSoloFile(file){const manager=window.CosmoComposerImages;if(!manager?.replaceAt||!Number.isInteger(soloIndex))return false;return manager.replaceAt(soloIndex,file)}
   const nextPaint=()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
   async function save(blob,name=`before-after-${Date.now()}.jpg`){
     if(!blob||typeof blob.size!=='number'||blob.size<=0)throw new Error('Не удалось собрать изображение.');
@@ -46,6 +45,7 @@
     const draft=window.CosmoSofaDraft;await draft?.setScreen?.('publish');setSaveStage('Сохраняем изображение…');if(!draft?.flush||await draft.flush('before-after-save')!==true)throw new Error('Не удалось сохранить изображение.');
     const navigation=window.CosmoNavigation;if(!navigation?.replace)throw new Error('Навигация недоступна.');const nextState=await navigation.replace(navigation.STATES.PUBLISH,{focus:false});if(nextState!==navigation.STATES.PUBLISH)throw new Error('Не удалось открыть редактор.');await nextPaint()
   }
+  function replaceSoloFile(file){const manager=window.CosmoComposerImages;if(!manager?.replaceAt||!Number.isInteger(soloIndex))return false;return manager.replaceAt(soloIndex,file)}
   window.addEventListener('message',event=>{const frame=overlay?.querySelector('iframe');if(event.origin!==location.origin||event.source!==frame?.contentWindow)return;if(event.data?.type!=='cosmo-before-after-close'||event.data.action!=='back')return;if(currentMode==='solo'){close();return}const navigation=window.CosmoNavigation;if(navigation?.back)void navigation.back();else close()});
   window.addEventListener('cosmo-new-post',clear);
   window.CosmoBeforeAfter=Object.freeze({open,close,clear,save,saveDraft,saveAsset,removeAsset,swapAssets});
