@@ -15,8 +15,15 @@
   function setSaveStage(message){frameBridge()?.setStage?.(message)}
   function restoreIntoFrame(){if(currentMode!=='dual')return;const payload=window.CosmoSofaDraft?.getBeforeAfterDraft?.();if(!payload?.state)return;const restore=frameBridge()?.restoreDraft?.(payload);restore?.catch?.(error=>debugLog('RESTORE rejected',{message:error?.message||String(error),imageCount:payload.images?.length||0}))}
   function restoreSoloIntoFrame(){if(currentMode!=='solo'||!soloFile)return;const restore=frameBridge()?.restoreSolo?.(soloFile,soloIndex);restore?.catch?.(error=>debugLog('SOLO RESTORE rejected',{message:error?.message||String(error),index:soloIndex}))}
-  function open(){soloIndex=null;soloFile=null;const current=ensureOverlay('dual');window.CosmoSofaDraft?.setScreen?.('beforeafter');frameBridge()?.resetTransient?.();restoreIntoFrame();current.hidden=false;document.documentElement.style.overflow='hidden'}
-  function openSolo(file,index){if(!(file instanceof File)||!Number.isInteger(index)||index<0)return false;soloFile=file;soloIndex=index;const current=ensureOverlay('solo');frameBridge()?.resetTransient?.();restoreSoloIntoFrame();current.hidden=false;document.documentElement.style.overflow='hidden';return true}
+  function open(){
+    const request=arguments[0];
+    if(request?.mode==='solo'){
+      const {file,index}=request;
+      if(!(file instanceof File)||!Number.isInteger(index)||index<0)return false;
+      soloFile=file;soloIndex=index;const current=ensureOverlay('solo');frameBridge()?.resetTransient?.();restoreSoloIntoFrame();current.hidden=false;document.documentElement.style.overflow='hidden';return true
+    }
+    soloIndex=null;soloFile=null;const current=ensureOverlay('dual');window.CosmoSofaDraft?.setScreen?.('beforeafter');frameBridge()?.resetTransient?.();restoreIntoFrame();current.hidden=false;document.documentElement.style.overflow='hidden';return true
+  }
   function close(){if(!overlay)return;frameBridge()?.resetTransient?.();overlay.hidden=true;document.documentElement.style.overflow='';window.scrollTo({top:0,behavior:'instant'})}
   function clear(){if(!overlay)return;overlay.remove();overlay=null;soloIndex=null;soloFile=null;currentMode='dual';document.documentElement.style.overflow=''}
   function authHeaders(){if(!webApp?.initData)throw new Error('Telegram Mini App недоступен. Не удалось сохранить изображение.');return{Authorization:`tma ${webApp.initData}`}}
@@ -41,5 +48,5 @@
   }
   window.addEventListener('message',event=>{const frame=overlay?.querySelector('iframe');if(event.origin!==location.origin||event.source!==frame?.contentWindow)return;if(event.data?.type!=='cosmo-before-after-close'||event.data.action!=='back')return;if(currentMode==='solo'){close();return}const navigation=window.CosmoNavigation;if(navigation?.back)void navigation.back();else close()});
   window.addEventListener('cosmo-new-post',clear);
-  window.CosmoBeforeAfter=Object.freeze({open,openSolo,close,clear,save,saveDraft,saveAsset,removeAsset,swapAssets});
+  window.CosmoBeforeAfter=Object.freeze({open,close,clear,save,saveDraft,saveAsset,removeAsset,swapAssets});
 })();
