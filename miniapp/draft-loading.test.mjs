@@ -57,12 +57,13 @@ test('failed draft load becomes retryable error state',async()=>{
   assert.equal(store.getState().hasDraft,false);
 });
 
-test('draft loading UI stays independent from Home settings controls',()=>{
-  assert.match(overlaySource,/Запрос ваших черновиков/);
-  assert.match(overlaySource,/Ошибка загрузки черновиков/);
-  assert.match(overlaySource,/Ещё раз/);
-  assert.match(overlaySource,/Пропустить/);
-  assert.match(overlaySource,/Продолжить работу с черновика/);
+test('draft loading UI is an on-demand session restore dialog independent from Home settings controls',()=>{
+  assert.match(overlaySource,/Восстанавливаем сессию…/);
+  assert.match(overlaySource,/Нет сохранённых сессий!/);
+  assert.match(overlaySource,/function showLoading\(\)/);
+  assert.match(overlaySource,/function showEmpty\(\)/);
+  assert.match(overlaySource,/function hide\(\)/);
+  assert.match(overlaySource,/overlay\.hidden=true/);
   assert.doesNotMatch(overlaySource,/setHomeControlsVisible/);
   assert.doesNotMatch(overlaySource,/open-settings/);
   assert.doesNotMatch(overlaySource,/cosmo-settings/);
@@ -71,5 +72,5 @@ test('draft loading UI stays independent from Home settings controls',()=>{
   assert.match(storeSource,/const LOAD_TIMEOUT_MS=10000/);
   const overlayImport=bootstrapSource.indexOf("import('/draft-loading-overlay.js')");
   const storeImport=bootstrapSource.indexOf("import('/draft-store.js')");
-  assert.ok(overlayImport>=0&&storeImport>=0&&overlayImport<storeImport,'draft modal must exist before draft restore starts');
+  assert.ok(overlayImport>=0&&storeImport>=0&&overlayImport<storeImport,'restore dialog must be available before an on-demand draft load can start');
 });
