@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const guard=fs.readFileSync(path.resolve('../miniapp/vk-group-publish-guard.js'),'utf8');
-const runtime=fs.readFileSync(path.resolve('../miniapp/new-post-runtime.js'),'utf8');
+const bootstrap=fs.readFileSync(path.resolve('../miniapp/bootstrap.js'),'utf8');
 
 describe('VK missing group publish flow',()=>{
   it('saves the draft and routes settings to VK group onboarding',()=>{
@@ -22,7 +22,7 @@ describe('VK missing group publish flow',()=>{
   });
 
   it('keeps the existing VK onboarding implementation and only composes the guard',()=>{
-    expect(runtime).toContain("import('./vk-group-publish-guard.js')");
+    expect(bootstrap).toContain("import('/vk-group-publish-guard.js')");
     expect(guard).not.toContain('/api/miniapp/vk-handoff');
     expect(guard).not.toContain('user_vk_group');
   });

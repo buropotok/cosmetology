@@ -15,8 +15,8 @@ describe('AppRouter',()=>{
     expect(visible).toEqual(['ai-screen']);expect(window.CosmoRouter.current).toBe('ai');expect(document.body.dataset.cosmoRoute).toBe('ai');
   });
 
-  it('returns Settings to the route that opened it',async()=>{
-    window.CosmoRouter.show('composer',{notify:false});await window.CosmoRouter.openSettings();expect(window.CosmoRouter.current).toBe('settings');window.CosmoRouter.closeSettings();expect(window.CosmoRouter.current).toBe('composer');
+  it('returns Settings to the route that opened it',()=>{
+    window.CosmoRouter.show('composer',{notify:false});window.CosmoRouter.openSettings();expect(window.CosmoRouter.current).toBe('settings');window.CosmoRouter.closeSettings();expect(window.CosmoRouter.current).toBe('composer');
   });
 
   it('delegates onboarding without owning its feature lifecycle',async()=>{

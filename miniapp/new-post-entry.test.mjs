@@ -7,7 +7,6 @@ const navigation=await readFile(new URL('./navigation.js',import.meta.url),'utf8
 const controller=await readFile(new URL('./before-after-controller.js',import.meta.url),'utf8');
 const beforeAfterHtml=await readFile(new URL('./before-after.html',import.meta.url),'utf8');
 const bootstrap=await readFile(new URL('./bootstrap.js',import.meta.url),'utf8');
-const runtime=await readFile(new URL('./new-post-runtime.js',import.meta.url),'utf8');
 const pencil=await readFile(new URL('./assets/icons/manual-edit.svg',import.meta.url),'utf8');
 
 test('Home new-post flow resets the logical navigation stack to Menu',()=>{
@@ -33,8 +32,7 @@ test('New Post choices request logical navigation instead of deciding Back desti
 
 test('New Post entry remains lazy-loaded from navigation',()=>{
   assert.doesNotMatch(bootstrap,/import\(['"]\/new-post-entry\.js['"]\)/);
-  assert.match(navigation,/import\('\.\/new-post-runtime\.js'\)/);
-  assert.match(runtime,/import\('\.\/new-post-entry\.js'\)/);
+  assert.match(navigation,/newPostEntryPromise=import\('\/new-post-entry\.js'\)/);
 });
 
 test('Before/After Back and Save use the shared navigation API',()=>{
