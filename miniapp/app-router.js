@@ -1,5 +1,5 @@
 (()=>{
-const ROUTES=Object.freeze({HOME:'home',AI:'ai',COMPOSER:'composer',SETTINGS:'settings',ONBOARDING:'onboarding'}),screenIds=Object.freeze({home:'home-screen',ai:'ai-screen',composer:'composer-screen',settings:'settings-screen',onboarding:'onboarding-root'}),listeners=new Set();
+const ROUTES=Object.freeze({HOME:'home',COMPOSER:'composer',SETTINGS:'settings',ONBOARDING:'onboarding'}),screenIds=Object.freeze({home:'home-screen',composer:'composer-screen',settings:'settings-screen',onboarding:'onboarding-root'}),listeners=new Set();
 const telegram=window.CosmoTelegramGateway.create();let current=null,settingsReturn='home',onboardingHandler=null;
 function screen(route){return document.getElementById(screenIds[route])}
 function show(route,{notify=true}={}){if(!screenIds[route])throw new RangeError(`Unknown application route: ${route}`);for(const [name,id] of Object.entries(screenIds)){const element=document.getElementById(id);if(element)element.hidden=name!==route}current=route;document.body.dataset.cosmoRoute=route;window.scrollTo({top:0,left:0,behavior:'instant'});if(notify)telegram.notifySelection();for(const listener of listeners)listener(route);return route}
