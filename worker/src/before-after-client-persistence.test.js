@@ -35,6 +35,25 @@ describe('Before/After client persistence contract',()=>{
     expect(drafts).toContain('file=beforeAfterFiles.get(role)');
   });
 
+  it('appends the final BA composite through Composer and lets draft persistence save the full image set',()=>{
+    const controller=source('before-after-controller.js');
+    const applyImageFile=controller.match(/function applyImageFile\(file\)\{(.+?)\n  \}\n  const nextPaint/s)?.[1]||'';
+    const save=controller.match(/async function save\(blob,name=.+?\)\{(.+?)\n  \}\n  window\.addEventListener/s)?.[1]||'';
+    expect(applyImageFile).toContain('manager?.addFiles');
+    expect(applyImageFile).toContain('manager.addFiles([file])');
+    expect(applyImageFile).not.toContain('replaceFiles');
+    expect(save).toContain("draft.flush('before-after-save')");
+    expect(save).not.toContain("fetch('/api/miniapp/draft'");
+    expect(controller).not.toContain('function persistResult');
+    expect(controller).not.toContain('function draftBody');
+  });
+
+  it('rejects BA append when Composer already owns ten photos',()=>{
+    const controller=source('before-after-controller.js');
+    expect(controller).toContain("if((manager.getFiles?.().length||0)>=10)return false");
+    expect(controller).toContain('В редакторе уже 10 фотографий. Удалите одну и повторите сохранение.');
+  });
+
   it('persists changed roles immediately and debounces state-only changes',()=>{
     const bridge=source('before-after-bridge.js');
     expect(bridge).toContain('persistSemanticChange');
