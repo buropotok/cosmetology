@@ -17,11 +17,30 @@
   async function saveAsset(role,file){const body=new FormData();body.set('role',role);body.set('image',file,file.name||`${role}.jpg`);const response=await fetch('/api/miniapp/before-after/asset',{method:'POST',headers:authHeaders(),body}),result=await response.json().catch(()=>null);debugLog(`HTTP ASSET ${role} response`,{status:response.status,ok:response.ok,result});if(!response.ok)throw new Error(result?.error?.message||'Не удалось сохранить фото До/После.');window.CosmoSofaDraft?.setBeforeAfterImage?.(role,file);return result}
   async function removeAsset(role){const response=await fetch('/api/miniapp/before-after/remove',{method:'POST',headers:{...authHeaders(),'content-type':'application/json'},body:JSON.stringify({role})}),result=await response.json().catch(()=>null);debugLog(`HTTP REMOVE ${role} response`,{status:response.status,ok:response.ok,result});if(!response.ok)throw new Error(result?.error?.message||'Не удалось удалить фото из черновика.');window.CosmoSofaDraft?.setBeforeAfterImage?.(role,null);return result}
   async function swapAssets(){const response=await fetch('/api/miniapp/before-after/swap',{method:'POST',headers:authHeaders()}),result=await response.json().catch(()=>null);debugLog('HTTP SWAP response',{status:response.status,ok:response.ok,result});if(!response.ok)throw new Error(result?.error?.message||'Не удалось поменять фото местами.');window.CosmoSofaDraft?.swapBeforeAfterImages?.();return result}
-  function draftBody(file){const body=baseDraftBody();body.set('screen','publish');body.set('imagesChanged','1');const state=window.CosmoSofaDraft?.getState?.().beforeAfterState;if(state)body.set('beforeAfterState',JSON.stringify(state));body.append('images',file,file.name);return body}
-  async function persistResult(file){const response=await fetch('/api/miniapp/draft',{method:'POST',headers:authHeaders(),body:draftBody(file)}),result=await response.json().catch(()=>null);if(!response.ok)throw new Error(result?.error?.message||'Не удалось сохранить изображение.');if(!result?.draft?.images?.[0]?.url)throw new Error('Не удалось подтвердить сохранение изображения.');return true}
-  function applyImageFile(file){const manager=window.CosmoComposerImages;if(manager?.replaceFiles){manager.replaceFiles([file]);return true}if(!imageInput||typeof DataTransfer==='undefined')return false;const dt=new DataTransfer();dt.items.add(file);imageInput.files=dt.files;imageInput.dispatchEvent(new Event('change',{bubbles:true}));return true}
+  function applyImageFile(file){
+    const manager=window.CosmoComposerImages;
+    if(manager?.addFiles){
+      if((manager.getFiles?.().length||0)>=10)return false;
+      manager.addFiles([file]);
+      return manager.getFiles?.().includes(file)??true;
+    }
+    if(!imageInput||typeof DataTransfer==='undefined')return false;
+    const current=Array.from(imageInput.files||[]).slice(0,10);
+    if(current.length>=10)return false;
+    const dt=new DataTransfer();current.forEach(item=>dt.items.add(item));dt.items.add(file);imageInput.files=dt.files;imageInput.dispatchEvent(new Event('change',{bubbles:true}));return true;
+  }
   const nextPaint=()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
-  async function save(blob,name=`before-after-${Date.now()}.jpg`){if(!blob||typeof blob.size!=='number'||blob.size<=0)throw new Error('Не удалось собрать изображение.');const file=new File([blob],name,{type:blob.type||'image/jpeg',lastModified:Date.now()});setSaveStage('Сохраняем изображение…');await persistResult(file);setSaveStage('Добавляем изображение…');if(!applyImageFile(file))throw new Error('Не удалось добавить изображение в редактор.');window.CosmoSofaDraft?.setScreen?.('publish');const navigation=window.CosmoNavigation;if(!navigation?.replace)throw new Error('Навигация недоступна.');const nextState=await navigation.replace(navigation.STATES.PUBLISH,{focus:false});if(nextState!==navigation.STATES.PUBLISH)throw new Error('Не удалось открыть редактор.');await nextPaint()}
+  async function save(blob,name=`before-after-${Date.now()}.jpg`){
+    if(!blob||typeof blob.size!=='number'||blob.size<=0)throw new Error('Не удалось собрать изображение.');
+    const file=new File([blob],name,{type:blob.type||'image/jpeg',lastModified:Date.now()});
+    setSaveStage('Добавляем изображение…');
+    if(!applyImageFile(file))throw new Error('В редакторе уже 10 фотографий. Удалите одну и повторите сохранение.');
+    const draft=window.CosmoSofaDraft;
+    await draft?.setScreen?.('publish');
+    setSaveStage('Сохраняем изображение…');
+    if(!draft?.flush||await draft.flush('before-after-save')!==true)throw new Error('Не удалось сохранить изображение.');
+    const navigation=window.CosmoNavigation;if(!navigation?.replace)throw new Error('Навигация недоступна.');const nextState=await navigation.replace(navigation.STATES.PUBLISH,{focus:false});if(nextState!==navigation.STATES.PUBLISH)throw new Error('Не удалось открыть редактор.');await nextPaint()
+  }
   window.addEventListener('message',event=>{const frame=overlay?.querySelector('iframe');if(event.origin!==location.origin||event.source!==frame?.contentWindow)return;if(event.data?.type!=='cosmo-before-after-close'||event.data.action!=='back')return;const navigation=window.CosmoNavigation;if(navigation?.back)void navigation.back();else close()});
   window.addEventListener('cosmo-new-post',clear);
   window.CosmoBeforeAfter=Object.freeze({open,close,clear,save,saveDraft,saveAsset,removeAsset,swapAssets});
