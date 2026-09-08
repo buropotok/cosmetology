@@ -1,4 +1,4 @@
-export function createResize({ handle, slots, state, geometry, composite, onRender }) {
+export function createResize({ handle, slots, state, composite, onRender }) {
   // Telegram iOS/WKWebView is reliable with window-level pointer tracking here; avoid pointer capture.
   let active = null;
   let renderFrame = 0;
@@ -13,7 +13,6 @@ export function createResize({ handle, slots, state, geometry, composite, onRend
     if (renderFrame) return;
     renderFrame = requestAnimationFrame(() => {
       renderFrame = 0;
-      geometry.refitForComposite();
       onRender();
     });
   }

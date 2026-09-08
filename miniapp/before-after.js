@@ -22,7 +22,7 @@ const composite = createComposite({ slots, photos: state.photos, compositeResult
 let editor;
 const watermarks = createWatermarks({ $, carousel: wmCarousel, fileInput: wmFile, state, getEditor: () => editor, composite, authHeaders, loadImage, showError, onRender: render });
 editor = createEditor({ $, editor: editorElement, stage, editImage, wmImage, rotation, opacity, opacityControl, photos: state.photos, state, geometry, composite, loadImage, onRender: render });
-const resize = createResize({ handle: cropHandle, slots, state, geometry, composite, onRender: render });
+const resize = createResize({ handle: cropHandle, slots, state, composite, onRender: render });
 
 function render() {
   slots.dataset.layout = state.layout;
@@ -45,7 +45,7 @@ function render() {
 }
 function applyRatio(value) {
   state.selectedRatio = value; state.cropHeight = null; slots.style.height = ''; slots.style.aspectRatio = value; composite.clearCommitted();
-  requestAnimationFrame(() => { geometry.refitForComposite(); render(); });
+  requestAnimationFrame(render);
 }
 function restoreLayoutStyles() {
   if (state.selectedRatio === 'custom' && state.cropHeight) { slots.style.aspectRatio = 'auto'; slots.style.height = `${state.cropHeight}px`; }
@@ -103,7 +103,7 @@ const point = e => ({ x: e.clientX, y: e.clientY });
 function previewBegin(role) { const photo = state.photos[role]; if (!photo) return; const points = [...previewPointers.values()]; if (points.length === 1) previewGesture = { type: 'pan', start: points[0], x: photo.x, y: photo.y, scale: photo.scale }; else if (points.length >= 2) previewGesture = { type: 'pinch', distance: Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y), scale: photo.scale }; }
 document.querySelectorAll('[data-slot]').forEach(element => {
   element.onclick = event => { if (mode === 'solo') return; const role = element.dataset.slot; if (event.target?.closest?.('.delete-photo') || state.photos[role]) return; pending = role; if (!event.target?.closest?.('label[for="file"]')) file.click(); };
-  element.onpointerdown = event => { if (event.target?.closest?.('.delete-photo')) return; if (event.button != null && event.button !== 0) return; const role = element.dataset.slot; if (!state.photos[role]) { if (mode !== 'solo') pending = role; return; } event.preventDefault(); if (mode !== 'solo') element.setPointerCapture?.(event.pointerId); previewSlot = role; previewStarted = performance.now(); previewMoved = false; previewPointers.set(event.pointerId, point(event)); previewBegin(role); };
+  element.onpointerdown = event => { if (event.target?.closest?.('.delete-photo')) return; if (event.button != null && event.button !== 0) return; const role = element.dataset.slot; if (!state.photos[role]) { if (mode !== 'solo') pending = role; return; } event.preventDefault(); if (mode !== 'solo') element.setPointerCapture?.(event.pointerId); previewSlot = role; previewStarted = mode === 'dual' ? performance.now() : 0; previewMoved = false; previewPointers.set(event.pointerId, point(event)); previewBegin(role); };
   element.onpointermove = event => {
     const role = previewSlot, photo = state.photos[role]; if (!photo || !previewPointers.has(event.pointerId)) return; event.preventDefault(); previewPointers.set(event.pointerId, point(event)); const points = [...previewPointers.values()]; let changed = false;
     if (points.length === 1) {
@@ -118,7 +118,7 @@ document.querySelectorAll('[data-slot]').forEach(element => {
     }
     if (changed) { composite.clearCommitted(); render(); }
   };
-  const end = event => { const role = previewSlot; previewPointers.delete(event.pointerId); if (previewPointers.size) { previewBegin(role); return; } const tap = !previewMoved && performance.now() - previewStarted < 350; const moved = previewMoved; previewGesture = null; previewSlot = null; previewMoved = false; if (moved) state.notify(); if (mode === 'dual' && tap && role && state.photos[role]) editor.openPhoto(role); };
+  const end = event => { const role = previewSlot; previewPointers.delete(event.pointerId); if (previewPointers.size) { previewBegin(role); return; } const moved = previewMoved; previewGesture = null; previewSlot = null; previewMoved = false; if (moved) state.notify(); if (mode === 'solo') return; const tap = !moved && performance.now() - previewStarted < 350; if (tap && role && state.photos[role]) editor.openPhoto(role); };
   element.onpointerup = end; element.onpointercancel = event => { previewPointers.delete(event.pointerId); previewGesture = null; previewSlot = null; previewMoved = false; };
 });
 
