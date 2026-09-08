@@ -94,13 +94,6 @@ function decorate(){
   wrap.style.cssText='position:relative;display:block;flex:0 0 62px;width:62px;height:62px;overflow:visible;cursor:pointer';
   img.parentNode.insertBefore(wrap,img);
   wrap.append(img);
-  wrap.addEventListener('click',event=>{
-   if(event.target?.closest?.('.composer-image-delete'))return;
-   const current=[...previews.querySelectorAll('img')];
-   const index=current.indexOf(img);
-   const selected=index>=0?files[index]:null;
-   if(selected)window.CosmoBeforeAfter?.open?.({mode:'solo',file:selected,index});
-  });
   const del=document.createElement('button');
   del.type='button';
   del.className='composer-image-delete';
