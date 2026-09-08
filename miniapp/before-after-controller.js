@@ -3,24 +3,34 @@
   for(const href of ['/before-after.html','/before-after.css','/before-after.js']){const link=document.createElement('link');link.rel='prefetch';link.href=href;document.head.append(link)}
   const style=document.createElement('style');style.textContent='.before-after-overlay{position:fixed;inset:0;z-index:10000;background:#111}.before-after-overlay[hidden]{display:none!important}.before-after-overlay iframe{display:block;width:100%;height:100%;border:0;background:#111}';document.head.append(style);
   const imageInput=document.querySelector('#image'),webApp=window.Telegram?.WebApp;let overlay=null,currentMode='dual',soloIndex=null,soloFile=null;
+  async function restoreSoloIntoFrame(){
+    if(currentMode!=='solo'||!soloFile)return false;
+    const restore=frameBridge()?.restoreSolo?.(soloFile,soloIndex);if(!restore)return false;
+    try{await restore;return true}catch(error){debugLog('SOLO RESTORE rejected',{message:error?.message||String(error),index:soloIndex});return false}
+  }
+  async function revealSolo(current){
+    if(currentMode!=='solo'||overlay!==current)return false;
+    if(!await restoreSoloIntoFrame())return false;
+    if(currentMode!=='solo'||overlay!==current)return false;
+    current.hidden=false;return true
+  }
   function ensureOverlay(mode='dual'){
     if(overlay&&currentMode===mode)return overlay;
     if(overlay)overlay.remove();
     currentMode=mode;overlay=document.createElement('div');overlay.className='before-after-overlay';overlay.hidden=true;
     overlay.innerHTML=`<iframe src="/before-after.html?embedded=1&mode=${encodeURIComponent(mode)}" title="${mode==='solo'?'Фото':'До / После'}" allow="clipboard-read; clipboard-write"></iframe>`;
-    document.body.append(overlay);const frame=overlay.querySelector('iframe');frame.addEventListener('load',()=>{if(currentMode==='solo')restoreSoloIntoFrame();else restoreIntoFrame()});return overlay
+    document.body.append(overlay);const current=overlay,frame=current.querySelector('iframe');frame.addEventListener('load',()=>{if(currentMode==='solo'&&overlay===current)void revealSolo(current);else if(currentMode==='dual'&&overlay===current)restoreIntoFrame()});return current
   }
   function frameBridge(){try{return overlay?.querySelector('iframe')?.contentWindow?.CosmoBeforeAfterBridge||null}catch{return null}}
   function debugLog(type,data){try{frameBridge()?.debugLog?.(type,data)}catch{}}
   function setSaveStage(message){frameBridge()?.setStage?.(message)}
   function restoreIntoFrame(){if(currentMode!=='dual')return;const payload=window.CosmoSofaDraft?.getBeforeAfterDraft?.();if(!payload?.state)return;const restore=frameBridge()?.restoreDraft?.(payload);restore?.catch?.(error=>debugLog('RESTORE rejected',{message:error?.message||String(error),imageCount:payload.images?.length||0}))}
-  function restoreSoloIntoFrame(){if(currentMode!=='solo'||!soloFile)return;const restore=frameBridge()?.restoreSolo?.(soloFile,soloIndex);restore?.catch?.(error=>debugLog('SOLO RESTORE rejected',{message:error?.message||String(error),index:soloIndex}))}
   function open(){
     const request=arguments[0];
     if(request?.mode==='solo'){
       const {file,index}=request;
       if(!(file instanceof File)||!Number.isInteger(index)||index<0)return false;
-      soloFile=file;soloIndex=index;const current=ensureOverlay('solo');frameBridge()?.resetTransient?.();restoreSoloIntoFrame();current.hidden=false;document.documentElement.style.overflow='hidden';return true
+      soloFile=file;soloIndex=index;const current=ensureOverlay('solo');current.hidden=true;frameBridge()?.resetTransient?.();void revealSolo(current);document.documentElement.style.overflow='hidden';return true
     }
     soloIndex=null;soloFile=null;const current=ensureOverlay('dual');window.CosmoSofaDraft?.setScreen?.('beforeafter');frameBridge()?.resetTransient?.();restoreIntoFrame();current.hidden=false;document.documentElement.style.overflow='hidden';return true
   }
