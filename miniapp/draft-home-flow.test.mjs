@@ -47,7 +47,10 @@ test('cancel has no committed new-post side effects',()=>{
 });
 
 test('Continue restores the workspace menu instead of routing by persisted draft screen',()=>{
-  const resume=navigation.slice(navigation.indexOf('async function resumeDraft'),navigation.indexOf("home.querySelector('#flow-new')"));
+  const start=navigation.indexOf('async function resumeDraft()');
+  const end=navigation.indexOf("home.querySelector('#flow-new')",start);
+  assert.ok(start>=0&&end>start,'resumeDraft should exist before Home handlers');
+  const resume=navigation.slice(start,end);
   assert.match(resume,/navigation\.reset\(\[STATES\.HOME,STATES\.MENU\]\)/);
   assert.doesNotMatch(resume,/state\.screen/);
   assert.doesNotMatch(resume,/STATES\.(AI|PUBLISH|BEFORE_AFTER)/);
