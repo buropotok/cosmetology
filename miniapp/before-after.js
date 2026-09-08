@@ -1,40 +1,121 @@
-(()=>{
-const photos={before:null,after:null};let layout='horizontal',pending='before',editing=null,mode='photo',editSnapshot=null,cropHeight=null,selectedRatio='16/9',selectedWatermark=null,watermarkState={x:0,y:0,scale:1,rotation:0,opacity:.2},restoringDraft=false;
-const $=id=>document.getElementById(id),slots=$('slots'),file=$('file'),editor=$('editor'),stage=$('stage'),editImage=$('editImage'),wmImage=$('watermarkImage'),rotation=$('rotation'),opacity=$('opacity'),opacityControl=$('opacityControl'),compositeResult=$('compositeResult'),cropHandle=$('cropHandle'),wmFile=$('watermarkFile'),wmCarousel=$('watermarkCarousel');
-const webApp=window.Telegram?.WebApp;const authHeaders=()=>webApp?.initData?{Authorization:`tma ${webApp.initData}`}:{ };
-const ratioValue=v=>{const [w,h]=v.split('/').map(Number);return w/h};
-function transformFor(p){return `translate(calc(-50% + ${p.x}px),calc(-50% + ${p.y}px)) scale(${p.scale}) rotate(${p.rotation}deg)`}
-function notifyDraftChange(){if(!restoringDraft)window.dispatchEvent(new CustomEvent('cosmo-before-after-change'))}
-function render(){slots.dataset.layout=layout;document.querySelectorAll('[data-layout]').forEach(b=>b.classList.toggle('selected',b.dataset.layout===layout));document.querySelectorAll('[data-ratio]').forEach(b=>b.classList.toggle('selected',b.dataset.ratio===selectedRatio));['before','after'].forEach(s=>{const el=document.querySelector(`[data-slot=${s}]`),img=el.querySelector('img'),p=photos[s];el.classList.toggle('loaded',!!p);if(p){img.src=p.url;img.style.width=`${p.img.naturalWidth}px`;img.style.height=`${p.img.naturalHeight}px`;img.style.transform=transformFor(p)}});$('finish').disabled=!(photos.before||photos.after);notifyDraftChange()}
-function applyRatio(value){selectedRatio=value;cropHeight=null;slots.style.height='';slots.style.aspectRatio=value;clearCommitted();requestAnimationFrame(()=>{refitForComposite();render()})}
-function setInitialCompositeSize(){applyRatio(selectedRatio)}
-function setEditorGeometryFromRect(r){const controls=document.querySelector('.editor-controls').getBoundingClientRect().height,available=editor.clientHeight-58-controls,scale=Math.min(window.innerWidth/r.width,Math.max(1,available)/r.height);stage.style.width=`${r.width*scale}px`;stage.style.height=`${r.height*scale}px`;stage.dataset.geometryScale=String(scale)}
-function setEditorGeometry(s){setEditorGeometryFromRect(document.querySelector(`[data-slot=${s}]`).getBoundingClientRect())}
-document.querySelectorAll('[data-ratio]').forEach(b=>b.onclick=()=>applyRatio(b.dataset.ratio));
-document.querySelectorAll('[data-layout]').forEach(b=>b.onclick=()=>{layout=b.dataset.layout;slots.dataset.layout=layout;setInitialCompositeSize()});
-file.onchange=()=>{const f=file.files?.[0];file.value='';if(!f)return;if(!['image/jpeg','image/png','image/webp'].includes(f.type))return showError('Поддерживаются JPEG, PNG и WebP.');const url=URL.createObjectURL(f),img=new Image();img.onload=()=>{if(photos[pending])URL.revokeObjectURL(photos[pending].url);photos[pending]={file:f,url,img,x:0,y:0,scale:1,rotation:0,fitted:false};clearCommitted();render();openEditor(pending)};img.src=url};
-$('swap').onclick=()=>{[photos.before,photos.after]=[photos.after,photos.before];clearCommitted();render()};
-function transform(){const g=Number(stage.dataset.geometryScale||1);if(mode==='watermark'){const p=watermarkState;wmImage.style.opacity=String(p.opacity);wmImage.style.transform=`translate(calc(-50% + ${p.x*g}px),calc(-50% + ${p.y*g}px)) scale(${p.scale*g}) rotate(${p.rotation}deg)`;return}if(!editing)return;const p=photos[editing];editImage.style.width=`${p.img.naturalWidth}px`;editImage.style.height=`${p.img.naturalHeight}px`;editImage.style.transform=`translate(calc(-50% + ${p.x*g}px),calc(-50% + ${p.y*g}px)) scale(${p.scale*g}) rotate(${p.rotation}deg)`}
-function fit(p,r){p.scale=Math.max(r.width/p.img.naturalWidth,r.height/p.img.naturalHeight);p.x=p.y=0;p.fitted=true}
-function refitForComposite(){['before','after'].forEach(s=>{const p=photos[s],slot=document.querySelector(`[data-slot=${s}]`);if(!p||!slot)return;const r=slot.getBoundingClientRect(),min=Math.max(r.width/p.img.naturalWidth,r.height/p.img.naturalHeight);if(p.scale<min)p.scale=min})}
-function openEditor(s){mode='photo';editing=s;opacityControl.hidden=true;wmImage.hidden=true;editImage.hidden=false;const p=photos[s],slotRect=document.querySelector(`[data-slot=${s}]`).getBoundingClientRect();editSnapshot={...p};if(!p.fitted)fit(p,slotRect);editor.hidden=false;$('editorTitle').textContent=s==='before'?'До':'После';$('editorHint').textContent='Двигайте фото одним пальцем. Масштабируйте двумя.';editImage.src=p.url;requestAnimationFrame(()=>{setEditorGeometry(s);rotation.value=String(p.rotation);$('angle').textContent=`${p.rotation}°`;transform()})}
-$('editorCancel').onclick=()=>{if(mode==='photo'&&editing&&editSnapshot)Object.assign(photos[editing],editSnapshot);if(mode==='watermark'&&editSnapshot)watermarkState={...editSnapshot};closeEditor();render()};
-$('editorSave').onclick=async()=>{if(mode==='watermark')await commitWatermark();closeEditor();requestAnimationFrame(()=>{refitForComposite();render()})};
-function closeEditor(){editor.hidden=true;editing=null;editSnapshot=null;mode='photo';opacityControl.hidden=true}
-rotation.oninput=()=>{const p=mode==='watermark'?watermarkState:photos[editing];if(!p)return;p.rotation=Number(rotation.value);$('angle').textContent=`${rotation.value}°`;transform();notifyDraftChange()};opacity.oninput=()=>{watermarkState.opacity=Number(opacity.value)/100;$('opacityValue').textContent=`${opacity.value}%`;transform();notifyDraftChange()};$('gridToggle').onclick=()=>{const g=$('grid');g.hidden=!g.hidden;$('gridToggle').textContent=g.hidden?'Показать сетку':'Скрыть сетку'};
-const pointers=new Map;let gesture=null;const point=e=>({x:e.clientX,y:e.clientY});function activeState(){return mode==='watermark'?watermarkState:photos[editing]}function beginGesture(){const p=activeState();if(!p)return;const a=[...pointers.values()],g=Number(stage.dataset.geometryScale||1);if(a.length===1)gesture={type:'pan',start:a[0],x:p.x,y:p.y,g};else if(a.length>=2)gesture={type:'pinch',distance:Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y),scale:p.scale}}
-stage.onpointerdown=e=>{stage.setPointerCapture(e.pointerId);pointers.set(e.pointerId,point(e));beginGesture()};stage.onpointermove=e=>{const p=activeState();if(!p||!pointers.has(e.pointerId))return;pointers.set(e.pointerId,point(e));const a=[...pointers.values()];if(a.length===1){if(!gesture||gesture.type!=='pan')beginGesture();p.x=gesture.x+(a[0].x-gesture.start.x)/gesture.g;p.y=gesture.y+(a[0].y-gesture.start.y)/gesture.g}else if(a.length>=2){if(!gesture||gesture.type!=='pinch')beginGesture();const d=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y);p.scale=Math.max(.05,Math.min(10,gesture.scale*d/Math.max(1,gesture.distance)))}transform()};function end(e){pointers.delete(e.pointerId);beginGesture();notifyDraftChange()}stage.onpointerup=end;stage.onpointercancel=end;
-const previewPointers=new Map;let previewGesture=null,previewSlot=null,previewMoved=false,previewStarted=0;function previewBegin(s){const p=photos[s];if(!p)return;const a=[...previewPointers.values()];if(a.length===1)previewGesture={type:'pan',start:a[0],x:p.x,y:p.y,scale:p.scale};else if(a.length>=2)previewGesture={type:'pinch',distance:Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y),scale:p.scale}}
-document.querySelectorAll('[data-slot]').forEach(el=>{el.onclick=null;el.onpointerdown=e=>{if(e.button!=null&&e.button!==0)return;const s=el.dataset.slot;if(!photos[s]){pending=s;file.click();return}e.preventDefault();el.setPointerCapture?.(e.pointerId);previewSlot=s;previewStarted=performance.now();previewMoved=false;previewPointers.set(e.pointerId,point(e));previewBegin(s)};el.onpointermove=e=>{const s=previewSlot,p=photos[s];if(!p||!previewPointers.has(e.pointerId))return;e.preventDefault();previewPointers.set(e.pointerId,point(e));const a=[...previewPointers.values()];if(a.length===1){if(!previewGesture||previewGesture.type!=='pan')previewBegin(s);const dx=a[0].x-previewGesture.start.x,dy=a[0].y-previewGesture.start.y;if(Math.hypot(dx,dy)>5)previewMoved=true;p.x=previewGesture.x+dx;p.y=previewGesture.y+dy}else if(a.length>=2){previewMoved=true;if(!previewGesture||previewGesture.type!=='pinch')previewBegin(s);const d=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y);p.scale=Math.max(.05,Math.min(10,previewGesture.scale*d/Math.max(1,previewGesture.distance)))}clearCommitted();render()};const previewEnd=e=>{const s=previewSlot;previewPointers.delete(e.pointerId);if(previewPointers.size){previewBegin(s);return}const tap=!previewMoved&&performance.now()-previewStarted<350;previewGesture=null;previewSlot=null;notifyDraftChange();if(tap&&s&&photos[s])openEditor(s)};el.onpointerup=previewEnd;el.onpointercancel=e=>{previewPointers.delete(e.pointerId);previewGesture=null;previewSlot=null}});
-let cropGesture=null;cropHandle.onpointerdown=e=>{e.preventDefault();e.stopPropagation();cropGesture={startY:e.clientY,startHeight:slots.getBoundingClientRect().height};cropHandle.setPointerCapture?.(e.pointerId)};cropHandle.onpointermove=e=>{if(!cropGesture)return;e.preventDefault();const width=slots.getBoundingClientRect().width,minHeight=width/(16/9),maxHeight=Math.max(minHeight,window.innerHeight-120),next=Math.max(minHeight,Math.min(maxHeight,cropGesture.startHeight+e.clientY-cropGesture.startY));cropHeight=next;selectedRatio='custom';slots.style.height=`${next}px`;slots.style.aspectRatio='auto';clearCommitted();requestAnimationFrame(()=>{refitForComposite();render()})};cropHandle.onpointerup=cropHandle.onpointercancel=e=>{cropGesture=null;cropHandle.releasePointerCapture?.(e.pointerId);notifyDraftChange()};
-function drawPhoto(ctx,p,r,k){if(!p)return;ctx.save();ctx.beginPath();ctx.rect(r.x*k,r.y*k,r.width*k,r.height*k);ctx.clip();ctx.translate((r.x+r.width/2+p.x)*k,(r.y+r.height/2+p.y)*k);ctx.rotate(p.rotation*Math.PI/180);ctx.scale(p.scale*k,p.scale*k);ctx.drawImage(p.img,-p.img.naturalWidth/2,-p.img.naturalHeight/2);ctx.restore()}function baseCanvas(){const sr=slots.getBoundingClientRect(),k=Math.min(3,Math.max(1,1080/sr.width)),c=document.createElement('canvas');c.width=Math.round(sr.width*k);c.height=Math.round(sr.height*k);const ctx=c.getContext('2d');ctx.fillStyle='#000';ctx.fillRect(0,0,c.width,c.height);['before','after'].forEach(s=>{const r=document.querySelector(`[data-slot=${s}]`).getBoundingClientRect();drawPhoto(ctx,photos[s],{x:r.left-sr.left,y:r.top-sr.top,width:r.width,height:r.height},k)});return {c,ctx,sr,k}}async function compositeBlob(){const {c}=baseCanvas();return new Promise(resolve=>c.toBlob(resolve,'image/jpeg',.94))}window.cosmoBeforeAfterCompositeBlob=async()=>{if(compositeResult.dataset.url&&!compositeResult.hidden)return fetch(compositeResult.dataset.url).then(r=>r.blob());return compositeBlob()};
-async function commitWatermark(){if(!selectedWatermark)return;const wm=await loadImage(selectedWatermark.url),{c,ctx,sr,k}=baseCanvas(),p=watermarkState;ctx.save();ctx.globalAlpha=p.opacity;ctx.translate((sr.width/2+p.x)*k,(sr.height/2+p.y)*k);ctx.rotate(p.rotation*Math.PI/180);ctx.scale(p.scale*k,p.scale*k);ctx.drawImage(wm,-wm.naturalWidth/2,-wm.naturalHeight/2);ctx.restore();const blob=await new Promise(resolve=>c.toBlob(resolve,'image/jpeg',.94));if(compositeResult.dataset.url)URL.revokeObjectURL(compositeResult.dataset.url);const url=URL.createObjectURL(blob);compositeResult.dataset.url=url;compositeResult.src=url;compositeResult.hidden=false;compositeResult.style.cssText='position:absolute;inset:0;width:100%;height:100%;object-fit:fill;z-index:5;pointer-events:none';cropHandle.style.zIndex='6';notifyDraftChange()}function clearCommitted(){if(compositeResult.dataset.url){URL.revokeObjectURL(compositeResult.dataset.url);delete compositeResult.dataset.url}compositeResult.hidden=true}
-async function processedWatermark(file){const src=URL.createObjectURL(file);try{const img=await loadImage(src),max=1200,scale=Math.min(1,max/Math.max(img.naturalWidth,img.naturalHeight)),c=document.createElement('canvas');c.width=Math.max(1,Math.round(img.naturalWidth*scale));c.height=Math.max(1,Math.round(img.naturalHeight*scale));const ctx=c.getContext('2d');ctx.filter='grayscale(1)';ctx.globalAlpha=1;ctx.drawImage(img,0,0,c.width,c.height);return new Promise(resolve=>c.toBlob(b=>resolve(new File([b],file.name.replace(/\.[^.]+$/,'.png'),{type:'image/png'})),'image/png'))}finally{URL.revokeObjectURL(src)}}function loadImage(src){return new Promise((resolve,reject)=>{const i=new Image;i.onload=()=>resolve(i);i.onerror=reject;i.src=src})}async function fetchWmBlob(id){const r=await fetch(`/api/miniapp/watermarks/${encodeURIComponent(id)}`,{headers:authHeaders()});if(!r.ok)throw new Error('Не удалось загрузить водяной знак');return r.blob()}async function loadWatermarks(){if(!webApp?.initData)return;try{const r=await fetch('/api/miniapp/watermarks',{headers:authHeaders()}),data=await r.json();if(!r.ok)throw new Error(data?.error?.message||'Не удалось загрузить водяные знаки');for(const wm of data.watermarks||[])await appendWatermark(wm)}catch(e){showError(e.message)}}async function appendWatermark(wm){if(wmCarousel.querySelector(`[data-watermark="${CSS.escape(wm.id)}"]`))return;const b=document.createElement('button');b.type='button';b.className='watermark-item';b.dataset.watermark=wm.id;const blob=await fetchWmBlob(wm.id),url=URL.createObjectURL(blob);b.dataset.url=url;b.innerHTML=`<img alt=""><span hidden></span>`;b.querySelector('img').src=url;b.onclick=()=>selectWatermark(b);wmCarousel.append(b)}async function selectWatermark(button){wmCarousel.querySelectorAll('.watermark-item').forEach(x=>x.classList.toggle('selected',x===button));if(button.dataset.watermark==='none'){selectedWatermark=null;clearCommitted();notifyDraftChange();return}selectedWatermark={id:button.dataset.watermark,url:button.dataset.url};watermarkState={x:0,y:0,scale:1,rotation:0,opacity:.2};await openWatermarkEditor()}wmCarousel.querySelector('[data-watermark="none"]').onclick=()=>selectWatermark(wmCarousel.querySelector('[data-watermark="none"]'));$('addWatermark').onclick=()=>wmFile.click();wmFile.onchange=async()=>{const f=wmFile.files?.[0];wmFile.value='';if(!f)return;try{$('addWatermark').disabled=true;const processed=await processedWatermark(f),body=new FormData();body.set('image',processed);const r=await fetch('/api/miniapp/watermarks',{method:'POST',headers:authHeaders(),body}),wm=await r.json();if(!r.ok)throw new Error(wm?.error?.message||'Не удалось сохранить водяной знак');await appendWatermark(wm);const b=wmCarousel.querySelector(`[data-watermark="${CSS.escape(wm.id)}"]`);selectWatermark(b)}catch(e){showError(e.message)}finally{$('addWatermark').disabled=false}};
-async function openWatermarkEditor(){if(!selectedWatermark)return;const blob=await compositeBlob(),baseUrl=URL.createObjectURL(blob),wm=await loadImage(selectedWatermark.url),r=slots.getBoundingClientRect();mode='watermark';editing=null;editSnapshot={...watermarkState};editor.hidden=false;opacityControl.hidden=false;$('editorTitle').textContent='Водяной знак';$('editorHint').textContent='Двигайте водяной знак одним пальцем. Масштабируйте двумя.';editImage.hidden=false;editImage.src=baseUrl;wmImage.hidden=false;wmImage.src=selectedWatermark.url;requestAnimationFrame(()=>{setEditorGeometryFromRect(r);const g=Number(stage.dataset.geometryScale||1);editImage.style.width=`${r.width}px`;editImage.style.height=`${r.height}px`;editImage.style.transform=`translate(-50%,-50%) scale(${g})`;wmImage.style.width=`${wm.naturalWidth}px`;wmImage.style.height=`${wm.naturalHeight}px`;if(watermarkState.scale===1)watermarkState.scale=Math.min(r.width*.35/wm.naturalWidth,r.height*.35/wm.naturalHeight);rotation.value=String(watermarkState.rotation);opacity.value=String(Math.round(watermarkState.opacity*100));$('opacityValue').textContent=`${opacity.value}%`;$('angle').textContent=`${watermarkState.rotation}°`;transform();URL.revokeObjectURL(baseUrl)})}
-function photoState(p,imageIndex){return p?{imageIndex,x:p.x,y:p.y,scale:p.scale,rotation:p.rotation,fitted:p.fitted}:null}
-function getDraftSnapshot(){const files=[];let beforeIndex=null,afterIndex=null;if(photos.before){beforeIndex=files.length;files.push(photos.before.file)}if(photos.after){afterIndex=files.length;files.push(photos.after.file)}return{state:{version:1,layout,ratio:selectedRatio,cropHeight,before:photoState(photos.before,beforeIndex),after:photoState(photos.after,afterIndex),watermark:selectedWatermark?{id:selectedWatermark.id}:null,watermarkState:{...watermarkState}},files}}
-async function restorePhoto(slot,fileValue,saved){if(!fileValue||!saved)return null;const url=URL.createObjectURL(fileValue),img=await loadImage(url);return{file:fileValue,url,img,x:Number(saved.x)||0,y:Number(saved.y)||0,scale:Number(saved.scale)||1,rotation:Number(saved.rotation)||0,fitted:saved.fitted!==false}}
-async function restoreDraft(saved,files=[]){if(!saved||typeof saved!=='object')return;restoringDraft=true;try{for(const s of ['before','after']){if(photos[s]?.url)URL.revokeObjectURL(photos[s].url);photos[s]=null}layout=saved.layout==='vertical'?'vertical':'horizontal';selectedRatio=typeof saved.ratio==='string'?saved.ratio:'16/9';cropHeight=Number.isFinite(Number(saved.cropHeight))?Number(saved.cropHeight):null;if(selectedRatio==='custom'&&cropHeight){slots.style.aspectRatio='auto';slots.style.height=`${cropHeight}px`}else{slots.style.height='';slots.style.aspectRatio=selectedRatio}photos.before=await restorePhoto('before',files[saved.before?.imageIndex],saved.before);photos.after=await restorePhoto('after',files[saved.after?.imageIndex],saved.after);watermarkState=saved.watermarkState&&typeof saved.watermarkState==='object'?{...watermarkState,...saved.watermarkState}:watermarkState;selectedWatermark=null;if(saved.watermark?.id){const button=wmCarousel.querySelector(`[data-watermark="${CSS.escape(saved.watermark.id)}"]`);if(button)selectedWatermark={id:button.dataset.watermark,url:button.dataset.url}}clearCommitted();render()}finally{restoringDraft=false}}
-window.CosmoBeforeAfterState=Object.freeze({getDraftSnapshot,restoreDraft});
-function showError(m){$('error').textContent=m||''}function returnToPublisher(){try{sessionStorage.setItem('cosmo-return-screen','composer')}catch{}location.href='/'}$('back').onclick=returnToPublisher;$('finish').onclick=returnToPublisher;window.addEventListener('beforeunload',()=>{['before','after'].forEach(s=>photos[s]&&URL.revokeObjectURL(photos[s].url));wmCarousel.querySelectorAll('[data-url]').forEach(b=>URL.revokeObjectURL(b.dataset.url));if(compositeResult.dataset.url)URL.revokeObjectURL(compositeResult.dataset.url)});applyRatio(selectedRatio);loadWatermarks();
-})();
+import { createBeforeAfterState } from './before-after/state.js';
+import { createGeometry } from './before-after/geometry.js';
+import { createComposite } from './before-after/composite.js';
+import { createEditor } from './before-after/editor.js';
+import { createWatermarks } from './before-after/watermarks.js';
+
+const $ = id => document.getElementById(id);
+const slots = $('slots'), file = $('file'), editorElement = $('editor'), stage = $('stage'), editImage = $('editImage'), wmImage = $('watermarkImage');
+const rotation = $('rotation'), opacity = $('opacity'), opacityControl = $('opacityControl'), compositeResult = $('compositeResult'), cropHandle = $('cropHandle');
+const wmFile = $('watermarkFile'), wmCarousel = $('watermarkCarousel'), webApp = window.Telegram?.WebApp;
+const authHeaders = () => webApp?.initData ? { Authorization: `tma ${webApp.initData}` } : {};
+const loadImage = src => new Promise((resolve, reject) => { const image = new Image(); image.onload = () => resolve(image); image.onerror = reject; image.src = src; });
+const showError = message => { $('error').textContent = message || ''; };
+const transformFor = photo => `translate(calc(-50% + ${photo.x}px),calc(-50% + ${photo.y}px)) scale(${photo.scale}) rotate(${photo.rotation}deg)`;
+
+const state = createBeforeAfterState({ loadImage, onChange: () => window.dispatchEvent(new CustomEvent('cosmo-before-after-change')) });
+const geometry = createGeometry({ slots, editor: editorElement, stage, photos: state.photos });
+const composite = createComposite({ slots, photos: state.photos, compositeResult, cropHandle, notify: state.notify });
+let editor;
+const watermarks = createWatermarks({ $, carousel: wmCarousel, fileInput: wmFile, state, getEditor: () => editor, composite, authHeaders, loadImage, showError });
+editor = createEditor({ $, editor: editorElement, stage, editImage, wmImage, rotation, opacity, opacityControl, photos: state.photos, state, geometry, composite, loadImage, onRender: render });
+
+function render() {
+  slots.dataset.layout = state.layout;
+  document.querySelectorAll('[data-layout]').forEach(button => button.classList.toggle('selected', button.dataset.layout === state.layout));
+  document.querySelectorAll('[data-ratio]').forEach(button => button.classList.toggle('selected', button.dataset.ratio === state.selectedRatio));
+  for (const role of ['before', 'after']) {
+    const element = document.querySelector(`[data-slot=${role}]`), image = element.querySelector('img'), photo = state.photos[role];
+    element.classList.toggle('loaded', !!photo);
+    if (photo) { image.src = photo.url; image.style.width = `${photo.img.naturalWidth}px`; image.style.height = `${photo.img.naturalHeight}px`; image.style.transform = transformFor(photo); }
+  }
+  $('finish').disabled = !(state.photos.before || state.photos.after);
+  state.notify();
+}
+function applyRatio(value) {
+  state.selectedRatio = value; state.cropHeight = null; slots.style.height = ''; slots.style.aspectRatio = value; composite.clearCommitted();
+  requestAnimationFrame(() => { geometry.refitForComposite(); render(); });
+}
+function restoreLayoutStyles() {
+  if (state.selectedRatio === 'custom' && state.cropHeight) { slots.style.aspectRatio = 'auto'; slots.style.height = `${state.cropHeight}px`; }
+  else { slots.style.height = ''; slots.style.aspectRatio = state.selectedRatio; }
+}
+
+document.querySelectorAll('[data-ratio]').forEach(button => button.onclick = () => applyRatio(button.dataset.ratio));
+document.querySelectorAll('[data-layout]').forEach(button => button.onclick = () => { state.layout = button.dataset.layout; slots.dataset.layout = state.layout; applyRatio(state.selectedRatio); });
+let pending = 'before';
+file.onchange = () => {
+  const selected = file.files?.[0]; file.value = ''; if (!selected) return;
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(selected.type)) return showError('Поддерживаются JPEG, PNG и WebP.');
+  const url = URL.createObjectURL(selected), image = new Image();
+  image.onload = () => {
+    if (state.photos[pending]) URL.revokeObjectURL(state.photos[pending].url);
+    state.photos[pending] = { file: selected, url, img: image, x: 0, y: 0, scale: 1, rotation: 0, fitted: false };
+    composite.clearCommitted(); render(); editor.openPhoto(pending);
+  };
+  image.src = url;
+};
+$('swap').onclick = () => { [state.photos.before, state.photos.after] = [state.photos.after, state.photos.before]; composite.clearCommitted(); render(); };
+
+const previewPointers = new Map(); let previewGesture = null, previewSlot = null, previewMoved = false, previewStarted = 0;
+const point = e => ({ x: e.clientX, y: e.clientY });
+function previewBegin(role) {
+  const photo = state.photos[role]; if (!photo) return; const points = [...previewPointers.values()];
+  if (points.length === 1) previewGesture = { type: 'pan', start: points[0], x: photo.x, y: photo.y, scale: photo.scale };
+  else if (points.length >= 2) previewGesture = { type: 'pinch', distance: Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y), scale: photo.scale };
+}
+document.querySelectorAll('[data-slot]').forEach(element => {
+  element.onclick = null;
+  element.onpointerdown = event => {
+    if (event.button != null && event.button !== 0) return; const role = element.dataset.slot;
+    if (!state.photos[role]) { pending = role; file.click(); return; }
+    event.preventDefault(); element.setPointerCapture?.(event.pointerId); previewSlot = role; previewStarted = performance.now(); previewMoved = false;
+    previewPointers.set(event.pointerId, point(event)); previewBegin(role);
+  };
+  element.onpointermove = event => {
+    const role = previewSlot, photo = state.photos[role]; if (!photo || !previewPointers.has(event.pointerId)) return;
+    event.preventDefault(); previewPointers.set(event.pointerId, point(event)); const points = [...previewPointers.values()];
+    if (points.length === 1) {
+      if (!previewGesture || previewGesture.type !== 'pan') previewBegin(role);
+      const dx = points[0].x - previewGesture.start.x, dy = points[0].y - previewGesture.start.y; if (Math.hypot(dx, dy) > 5) previewMoved = true;
+      photo.x = previewGesture.x + dx; photo.y = previewGesture.y + dy;
+    } else if (points.length >= 2) {
+      previewMoved = true; if (!previewGesture || previewGesture.type !== 'pinch') previewBegin(role);
+      const distance = Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
+      photo.scale = Math.max(.05, Math.min(10, previewGesture.scale * distance / Math.max(1, previewGesture.distance)));
+    }
+    composite.clearCommitted(); render();
+  };
+  const end = event => {
+    const role = previewSlot; previewPointers.delete(event.pointerId);
+    if (previewPointers.size) { previewBegin(role); return; }
+    const tap = !previewMoved && performance.now() - previewStarted < 350; previewGesture = null; previewSlot = null; state.notify();
+    if (tap && role && state.photos[role]) editor.openPhoto(role);
+  };
+  element.onpointerup = end; element.onpointercancel = event => { previewPointers.delete(event.pointerId); previewGesture = null; previewSlot = null; };
+});
+
+let cropGesture = null;
+cropHandle.onpointerdown = event => { event.preventDefault(); event.stopPropagation(); cropGesture = { startY: event.clientY, startHeight: slots.getBoundingClientRect().height }; cropHandle.setPointerCapture?.(event.pointerId); };
+cropHandle.onpointermove = event => {
+  if (!cropGesture) return; event.preventDefault(); const width = slots.getBoundingClientRect().width, minHeight = width / (16 / 9), maxHeight = Math.max(minHeight, window.innerHeight - 120);
+  const next = Math.max(minHeight, Math.min(maxHeight, cropGesture.startHeight + event.clientY - cropGesture.startY));
+  state.cropHeight = next; state.selectedRatio = 'custom'; slots.style.height = `${next}px`; slots.style.aspectRatio = 'auto'; composite.clearCommitted();
+  requestAnimationFrame(() => { geometry.refitForComposite(); render(); });
+};
+cropHandle.onpointerup = cropHandle.onpointercancel = event => { cropGesture = null; cropHandle.releasePointerCapture?.(event.pointerId); state.notify(); };
+
+window.cosmoBeforeAfterCompositeBlob = () => composite.publicBlob();
+window.CosmoBeforeAfterState = Object.freeze({
+  getDraftSnapshot: () => state.snapshot(),
+  restoreDraft: async (saved, files = []) => { await state.restore(saved, files, watermarks.find); restoreLayoutStyles(); composite.clearCommitted(); render(); },
+});
+function returnToPublisher() { try { sessionStorage.setItem('cosmo-return-screen', 'composer'); } catch {} location.href = '/'; }
+$('back').onclick = returnToPublisher; $('finish').onclick = returnToPublisher;
+window.addEventListener('beforeunload', () => {
+  for (const role of ['before', 'after']) if (state.photos[role]) URL.revokeObjectURL(state.photos[role].url);
+  wmCarousel.querySelectorAll('[data-url]').forEach(button => URL.revokeObjectURL(button.dataset.url));
+  if (compositeResult.dataset.url) URL.revokeObjectURL(compositeResult.dataset.url);
+});
+applyRatio(state.selectedRatio);
+watermarks.load();
