@@ -22,6 +22,8 @@ export function createResize({ handle, slots, state, geometry, composite, onRend
     window.removeEventListener('pointermove', onPointerMove, true);
     window.removeEventListener('pointerup', onPointerEnd, true);
     window.removeEventListener('pointercancel', onPointerEnd, true);
+    window.removeEventListener('touchend', onTouchEnd, true);
+    window.removeEventListener('touchcancel', onTouchEnd, true);
     active = null;
   }
 
@@ -49,7 +51,14 @@ export function createResize({ handle, slots, state, geometry, composite, onRend
 
   function onPointerEnd(event) {
     if (!active || event.pointerId !== active.pointerId) return;
-    applyPointer(event);
+    // Pointer-up ends the gesture only. WebKit can deliver a delayed or unreliable
+    // release coordinate, so the crop may only be mutated by pointermove.
+    cleanupPointerListeners();
+  }
+
+  function onTouchEnd() {
+    if (!active) return;
+    // iOS/WKWebView fallback when the matching pointerup/pointercancel is lost.
     cleanupPointerListeners();
   }
 
@@ -74,6 +83,8 @@ export function createResize({ handle, slots, state, geometry, composite, onRend
     window.addEventListener('pointermove', onPointerMove, { capture: true, passive: false });
     window.addEventListener('pointerup', onPointerEnd, true);
     window.addEventListener('pointercancel', onPointerEnd, true);
+    window.addEventListener('touchend', onTouchEnd, true);
+    window.addEventListener('touchcancel', onTouchEnd, true);
   }
 
   handle.addEventListener('pointerdown', onPointerDown, { passive: false });
