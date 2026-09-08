@@ -7,7 +7,7 @@ const storeSource=await readFile(new URL('./draft-store.js',import.meta.url),'ut
 const overlaySource=await readFile(new URL('./draft-loading-overlay.js',import.meta.url),'utf8');
 const navigationSource=await readFile(new URL('./navigation.js',import.meta.url),'utf8');
 const settingsIconSource=await readFile(new URL('./assets/icons/settings.svg',import.meta.url),'utf8');
-const bootstrapSource=await readFile(new URL('./bootstrap.js',import.meta.url),'utf8');
+const runtimeSource=await readFile(new URL('./new-post-runtime.js',import.meta.url),'utf8');
 
 function createState(){
   let snapshot={plainText:'',content:'',images:[],platform:'telegram',activePhotoIndex:0};
@@ -70,7 +70,7 @@ test('draft loading UI is an on-demand session restore dialog independent from H
   assert.match(navigationSource,/\/assets\/icons\/settings\.svg/);
   assert.match(settingsIconSource,/<svg/);
   assert.match(storeSource,/const LOAD_TIMEOUT_MS=10000/);
-  const overlayImport=bootstrapSource.indexOf("import('/draft-loading-overlay.js')");
-  const storeImport=bootstrapSource.indexOf("import('/draft-store.js')");
-  assert.ok(overlayImport>=0&&storeImport>=0&&overlayImport<storeImport,'restore dialog must be available before an on-demand draft load can start');
+  const overlayImport=runtimeSource.indexOf("import('./draft-loading-overlay.js')");
+  const storeImport=runtimeSource.indexOf("import('./draft-store.js')");
+  assert.ok(overlayImport>=0&&storeImport>=0,'restore dialog and store belong to the on-demand New Post runtime');
 });
