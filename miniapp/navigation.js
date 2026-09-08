@@ -121,15 +121,7 @@ async function openNewPost(){
 async function resumeDraft(){
   const state=window.CosmoSofaDraft?.getState?.();
   if(state?.loadStatus!=='ready'||!state.hasDraft)return;
-  if(state.screen==='beforeafter'){
-    await navigation.reset([STATES.HOME,STATES.MENU,STATES.BEFORE_AFTER]);
-    return;
-  }
-  if(state.screen==='ai'){
-    await navigation.reset([STATES.HOME,STATES.MENU,STATES.AI]);
-    return;
-  }
-  await navigation.reset([STATES.HOME,STATES.MENU,STATES.PUBLISH],{focus:false});
+  await navigation.reset([STATES.HOME,STATES.MENU]);
 }
 home.querySelector('#flow-new').addEventListener('click',()=>{void openNewPost()});
 continueButton.addEventListener('click',()=>{void resumeDraft()});
