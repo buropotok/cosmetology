@@ -46,6 +46,13 @@ test('cancel has no committed new-post side effects',()=>{
   assert.doesNotMatch(committed,/router\.show\('composer'\)/);
 });
 
+test('Continue restores the workspace menu instead of routing by persisted draft screen',()=>{
+  const resume=navigation.slice(navigation.indexOf('async function resumeDraft'),navigation.indexOf("home.querySelector('#flow-new')"));
+  assert.match(resume,/navigation\.reset\(\[STATES\.HOME,STATES\.MENU\]\)/);
+  assert.doesNotMatch(resume,/state\.screen/);
+  assert.doesNotMatch(resume,/STATES\.(AI|PUBLISH|BEFORE_AFTER)/);
+});
+
 test('New Post ignores repeated clicks while a transition is in flight',()=>{
   assert.match(navigation,/let newPostInFlight=false/);
   assert.match(navigation,/if\(newPostInFlight\)return;\s*newPostInFlight=true/);
