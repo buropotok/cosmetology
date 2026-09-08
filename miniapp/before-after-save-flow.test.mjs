@@ -17,13 +17,16 @@ test('Before After shows a blocking save loader',()=>{
   assert.match(bridge,/showLoader\(\)/);
 });
 
-test('Before After persists to R2 before importing into composer',()=>{
+test('Before After appends to Composer before shared draft persistence',()=>{
   const saveStart=controller.indexOf('async function save(');
   const saveBody=controller.slice(saveStart,controller.indexOf("window.addEventListener('message'",saveStart));
-  const persistAt=saveBody.indexOf('persistResult(file)');
   const importAt=saveBody.indexOf('applyImageFile(file)');
-  assert.ok(persistAt>=0,'result should be persisted before composer import');
-  assert.ok(importAt>persistAt,'composer import must happen only after durable server persistence');
+  const flushAt=saveBody.indexOf("draft.flush('before-after-save')");
+  assert.ok(importAt>=0,'composite should be imported through the Composer boundary');
+  assert.ok(flushAt>importAt,'shared draft persistence must run after Composer owns the appended image');
+  assert.match(controller,/manager\?\.addFiles/,'Before/After should use the Composer append contract');
+  assert.doesNotMatch(controller,/manager\?\.replaceFiles/,'Before/After must not replace the Composer image set');
+  assert.doesNotMatch(controller,/persistResult\(|function draftBody\(/,'final Save must not own a parallel draft upload path');
   assert.doesNotMatch(controller,/webApp\.downloadFile\(/);
   assert.doesNotMatch(controller,/downloadToGallery/);
 });
