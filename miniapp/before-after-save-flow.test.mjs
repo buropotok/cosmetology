@@ -6,7 +6,8 @@ const controller=await readFile(new URL('./before-after-controller.js',import.me
 const bridge=await readFile(new URL('./before-after-bridge.js',import.meta.url),'utf8');
 const html=await readFile(new URL('./before-after.html',import.meta.url),'utf8');
 const css=await readFile(new URL('./before-after.css',import.meta.url),'utf8');
-const ios=await readFile(new URL('./before-after-ios.js',import.meta.url),'utf8');
+const entry=await readFile(new URL('./before-after.js',import.meta.url),'utf8');
+const resize=await readFile(new URL('./before-after/resize.js',import.meta.url),'utf8');
 
 test('Before After shows a blocking save loader',()=>{
   assert.match(html,/id="saveOverlay"/);
@@ -39,31 +40,28 @@ test('save stages explain durable save and editor import progress',()=>{
   assert.doesNotMatch(controller,/Сохраняем копию в галерею/);
 });
 
-test('Before After uses native label activation for iOS photo picking',()=>{
+test('Before After uses native label activation for photo picking without an iOS patch runtime',()=>{
   assert.match(html,/<label class="empty" for="file">/);
   assert.match(html,/id="file" class="native-file-input"/);
   assert.doesNotMatch(html,/id="file"[^>]* hidden/);
-  assert.match(html,/src="\/before-after-ios\.js"/);
-  assert.match(ios,/file\.click=\(\)=>\{\}/);
-  assert.match(ios,/originalDown\.call\(slot,event\)/);
+  assert.doesNotMatch(html,/before-after-ios\.js/);
+  assert.match(entry,/if \(!event\.target\.closest\('\.empty'\)\) file\.click\(\)/);
 });
 
-test('Before After delete action is visible and destructive',()=>{
+test('Before After delete action is visible and owned by the entry component',()=>{
   assert.match(html,/data-delete-photo="before"[^>]*>Удалить</);
   assert.match(html,/data-delete-photo="after"[^>]*>Удалить</);
   assert.match(css,/\.delete-photo\{[^}]*background:var\(--danger/);
-  assert.match(ios,/async function removePhoto\(slotName\)/);
-  assert.match(ios,/restoreDraft\(nextState/);
+  assert.match(entry,/function removePhoto\(role\)/);
+  assert.match(entry,/state\.photos\[role\] = null/);
 });
 
-test('Before After resize tracks pointer on window and commits once at end',()=>{
-  assert.match(ios,/window\.addEventListener\('pointermove',onMove/);
-  assert.match(ios,/cropHandle\.onpointermove=null/);
-  assert.match(ios,/originalMove\.call\(cropHandle,event\)/);
-  const moveStart=ios.indexOf('function onMove(event)');
-  const moveEnd=ios.indexOf('function onEnd(event)',moveStart);
-  assert.doesNotMatch(ios.slice(moveStart,moveEnd),/render\(/);
-  assert.doesNotMatch(ios.slice(moveStart,moveEnd),/requestAnimationFrame/);
+test('Before After resize tracks pointer on window through the resize owner',()=>{
+  assert.match(resize,/window\.addEventListener\('pointermove',onPointerMove/);
+  assert.match(resize,/window\.addEventListener\('pointerup',onPointerEnd/);
+  assert.match(resize,/window\.addEventListener\('pointercancel',onPointerEnd/);
+  assert.match(resize,/state\.cropHeight = next/);
+  assert.doesNotMatch(resize,/setPointerCapture|releasePointerCapture/);
 });
 
 test('Before After action buttons do not force draft persistence',()=>{
