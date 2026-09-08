@@ -38,13 +38,25 @@ async function confirmDraftReplacement(){
 async function showDraftLoadError(){
   await popup({title:'Черновик недоступен',message:'Не удалось проверить сохранённый черновик. Попробуйте ещё раз.',buttons:[{id:'ok',type:'ok',text:'ОК'}]});
 }
+async function showNewPostLoadError(){
+  await popup({title:'Новый пост недоступен',message:'Не удалось открыть создание публикации. Попробуйте ещё раз.',buttons:[{id:'ok',type:'ok',text:'ОК'}]});
+}
+let newPostEntryPromise;
+async function loadNewPostEntry(){
+  if(window.CosmoComposerView)return window.CosmoComposerView;
+  newPostEntryPromise??=import('/new-post-entry.js');
+  await newPostEntryPromise;
+  if(!window.CosmoComposerView)throw new Error('New Post entry did not initialize');
+  return window.CosmoComposerView;
+}
 async function commitNewPost(draft){
+  const composerView=await loadNewPostEntry();
   if(draft?.clear)await draft.clear();
   else draft?.cancelRestore?.();
   window.dispatchEvent(new CustomEvent('cosmo-new-post',{detail:{source:'flow-new'}}));
   window.dispatchEvent(new CustomEvent('cosmo-ai-wizard-reset'));
   router.show('composer');
-  window.CosmoComposerView?.showEntry?.();
+  composerView.showEntry();
 }
 let newPostInFlight=false;
 async function openNewPost(){
@@ -59,21 +71,30 @@ async function openNewPost(){
     if(!state||state.loadStatus!=='ready'){await showDraftLoadError();return}
     if(state.hasDraft&&!(await confirmDraftReplacement()))return;
     await commitNewPost(draft);
+  }catch(error){
+    console.error('New Post entry failed to load',error);
+    await showNewPostLoadError();
   }finally{newPostInFlight=false;button.disabled=false}
 }
-function resumeDraft(){
+async function resumeDraft(){
   const state=window.CosmoSofaDraft?.getState?.();
   if(state?.loadStatus!=='ready'||!state.hasDraft)return;
   if(state.screen==='beforeafter'){
     window.CosmoBeforeAfter?.open?.();
     return;
   }
-  router.show('composer');
-  if(state.screen==='ai')window.CosmoComposerView?.showAi?.();
-  else window.CosmoComposerView?.showEditor?.({focus:false});
+  try{
+    const composerView=await loadNewPostEntry();
+    router.show('composer');
+    if(state.screen==='ai')composerView.showAi();
+    else composerView.showEditor({focus:false});
+  }catch(error){
+    console.error('New Post entry failed to load',error);
+    await showNewPostLoadError();
+  }
 }
 home.querySelector('#flow-new').addEventListener('click',()=>{void openNewPost()});
-continueButton.addEventListener('click',resumeDraft);
+continueButton.addEventListener('click',()=>{void resumeDraft()});
 ai.querySelector('#flow-ai-back').addEventListener('click',()=>router.show('home'));
 ai.querySelectorAll('.cosmo-ai-chip').forEach(chip=>chip.addEventListener('click',()=>{ai.querySelectorAll('.cosmo-ai-chip').forEach(x=>x.classList.remove('active'));chip.classList.add('active');tg?.HapticFeedback?.selectionChanged?.()}));
 const aiPrompt=ai.querySelector('.cosmo-ai-prompt input');
