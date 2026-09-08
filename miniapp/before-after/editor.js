@@ -28,7 +28,7 @@ export function createEditor({ $, editor, stage, editImage, wmImage, rotation, o
   }
   async function openWatermark() {
     if (!state.selectedWatermark) return;
-    const baseBlob = await composite.blob(), baseUrl = URL.createObjectURL(baseBlob), wm = await loadImage(state.selectedWatermark.url);
+    const baseBlob = await composite.photoBlob(), baseUrl = URL.createObjectURL(baseBlob), wm = await loadImage(state.selectedWatermark.url);
     const rect = $('slots').getBoundingClientRect(); mode = 'watermark'; editing = null; snapshot = { ...state.watermarkState };
     editor.hidden = false; opacityControl.hidden = false; $('editorTitle').textContent = 'Водяной знак';
     $('editorHint').textContent = 'Двигайте водяной знак одним пальцем. Масштабируйте двумя.';
@@ -65,7 +65,7 @@ export function createEditor({ $, editor, stage, editImage, wmImage, rotation, o
     close(); onRender(); return true;
   };
   $('editorSave').onclick = async () => {
-    if (mode === 'watermark') await composite.commitWatermark(state.selectedWatermark, state.watermarkState, loadImage);
+    if (mode === 'watermark') await composite.commitWatermark();
     close(); onRender(); return true;
   };
   return { openPhoto, openWatermark, close, transform };

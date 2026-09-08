@@ -1,4 +1,4 @@
-export function createWatermarks({ $, carousel, fileInput, state, getEditor, composite, authHeaders, loadImage, showError }) {
+export function createWatermarks({ $, carousel, fileInput, state, getEditor, composite, authHeaders, loadImage, showError, onRender }) {
   async function fetchBlob(id) {
     const response = await fetch(`/api/miniapp/watermarks/${encodeURIComponent(id)}`, { headers: authHeaders() });
     if (!response.ok) throw new Error('Не удалось загрузить водяной знак');
@@ -12,7 +12,7 @@ export function createWatermarks({ $, carousel, fileInput, state, getEditor, com
   }
   async function select(button) {
     carousel.querySelectorAll('.watermark-item').forEach(x => x.classList.toggle('selected', x === button));
-    if (button.dataset.watermark === 'none') { state.selectedWatermark = null; composite.clearCommitted(); state.notify(); return; }
+    if (button.dataset.watermark === 'none') { state.selectedWatermark = null; composite.clearCommitted(); state.notify(); onRender?.(); return; }
     state.selectedWatermark = { id: button.dataset.watermark, url: button.dataset.url };
     state.watermarkState = { x: 0, y: 0, scale: 1, rotation: 0, opacity: .2 };
     await getEditor().openWatermark();
