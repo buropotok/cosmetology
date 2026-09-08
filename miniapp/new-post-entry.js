@@ -65,24 +65,16 @@
     if(focus)queueMicrotask(()=>document.querySelector('#text')?.focus());
   }
 
-  function openBeforeAfter(){
-    controls.hidden=true;
-    window.CosmoBeforeAfter?.open?.();
-  }
-
   controls.addEventListener('click',event=>{
     const button=event.target.closest?.('[data-new-post-choice]');
     if(!button)return;
+    const navigation=window.CosmoNavigation;
+    if(!navigation)return;
     const choice=button.dataset.newPostChoice;
-    if(choice==='ai')showAi();
-    else if(choice==='manual')showEditor({manual:true});
-    else if(choice==='before-after')openBeforeAfter();
+    if(choice==='ai')void navigation.push(navigation.STATES.AI);
+    else if(choice==='manual')void navigation.push(navigation.STATES.PUBLISH,{manual:true});
+    else if(choice==='before-after')void navigation.push(navigation.STATES.BEFORE_AFTER);
   });
 
-  window.addEventListener('cosmo-before-after-close',event=>{
-    if(event.detail?.action==='back')showEntry();
-    else if(event.detail?.action==='save')showEditor({focus:false});
-  });
-
-  window.CosmoComposerView=Object.freeze({showEntry,showAi,showEditor,openBeforeAfter});
+  window.CosmoComposerView=Object.freeze({showEntry,showAi,showEditor});
 })();
