@@ -35,3 +35,10 @@ test('solo editor disables nested photo editor and exposes main rotation UI', ()
   assert.match(css, /body\[data-mode=solo\] \[data-slot=after\]/);
   assert.match(css, /\.solo-rotation/);
 });
+
+test('solo keeps watermark editing in the dedicated editor while photo taps stay inline', () => {
+  const source = read('./before-after.js');
+  const watermarks = read('./before-after/watermarks.js');
+  assert.match(source, /mode === 'dual' && tap && role && state\.photos\[role\]\) editor\.openPhoto\(role\)/);
+  assert.match(watermarks, /await getEditor\(\)\.openWatermark\(\)/);
+});
