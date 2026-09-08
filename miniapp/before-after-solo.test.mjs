@@ -24,9 +24,8 @@ test('Before After controller keeps its public API stable and destroys each isol
   assert.match(source, /request\?\.mode==='solo'/);
   assert.match(source, /ensureOverlay\('solo'\)/);
   assert.match(source, /manager\.replaceAt\(soloIndex,file\)/);
-  assert.match(source, /function destroySolo\(\)/);
-  assert.match(source, /overlay\.remove\(\);overlay=null;soloIndex=null;soloFile=null;currentMode='dual'/);
-  assert.match(source, /if\(currentMode==='solo'\)destroySolo\(\)/);
+  assert.match(source, /function destroySolo\(\)\{if\(!overlay\)return;overlay\.remove\(\);overlay=null;soloIndex=null;soloFile=null;currentMode='dual'\}/);
+  assert.match(source, /if\(currentMode==='solo'\)destroySolo\(\);else overlay\.hidden=true/);
   assert.match(source, /Object\.freeze\(\{open,close,clear,save,saveDraft,saveAsset,removeAsset,swapAssets\}\)/);
   assert.doesNotMatch(source, /Object\.freeze\(\{[^}]*openSolo/);
 });
@@ -39,6 +38,17 @@ test('solo bridge accepts a parent-window image file and does not persist Before
   assert.match(source, /typeof file\.size!=='number'/);
   assert.match(source, /typeof file\.arrayBuffer!=='function'/);
   assert.doesNotMatch(source, /file instanceof File/);
+});
+
+test('solo is source-only and fits the canvas to the source photo aspect ratio', () => {
+  const source = read('./before-after.js');
+  assert.match(source, /file\.disabled = true/);
+  assert.match(source, /document\.querySelectorAll\('\.empty'\)\.forEach\(element => \{ element\.style\.display = 'none'; \}\)/);
+  assert.match(source, /if \(mode === 'solo'\) \{ file\.value = ''; return; \}/);
+  assert.match(source, /element\.onclick = event => \{ if \(mode === 'solo'\) return;/);
+  assert.match(source, /return width > 0 && height > 0 \? `\$\{width\}\/\$\{height\}` : '16\/9'/);
+  assert.match(source, /state\.selectedRatio = sourceRatio\(photo\)/);
+  assert.match(source, /geometry\.fit\(photo, rect\)/);
 });
 
 test('solo photo taps stay inline and expose main rotation UI', () => {
