@@ -13,9 +13,16 @@ describe('Before/After client persistence contract',()=>{
     expect(saveDraft).not.toContain("body.set('imagesChanged','1')");
     expect(saveDraft).not.toContain("body.append('images'");
     expect(controller).toContain("fetch('/api/miniapp/before-after/asset'");
-    expect(controller).toContain("fetch('/api/miniapp/before-after/remove'");
-    expect(controller).toContain("method:'POST'");
     expect(controller).toContain("fetch('/api/miniapp/before-after/swap'");
+  });
+
+  it('uses the dedicated Telegram-authenticated remove endpoint',()=>{
+    const controller=source('before-after-controller.js');
+    const removeAsset=controller.match(/async function removeAsset\(role\)\{(.+?)\n  async function swapAssets/s)?.[1]||'';
+    expect(removeAsset).toContain("fetch('/api/miniapp/before-after/remove'");
+    expect(removeAsset).toContain("method:'POST'");
+    expect(removeAsset).toContain('authHeaders()');
+    expect(removeAsset).not.toContain("method:'DELETE'");
   });
 
   it('updates the local BA file cache only after durable asset operations succeed',()=>{
@@ -45,7 +52,7 @@ describe('Before/After client persistence contract',()=>{
     const store=source('draft-store.js'),drafts=source('drafts.js');
     expect(store).toContain('draft.beforeAfterImages');
     expect(store).toContain('beforeAfterImages.push({role:item.role,file:new File');
-    expect(drafts).toContain('current.beforeAfterState');
+    expect(drafts).toContain('current.beforeAfterImages');
     expect(drafts).toContain('beforeAfterFiles.get(role)');
     expect(drafts).not.toContain('state.getSnapshot().images.slice(0,2)');
   });
