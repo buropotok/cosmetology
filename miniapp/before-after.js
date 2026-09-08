@@ -62,6 +62,7 @@ function configureMode() {
   document.body.dataset.mode = mode;
   if (mode !== 'solo') return;
   file.disabled = true;
+  document.querySelectorAll('.empty').forEach(element => { element.style.display = 'none'; });
   document.querySelector('header strong').textContent = 'Фото';
   const controls = document.createElement('section'); controls.className = 'solo-rotation'; controls.innerHTML = '<div><strong>Поворот</strong><span id="soloAngle">0°</span></div>';
   const slider = rotation.cloneNode(true); slider.id = 'soloRotation'; controls.append(slider); slots.after(controls);
