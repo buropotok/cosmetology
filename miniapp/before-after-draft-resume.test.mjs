@@ -23,9 +23,9 @@ test('opening Before/After marks the draft without clearing it',()=>{
 });
 
 test('Continue routes a Before/After draft centrally from Home navigation',()=>{
-  assert.match(navigation,/function resumeDraft\(\)/);
+  assert.match(navigation,/async function resumeDraft\(\)/);
   assert.match(navigation,/state\.screen==='beforeafter'/);
   assert.match(navigation,/CosmoBeforeAfter\?\.open\?\.\(\)/);
-  assert.match(navigation,/continueButton\.addEventListener\('click',resumeDraft\)/);
+  assert.match(navigation,/continueButton\.addEventListener\('click',\(\)=>\{void resumeDraft\(\)\}\)/);
   assert.doesNotMatch(bootstrap,/draft-resume-router\.js/);
 });
