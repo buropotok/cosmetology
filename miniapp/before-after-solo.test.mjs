@@ -42,6 +42,7 @@ test('solo bridge accepts a parent-window image file and does not persist Before
 test('solo is source-only and fits the canvas to the source photo aspect ratio', () => {
   const source = read('./before-after.js');
   assert.match(source, /file\.disabled = true/);
+  assert.match(source, /document\.querySelectorAll\('\.empty'\)\.forEach\(element => \{ element\.style\.display = 'none'; \}\)/);
   assert.match(source, /if \(mode === 'solo'\) \{ file\.value = ''; return; \}/);
   assert.match(source, /element\.onclick = event => \{ if \(mode === 'solo'\) return;/);
   assert.match(source, /return width > 0 && height > 0 \? `\$\{width\}\/\$\{height\}` : '16\/9'/);
