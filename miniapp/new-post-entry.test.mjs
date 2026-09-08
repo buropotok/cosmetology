@@ -16,7 +16,7 @@ test('Home new-post flow opens the Composer choice screen',()=>{
   assert.match(entry,/ДО \/ ПОСЛЕ/);
   assert.match(navigation,/async function openNewPost\(\)/);
   assert.match(navigation,/cosmo-ai-wizard-reset/);
-  assert.match(navigation,/router\.show\('composer'\);\s*window\.CosmoComposerView\?\.showEntry\?\.\(\)/);
+  assert.match(navigation,/const composerView=await getNewPostEntryOrReport\(\);\s*if\(!composerView\)return;[\s\S]*?router\.show\('composer'\);\s*composerView\.showEntry\(\)/);
   assert.match(entry,/function showEntry\(\)[\s\S]*wizard\.hidden=true;\s*composerContent\.hidden=true;\s*controls\.hidden=false;\s*publishMode\('entry'\)/);
 });
 
@@ -24,8 +24,8 @@ test('AI interface opens only after explicit AI choice',()=>{
   assert.match(entry,/if\(choice==='ai'\)showAi\(\)/);
   assert.match(entry,/function showAi\(\)/);
   assert.match(entry,/state\.restore\(\{\.\.\.state\.getSnapshot\(\),screen:'ai'\}\)/);
-  assert.ok(bootstrap.indexOf("import('/publish-ai-wizard.js')")<bootstrap.indexOf("import('/new-post-entry.js')"));
-  assert.ok(bootstrap.indexOf("import('/new-post-entry.js')")<bootstrap.indexOf("import('/navigation.js')"));
+  assert.doesNotMatch(bootstrap,/import\(['"]\/new-post-entry\.js['"]\)/);
+  assert.match(navigation,/newPostEntryPromise=import\('\/new-post-entry\.js'\)/);
 });
 
 test('manual and before-after choices stay inside the Composer view',()=>{
