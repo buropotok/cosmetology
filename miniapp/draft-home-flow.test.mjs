@@ -4,6 +4,7 @@ import {readFile} from 'node:fs/promises';
 
 const navigation=await readFile(new URL('./navigation.js',import.meta.url),'utf8');
 const drafts=await readFile(new URL('./drafts.js',import.meta.url),'utf8');
+const store=await readFile(new URL('./draft-store.js',import.meta.url),'utf8');
 const overlay=await readFile(new URL('./draft-loading-overlay.js',import.meta.url),'utf8');
 
 test('Home shows New Post and Continue immediately without draft readiness',()=>{
@@ -13,30 +14,26 @@ test('Home shows New Post and Continue immediately without draft readiness',()=>
   assert.doesNotMatch(navigation,/continueButton\.hidden=state\.loadStatus/);
 });
 
-test('draft runtime does not load or probe the server at startup',()=>{
-  assert.match(drafts,/async function load\(\)\{const result=await store\.load\(\);beforeAfterFilesInitialized=false;return result\}/);
+test('startup and New Post readiness never GET the server draft',()=>{
   assert.doesNotMatch(drafts,/const initialLoad=load\(\)/);
-  assert.doesNotMatch(drafts,/void initialLoad/);
-  assert.match(drafts,/async function whenReady\(\)/);
-  assert.match(drafts,/if\(current\.loadStatus==='ready'\)return current;await load\(\)/);
+  assert.match(drafts,/function whenReady\(\)\{return Promise\.resolve\(store\.getState\(\)\)\}/);
+  assert.doesNotMatch(drafts,/whenReady[^\n]*load\(\)/);
+  assert.match(store,/loadStatus='ready'/);
 });
 
-test('New Post can request draft readiness on demand before destructive confirmation',()=>{
-  assert.match(navigation,/state=draft\.whenReady\?await draft\.whenReady\(\):draft\.getState\?\.\(\)/);
-  assert.match(navigation,/if\(!state\|\|state\.loadStatus!=='ready'\)\{await showDraftLoadError\(\);return\}/);
-  assert.match(navigation,/if\(state\.hasDraft&&!\(await confirmDraftReplacement\(\)\)\)return/);
+test('New Post uses only live local state before destructive confirmation',()=>{
+  const start=navigation.indexOf('async function openNewPost()');
+  const end=navigation.indexOf('let resumeInFlight=false',start);
+  const flow=navigation.slice(start,end);
+  assert.match(flow,/draft\.whenReady\?await draft\.whenReady\(\):draft\.getState\?\.\(\)/);
+  assert.doesNotMatch(flow,/draft\.load\(/);
+  assert.match(flow,/if\(state\.hasDraft&&!\(await confirmDraftReplacement\(\)\)\)return/);
 });
 
-test('existing draft requires explicit destructive confirmation',()=>{
-  assert.match(navigation,/message:'Ваш черновик будет удален!'/);
-  assert.match(navigation,/id:'cancel',type:'cancel',text:'Отмена'/);
-  assert.match(navigation,/id:'continue',type:'destructive',text:'Продолжить'/);
-});
-
-test('cancel has no committed new-post side effects',()=>{
-  const cancelGuard=navigation.indexOf("if(state.hasDraft&&!(await confirmDraftReplacement()))return;");
-  const commit=navigation.indexOf('await commitNewPost(draft);',cancelGuard);
-  assert.ok(cancelGuard>=0&&commit>cancelGuard);
+test('New Post does not wait for server draft deletion before entering the menu',()=>{
+  assert.match(drafts,/const persistence=store\.clear\(\)/);
+  assert.match(drafts,/void persistence/);
+  assert.match(drafts,/return Promise\.resolve\(true\)/);
   const committed=navigation.slice(navigation.indexOf('async function commitNewPost'),navigation.indexOf('let newPostInFlight'));
   assert.match(committed,/await draft\.clear\(\)/);
   assert.match(committed,/cosmo-new-post/);
@@ -44,7 +41,17 @@ test('cancel has no committed new-post side effects',()=>{
   assert.match(committed,/navigation\.reset\(\[STATES\.HOME,STATES\.MENU\]\)/);
 });
 
-test('Continue is the explicit full draft load boundary and then opens the menu',()=>{
+test('existing live draft requires explicit destructive confirmation and cancel commits nothing',()=>{
+  assert.match(navigation,/message:'Ваш черновик будет удален!'/);
+  assert.match(navigation,/id:'cancel',type:'cancel',text:'Отмена'/);
+  assert.match(navigation,/id:'continue',type:'destructive',text:'Продолжить'/);
+  const cancelGuard=navigation.indexOf("if(state.hasDraft&&!(await confirmDraftReplacement()))return;");
+  const commit=navigation.indexOf('await commitNewPost(draft);',cancelGuard);
+  assert.ok(cancelGuard>=0&&commit>cancelGuard);
+});
+
+test('first Continue is the explicit server restore boundary and opens the menu',()=>{
+  assert.match(drafts,/const result=await store\.load\(\)/);
   const start=navigation.indexOf('async function resumeDraft()');
   const end=navigation.indexOf("home.querySelector('#flow-new')",start);
   assert.ok(start>=0&&end>start,'resumeDraft should exist before Home handlers');
@@ -54,6 +61,18 @@ test('Continue is the explicit full draft load boundary and then opens the menu'
   assert.match(resume,/navigation\.reset\(\[STATES\.HOME,STATES\.MENU\]\)/);
   assert.doesNotMatch(resume,/state\.screen/);
   assert.doesNotMatch(resume,/STATES\.(AI|PUBLISH|BEFORE_AFTER)/);
+});
+
+test('restored live session makes later Continue network-free',()=>{
+  assert.match(drafts,/if\(liveSessionActive\)return \{liveSession:true\}/);
+  assert.match(drafts,/if\(result\)liveSessionActive=true/);
+  assert.match(drafts,/return liveSessionActive\?\{\.\.\.current,hasDraft:true\}:current/);
+});
+
+test('New Post creates a live empty frontend session without waiting for persistence',()=>{
+  assert.match(drafts,/function clear\(\)\{\s*liveSessionActive=true/);
+  assert.match(drafts,/const persistence=store\.clear\(\)/);
+  assert.match(drafts,/return Promise\.resolve\(true\)/);
 });
 
 test('missing saved session is acknowledged and Continue is hidden for this frontend session',()=>{
