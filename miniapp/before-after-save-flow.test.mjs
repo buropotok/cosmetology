@@ -57,9 +57,9 @@ test('Before After delete action is visible and owned by the entry component',()
 });
 
 test('Before After resize tracks pointer on window through the resize owner',()=>{
-  assert.match(resize,/window\.addEventListener\('pointermove',onPointerMove/);
-  assert.match(resize,/window\.addEventListener\('pointerup',onPointerEnd/);
-  assert.match(resize,/window\.addEventListener\('pointercancel',onPointerEnd/);
+  assert.match(resize,/window\.addEventListener\('pointermove',\s*onPointerMove,\s*\{\s*capture:\s*true,\s*passive:\s*false\s*\}\)/);
+  assert.match(resize,/window\.addEventListener\('pointerup',\s*onPointerEnd,\s*true\)/);
+  assert.match(resize,/window\.addEventListener\('pointercancel',\s*onPointerEnd,\s*true\)/);
   assert.match(resize,/state\.cropHeight = next/);
   assert.doesNotMatch(resize,/setPointerCapture|releasePointerCapture/);
 });
