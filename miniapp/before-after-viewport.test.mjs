@@ -109,6 +109,104 @@ test('a new tap outside the crop handle cancels a stale resize session before po
   }
 });
 
+test('pointerup only ends crop resize and never reapplies its release coordinate', () => {
+  const previousWindow = globalThis.window;
+  const previousRaf = globalThis.requestAnimationFrame;
+  const previousCancelRaf = globalThis.cancelAnimationFrame;
+  const fakeWindow = new FakeTarget();
+  fakeWindow.innerHeight = 900;
+  globalThis.window = fakeWindow;
+  globalThis.requestAnimationFrame = () => 1;
+  globalThis.cancelAnimationFrame = () => {};
+
+  let height = 300;
+  const style = { aspectRatio: '' };
+  Object.defineProperty(style, 'height', {
+    get: () => `${height}px`,
+    set: value => { height = Number.parseFloat(value); },
+  });
+  const handle = new FakeTarget();
+  const slots = { style, getBoundingClientRect: () => ({ width: 400, height }) };
+  const state = { cropHeight: null, selectedRatio: '16/9' };
+  let captures = 0, preserves = 0;
+  const geometry = {
+    captureViewportAnchors() { captures += 1; return { before: { x: 200, y: height / 2 } }; },
+    preserveViewportAnchors() { preserves += 1; },
+  };
+  const composite = { clearCommitted() {} };
+
+  try {
+    const resize = createResize({ handle, slots, state, geometry, composite, onRender() {} });
+    handle.emit('pointerdown', pointerEvent({ pointerId: 7, clientY: 200, target: handle }));
+    fakeWindow.emit('pointermove', pointerEvent({ pointerId: 7, clientY: 250, target: handle }));
+    assert.equal(height, 350);
+    assert.equal(state.cropHeight, 350);
+    assert.equal(captures, 1);
+    assert.equal(preserves, 1);
+
+    fakeWindow.emit('pointerup', pointerEvent({ pointerId: 7, clientY: -500, target: handle }));
+
+    assert.equal(height, 350);
+    assert.equal(state.cropHeight, 350);
+    assert.equal(captures, 1);
+    assert.equal(preserves, 1);
+    assert.equal(fakeWindow.count('pointermove'), 0);
+    assert.equal(fakeWindow.count('touchend'), 0);
+    resize.destroy();
+  } finally {
+    globalThis.window = previousWindow;
+    globalThis.requestAnimationFrame = previousRaf;
+    globalThis.cancelAnimationFrame = previousCancelRaf;
+  }
+});
+
+test('touchend is a WebKit fallback that only cleans up an active resize', () => {
+  const previousWindow = globalThis.window;
+  const previousRaf = globalThis.requestAnimationFrame;
+  const previousCancelRaf = globalThis.cancelAnimationFrame;
+  const fakeWindow = new FakeTarget();
+  fakeWindow.innerHeight = 900;
+  globalThis.window = fakeWindow;
+  globalThis.requestAnimationFrame = () => 1;
+  globalThis.cancelAnimationFrame = () => {};
+
+  let height = 300;
+  const style = { aspectRatio: '' };
+  Object.defineProperty(style, 'height', {
+    get: () => `${height}px`,
+    set: value => { height = Number.parseFloat(value); },
+  });
+  const handle = new FakeTarget();
+  const slots = { style, getBoundingClientRect: () => ({ width: 400, height }) };
+  const state = { cropHeight: null, selectedRatio: '16/9' };
+  const geometry = {
+    captureViewportAnchors() { return { before: { x: 200, y: height / 2 } }; },
+    preserveViewportAnchors() {},
+  };
+  const composite = { clearCommitted() {} };
+
+  try {
+    const resize = createResize({ handle, slots, state, geometry, composite, onRender() {} });
+    handle.emit('pointerdown', pointerEvent({ pointerId: 3, clientY: 200, target: handle }));
+    fakeWindow.emit('pointermove', pointerEvent({ pointerId: 3, clientY: 240, target: handle }));
+    assert.equal(height, 340);
+    assert.equal(fakeWindow.count('pointermove'), 1);
+    assert.equal(fakeWindow.count('touchend'), 1);
+
+    fakeWindow.emit('touchend', { target: handle });
+    fakeWindow.emit('pointermove', pointerEvent({ pointerId: 3, clientY: 20, target: handle }));
+
+    assert.equal(height, 340);
+    assert.equal(state.cropHeight, 340);
+    assert.equal(fakeWindow.count('pointermove'), 0);
+    resize.destroy();
+  } finally {
+    globalThis.window = previousWindow;
+    globalThis.requestAnimationFrame = previousRaf;
+    globalThis.cancelAnimationFrame = previousCancelRaf;
+  }
+});
+
 test('ratio presets preserve viewport anchors instead of refitting the photo', async () => {
   const source = await readFile(new URL('./before-after.js', import.meta.url), 'utf8');
   const start = source.indexOf('function applyRatio(value)');
