@@ -3,6 +3,7 @@ import { createGeometry } from './before-after/geometry.js';
 import { createComposite } from './before-after/composite.js';
 import { createEditor } from './before-after/editor.js';
 import { createWatermarks } from './before-after/watermarks.js';
+import { createResize } from './before-after/resize.js';
 
 const $ = id => document.getElementById(id);
 const slots = $('slots'), file = $('file'), editorElement = $('editor'), stage = $('stage'), editImage = $('editImage'), wmImage = $('watermarkImage');
@@ -19,6 +20,7 @@ const composite = createComposite({ slots, photos: state.photos, compositeResult
 let editor;
 const watermarks = createWatermarks({ $, carousel: wmCarousel, fileInput: wmFile, state, getEditor: () => editor, composite, authHeaders, loadImage, showError });
 editor = createEditor({ $, editor: editorElement, stage, editImage, wmImage, rotation, opacity, opacityControl, photos: state.photos, state, geometry, composite, loadImage, onRender: render });
+const resize = createResize({ handle: cropHandle, slots, state, geometry, composite, onRender: render });
 
 function render() {
   slots.dataset.layout = state.layout;
@@ -57,6 +59,19 @@ file.onchange = () => {
 };
 $('swap').onclick = () => { [state.photos.before, state.photos.after] = [state.photos.after, state.photos.before]; composite.clearCommitted(); render(); };
 
+document.querySelectorAll('[data-delete-photo]').forEach(button => {
+  button.onpointerdown = event => { event.preventDefault(); event.stopPropagation(); };
+  button.onclick = event => {
+    event.preventDefault(); event.stopPropagation();
+    const role = button.dataset.deletePhoto, photo = state.photos[role];
+    if (!photo) return;
+    URL.revokeObjectURL(photo.url);
+    state.photos[role] = null;
+    composite.clearCommitted();
+    render();
+  };
+});
+
 const previewPointers = new Map(); let previewGesture = null, previewSlot = null, previewMoved = false, previewStarted = 0;
 const point = e => ({ x: e.clientX, y: e.clientY });
 function previewBegin(role) {
@@ -65,10 +80,16 @@ function previewBegin(role) {
   else if (points.length >= 2) previewGesture = { type: 'pinch', distance: Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y), scale: photo.scale };
 }
 document.querySelectorAll('[data-slot]').forEach(element => {
-  element.onclick = null;
+  element.onclick = event => {
+    const role = element.dataset.slot;
+    if (event.target?.closest?.('.delete-photo') || state.photos[role]) return;
+    pending = role;
+    if (!event.target?.closest?.('label[for="file"]')) file.click();
+  };
   element.onpointerdown = event => {
+    if (event.target?.closest?.('.delete-photo')) return;
     if (event.button != null && event.button !== 0) return; const role = element.dataset.slot;
-    if (!state.photos[role]) { pending = role; file.click(); return; }
+    if (!state.photos[role]) { pending = role; return; }
     event.preventDefault(); element.setPointerCapture?.(event.pointerId); previewSlot = role; previewStarted = performance.now(); previewMoved = false;
     previewPointers.set(event.pointerId, point(event)); previewBegin(role);
   };
@@ -95,16 +116,6 @@ document.querySelectorAll('[data-slot]').forEach(element => {
   element.onpointerup = end; element.onpointercancel = event => { previewPointers.delete(event.pointerId); previewGesture = null; previewSlot = null; };
 });
 
-let cropGesture = null;
-cropHandle.onpointerdown = event => { event.preventDefault(); event.stopPropagation(); cropGesture = { startY: event.clientY, startHeight: slots.getBoundingClientRect().height }; cropHandle.setPointerCapture?.(event.pointerId); };
-cropHandle.onpointermove = event => {
-  if (!cropGesture) return; event.preventDefault(); const width = slots.getBoundingClientRect().width, minHeight = width / (16 / 9), maxHeight = Math.max(minHeight, window.innerHeight - 120);
-  const next = Math.max(minHeight, Math.min(maxHeight, cropGesture.startHeight + event.clientY - cropGesture.startY));
-  state.cropHeight = next; state.selectedRatio = 'custom'; slots.style.height = `${next}px`; slots.style.aspectRatio = 'auto'; composite.clearCommitted();
-  requestAnimationFrame(() => { geometry.refitForComposite(); render(); });
-};
-cropHandle.onpointerup = cropHandle.onpointercancel = event => { cropGesture = null; cropHandle.releasePointerCapture?.(event.pointerId); state.notify(); };
-
 window.cosmoBeforeAfterCompositeBlob = () => composite.publicBlob();
 window.CosmoBeforeAfterState = Object.freeze({
   getDraftSnapshot: () => state.snapshot(),
@@ -113,6 +124,7 @@ window.CosmoBeforeAfterState = Object.freeze({
 function returnToPublisher() { try { sessionStorage.setItem('cosmo-return-screen', 'composer'); } catch {} location.href = '/'; }
 $('back').onclick = returnToPublisher; $('finish').onclick = returnToPublisher;
 window.addEventListener('beforeunload', () => {
+  resize.destroy();
   for (const role of ['before', 'after']) if (state.photos[role]) URL.revokeObjectURL(state.photos[role].url);
   wmCarousel.querySelectorAll('[data-url]').forEach(button => URL.revokeObjectURL(button.dataset.url));
   if (compositeResult.dataset.url) URL.revokeObjectURL(compositeResult.dataset.url);
