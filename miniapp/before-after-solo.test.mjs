@@ -24,7 +24,8 @@ test('Before After controller keeps its public API stable and destroys each isol
   assert.match(source, /request\?\.mode==='solo'/);
   assert.match(source, /ensureOverlay\('solo'\)/);
   assert.match(source, /manager\.replaceAt\(soloIndex,file\)/);
-  assert.match(source, /if\(currentMode==='solo'\)\{overlay\.remove\(\);overlay=null;soloIndex=null;soloFile=null;currentMode='dual'\}/);
+  assert.match(source, /function destroySolo\(\)\{if\(!overlay\)return;overlay\.remove\(\);overlay=null;soloIndex=null;soloFile=null;currentMode='dual'\}/);
+  assert.match(source, /if\(currentMode==='solo'\)destroySolo\(\);else overlay\.hidden=true/);
   assert.match(source, /Object\.freeze\(\{open,close,clear,save,saveDraft,saveAsset,removeAsset,swapAssets\}\)/);
   assert.doesNotMatch(source, /Object\.freeze\(\{[^}]*openSolo/);
 });
