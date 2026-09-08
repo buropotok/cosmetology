@@ -45,14 +45,14 @@ test('Before After uses native label activation for photo picking without an iOS
   assert.match(html,/id="file" class="native-file-input"/);
   assert.doesNotMatch(html,/id="file"[^>]* hidden/);
   assert.doesNotMatch(html,/before-after-ios\.js/);
-  assert.match(entry,/if \(!event\.target\.closest\('\.empty'\)\) file\.click\(\)/);
+  assert.match(entry,/if \(!event\.target\?\.closest\?\.\('label\[for="file"\]'\)\) file\.click\(\)/);
 });
 
 test('Before After delete action is visible and owned by the entry component',()=>{
   assert.match(html,/data-delete-photo="before"[^>]*>Удалить</);
   assert.match(html,/data-delete-photo="after"[^>]*>Удалить</);
   assert.match(css,/\.delete-photo\{[^}]*background:var\(--danger/);
-  assert.match(entry,/function removePhoto\(role\)/);
+  assert.match(entry,/document\.querySelectorAll\('\[data-delete-photo\]'\)/);
   assert.match(entry,/state\.photos\[role\] = null/);
 });
 
