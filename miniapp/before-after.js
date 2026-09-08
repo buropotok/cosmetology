@@ -32,7 +32,7 @@ function render() {
     element.classList.toggle('loaded', !!photo);
     if (photo) { image.src = photo.url; image.style.width = `${photo.img.naturalWidth}px`; image.style.height = `${photo.img.naturalHeight}px`; image.style.transform = transformFor(photo); }
   }
-  if (mode === 'solo') { rotation.value = String(state.photos.before?.rotation || 0); const angle = $('angle'), soloAngle = $('soloAngle'); if (angle) angle.textContent = `${rotation.value}°`; if (soloAngle) soloAngle.textContent = `${rotation.value}°`; }
+  if (mode === 'solo') { const value = String(state.photos.before?.rotation || 0), soloRotation = $('soloRotation'), soloAngle = $('soloAngle'); if (soloRotation) soloRotation.value = value; if (soloAngle) soloAngle.textContent = `${value}°`; }
   $('finish').disabled = !(state.photos.before || state.photos.after);
   state.notify();
 }
@@ -49,7 +49,7 @@ function configureMode() {
   if (mode !== 'solo') return;
   document.querySelector('header strong').textContent = 'Фото';
   const controls = document.createElement('section'); controls.className = 'solo-rotation'; controls.innerHTML = '<div><strong>Поворот</strong><span id="soloAngle">0°</span></div>';
-  const slider = rotation; slider.parentNode?.removeChild(slider); controls.append(slider); slots.after(controls);
+  const slider = rotation.cloneNode(true); slider.id = 'soloRotation'; controls.append(slider); slots.after(controls);
   slider.addEventListener('input', () => { const photo = state.photos.before; if (!photo) return; photo.rotation = Number(slider.value); controls.querySelector('#soloAngle').textContent = `${slider.value}°`; composite.clearCommitted(); render(); });
 }
 
