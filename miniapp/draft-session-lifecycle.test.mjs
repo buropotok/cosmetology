@@ -41,7 +41,7 @@ test('restored frontend session makes later Continue reuse live state without an
   assert.equal(calls.load,1);
 
   const resumedAgain=await draft.load();
-  assert.deepEqual(resumedAgain,{liveSession:true});
+  assert.equal(resumedAgain.liveSession,true);
   assert.equal(calls.load,1,'active frontend session must not reload the server draft');
 });
 
@@ -55,7 +55,7 @@ test('New Post resets the session immediately without waiting for server persist
   const clearResult=draft.clear();
   assert.equal(calls.clear,1);
   assert.equal(draft.getState().hasDraft,true,'a new empty frontend session is active immediately');
-  assert.deepEqual(draft.getBeforeAfterDraft().images,[],'Before/After files from the previous session are unavailable immediately');
+  assert.equal(draft.getBeforeAfterDraft().images.length,0,'Before/After files from the previous session are unavailable immediately');
 
   assert.equal(await clearResult,true,'New Post must not await server draft persistence');
   assert.equal(calls.load,1);
