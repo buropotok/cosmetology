@@ -62,19 +62,23 @@ function addFiles(incoming){
  if(total>10)showLimit();
 }
 
+function replaceAt(index,file){
+ if(!Number.isInteger(index)||index<0||index>=files.length||!(file instanceof File))return false;
+ files[index]=file;
+ notifyChange();
+ return true;
+}
+
 window.CosmoComposerImages={
  addFiles,
  replaceFiles(incoming){files=Array.from(incoming||[]).slice(0,10);notifyChange()},
+ replaceAt,
  getFiles(){return files.slice()}
 };
 
 input.addEventListener('change',event=>{
  if(internalChange)return;
  const incoming=Array.from(input.files||[]).slice(0,10);
- // A native picker change adds newly selected files to our managed set.
- // Programmatic changes (draft restore / other app code) already contain the
- // complete desired FileList and must replace it, otherwise restored files
- // are appended to the manager's existing state and appear as duplicates.
  if(event.isTrusted)addFiles(incoming);
  else{files=incoming;internalChange=true;try{input.dispatchEvent(new Event('change',{bubbles:true}))}finally{internalChange=false}void updateVkAspectWarning()}
 });
@@ -87,9 +91,16 @@ function decorate(){
   if(img.parentElement?.classList.contains('composer-thumb'))return;
   const wrap=document.createElement('span');
   wrap.className='composer-thumb';
-  wrap.style.cssText='position:relative;display:block;flex:0 0 62px;width:62px;height:62px;overflow:visible';
+  wrap.style.cssText='position:relative;display:block;flex:0 0 62px;width:62px;height:62px;overflow:visible;cursor:pointer';
   img.parentNode.insertBefore(wrap,img);
   wrap.append(img);
+  wrap.addEventListener('click',event=>{
+   if(event.target?.closest?.('.composer-image-delete'))return;
+   const current=[...previews.querySelectorAll('img')];
+   const index=current.indexOf(img);
+   const selected=index>=0?files[index]:null;
+   if(selected)window.CosmoBeforeAfter?.open?.({mode:'solo',file:selected,index});
+  });
   const del=document.createElement('button');
   del.type='button';
   del.className='composer-image-delete';

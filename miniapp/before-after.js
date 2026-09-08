@@ -6,6 +6,7 @@ import { createWatermarks } from './before-after/watermarks.js';
 import { createResize } from './before-after/resize.js';
 
 const $ = id => document.getElementById(id);
+const mode = new URLSearchParams(location.search).get('mode') === 'solo' ? 'solo' : 'dual';
 const slots = $('slots'), file = $('file'), editorElement = $('editor'), stage = $('stage'), editImage = $('editImage'), wmImage = $('watermarkImage');
 const rotation = $('rotation'), opacity = $('opacity'), opacityControl = $('opacityControl'), compositeResult = $('compositeResult'), cropHandle = $('cropHandle');
 const wmFile = $('watermarkFile'), wmCarousel = $('watermarkCarousel'), webApp = window.Telegram?.WebApp;
@@ -31,6 +32,7 @@ function render() {
     element.classList.toggle('loaded', !!photo);
     if (photo) { image.src = photo.url; image.style.width = `${photo.img.naturalWidth}px`; image.style.height = `${photo.img.naturalHeight}px`; image.style.transform = transformFor(photo); }
   }
+  if (mode === 'solo') { const value = String(state.photos.before?.rotation || 0), soloRotation = $('soloRotation'), soloAngle = $('soloAngle'); if (soloRotation) soloRotation.value = value; if (soloAngle) soloAngle.textContent = `${value}°`; }
   $('finish').disabled = !(state.photos.before || state.photos.after);
   state.notify();
 }
@@ -41,6 +43,14 @@ function applyRatio(value) {
 function restoreLayoutStyles() {
   if (state.selectedRatio === 'custom' && state.cropHeight) { slots.style.aspectRatio = 'auto'; slots.style.height = `${state.cropHeight}px`; }
   else { slots.style.height = ''; slots.style.aspectRatio = state.selectedRatio; }
+}
+function configureMode() {
+  document.body.dataset.mode = mode;
+  if (mode !== 'solo') return;
+  document.querySelector('header strong').textContent = 'Фото';
+  const controls = document.createElement('section'); controls.className = 'solo-rotation'; controls.innerHTML = '<div><strong>Поворот</strong><span id="soloAngle">0°</span></div>';
+  const slider = rotation.cloneNode(true); slider.id = 'soloRotation'; controls.append(slider); slots.after(controls);
+  slider.addEventListener('input', () => { const photo = state.photos.before; if (!photo) return; photo.rotation = Number(slider.value); controls.querySelector('#soloAngle').textContent = `${slider.value}°`; composite.clearCommitted(); render(); });
 }
 
 document.querySelectorAll('[data-ratio]').forEach(button => button.onclick = () => applyRatio(button.dataset.ratio));
@@ -53,7 +63,7 @@ file.onchange = () => {
   image.onload = () => {
     if (state.photos[pending]) URL.revokeObjectURL(state.photos[pending].url);
     state.photos[pending] = { file: selected, url, img: image, x: 0, y: 0, scale: 1, rotation: 0, fitted: false };
-    composite.clearCommitted(); render(); editor.openPhoto(pending);
+    composite.clearCommitted(); render(); if (mode === 'dual') editor.openPhoto(pending);
   };
   image.src = url;
 };
@@ -61,73 +71,24 @@ $('swap').onclick = () => { [state.photos.before, state.photos.after] = [state.p
 
 document.querySelectorAll('[data-delete-photo]').forEach(button => {
   button.onpointerdown = event => { event.preventDefault(); event.stopPropagation(); };
-  button.onclick = event => {
-    event.preventDefault(); event.stopPropagation();
-    const role = button.dataset.deletePhoto, photo = state.photos[role];
-    if (!photo) return;
-    URL.revokeObjectURL(photo.url);
-    state.photos[role] = null;
-    composite.clearCommitted();
-    render();
-  };
+  button.onclick = event => { event.preventDefault(); event.stopPropagation(); const role = button.dataset.deletePhoto, photo = state.photos[role]; if (!photo) return; URL.revokeObjectURL(photo.url); state.photos[role] = null; composite.clearCommitted(); render(); };
 });
 
 const previewPointers = new Map(); let previewGesture = null, previewSlot = null, previewMoved = false, previewStarted = 0;
 const point = e => ({ x: e.clientX, y: e.clientY });
-function previewBegin(role) {
-  const photo = state.photos[role]; if (!photo) return; const points = [...previewPointers.values()];
-  if (points.length === 1) previewGesture = { type: 'pan', start: points[0], x: photo.x, y: photo.y, scale: photo.scale };
-  else if (points.length >= 2) previewGesture = { type: 'pinch', distance: Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y), scale: photo.scale };
-}
+function previewBegin(role) { const photo = state.photos[role]; if (!photo) return; const points = [...previewPointers.values()]; if (points.length === 1) previewGesture = { type: 'pan', start: points[0], x: photo.x, y: photo.y, scale: photo.scale }; else if (points.length >= 2) previewGesture = { type: 'pinch', distance: Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y), scale: photo.scale }; }
 document.querySelectorAll('[data-slot]').forEach(element => {
-  element.onclick = event => {
-    const role = element.dataset.slot;
-    if (event.target?.closest?.('.delete-photo') || state.photos[role]) return;
-    pending = role;
-    if (!event.target?.closest?.('label[for="file"]')) file.click();
-  };
-  element.onpointerdown = event => {
-    if (event.target?.closest?.('.delete-photo')) return;
-    if (event.button != null && event.button !== 0) return; const role = element.dataset.slot;
-    if (!state.photos[role]) { pending = role; return; }
-    event.preventDefault(); element.setPointerCapture?.(event.pointerId); previewSlot = role; previewStarted = performance.now(); previewMoved = false;
-    previewPointers.set(event.pointerId, point(event)); previewBegin(role);
-  };
-  element.onpointermove = event => {
-    const role = previewSlot, photo = state.photos[role]; if (!photo || !previewPointers.has(event.pointerId)) return;
-    event.preventDefault(); previewPointers.set(event.pointerId, point(event)); const points = [...previewPointers.values()];
-    if (points.length === 1) {
-      if (!previewGesture || previewGesture.type !== 'pan') previewBegin(role);
-      const dx = points[0].x - previewGesture.start.x, dy = points[0].y - previewGesture.start.y; if (Math.hypot(dx, dy) > 5) previewMoved = true;
-      photo.x = previewGesture.x + dx; photo.y = previewGesture.y + dy;
-    } else if (points.length >= 2) {
-      previewMoved = true; if (!previewGesture || previewGesture.type !== 'pinch') previewBegin(role);
-      const distance = Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
-      photo.scale = Math.max(.05, Math.min(10, previewGesture.scale * distance / Math.max(1, previewGesture.distance)));
-    }
-    composite.clearCommitted(); render();
-  };
-  const end = event => {
-    const role = previewSlot; previewPointers.delete(event.pointerId);
-    if (previewPointers.size) { previewBegin(role); return; }
-    const tap = !previewMoved && performance.now() - previewStarted < 350; previewGesture = null; previewSlot = null; state.notify();
-    if (tap && role && state.photos[role]) editor.openPhoto(role);
-  };
+  element.onclick = event => { const role = element.dataset.slot; if (event.target?.closest?.('.delete-photo') || state.photos[role]) return; pending = role; if (!event.target?.closest?.('label[for="file"]')) file.click(); };
+  element.onpointerdown = event => { if (event.target?.closest?.('.delete-photo')) return; if (event.button != null && event.button !== 0) return; const role = element.dataset.slot; if (!state.photos[role]) { pending = role; return; } event.preventDefault(); element.setPointerCapture?.(event.pointerId); previewSlot = role; previewStarted = performance.now(); previewMoved = false; previewPointers.set(event.pointerId, point(event)); previewBegin(role); };
+  element.onpointermove = event => { const role = previewSlot, photo = state.photos[role]; if (!photo || !previewPointers.has(event.pointerId)) return; event.preventDefault(); previewPointers.set(event.pointerId, point(event)); const points = [...previewPointers.values()]; if (points.length === 1) { if (!previewGesture || previewGesture.type !== 'pan') previewBegin(role); const dx = points[0].x - previewGesture.start.x, dy = points[0].y - previewGesture.start.y; if (Math.hypot(dx, dy) > 5) previewMoved = true; photo.x = previewGesture.x + dx; photo.y = previewGesture.y + dy; } else if (points.length >= 2) { previewMoved = true; if (!previewGesture || previewGesture.type !== 'pinch') previewBegin(role); const distance = Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y); photo.scale = Math.max(.05, Math.min(10, previewGesture.scale * distance / Math.max(1, previewGesture.distance))); } composite.clearCommitted(); render(); };
+  const end = event => { const role = previewSlot; previewPointers.delete(event.pointerId); if (previewPointers.size) { previewBegin(role); return; } const tap = !previewMoved && performance.now() - previewStarted < 350; previewGesture = null; previewSlot = null; state.notify(); if (mode === 'dual' && tap && role && state.photos[role]) editor.openPhoto(role); };
   element.onpointerup = end; element.onpointercancel = event => { previewPointers.delete(event.pointerId); previewGesture = null; previewSlot = null; };
 });
 
 window.cosmoBeforeAfterCompositeBlob = () => composite.publicBlob();
-window.CosmoBeforeAfterState = Object.freeze({
-  getDraftSnapshot: () => state.snapshot(),
-  restoreDraft: async (saved, files = []) => { await state.restore(saved, files, watermarks.find); restoreLayoutStyles(); composite.clearCommitted(); render(); },
-});
+window.CosmoBeforeAfterState = Object.freeze({ getDraftSnapshot: () => state.snapshot(), restoreDraft: async (saved, files = []) => { await state.restore(saved, files, watermarks.find); restoreLayoutStyles(); composite.clearCommitted(); render(); } });
+window.CosmoBeforeAfterSolo = Object.freeze({ setSourceIndex(index) { if (mode === 'solo') document.body.dataset.sourceIndex = String(index); } });
 function returnToPublisher() { try { sessionStorage.setItem('cosmo-return-screen', 'composer'); } catch {} location.href = '/'; }
 $('back').onclick = returnToPublisher; $('finish').onclick = returnToPublisher;
-window.addEventListener('beforeunload', () => {
-  resize.destroy();
-  for (const role of ['before', 'after']) if (state.photos[role]) URL.revokeObjectURL(state.photos[role].url);
-  wmCarousel.querySelectorAll('[data-url]').forEach(button => URL.revokeObjectURL(button.dataset.url));
-  if (compositeResult.dataset.url) URL.revokeObjectURL(compositeResult.dataset.url);
-});
-applyRatio(state.selectedRatio);
-watermarks.load();
+window.addEventListener('beforeunload', () => { resize.destroy(); for (const role of ['before', 'after']) if (state.photos[role]) URL.revokeObjectURL(state.photos[role].url); wmCarousel.querySelectorAll('[data-url]').forEach(button => URL.revokeObjectURL(button.dataset.url)); if (compositeResult.dataset.url) URL.revokeObjectURL(compositeResult.dataset.url); });
+configureMode(); applyRatio(state.selectedRatio); watermarks.load();
