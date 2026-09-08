@@ -22,11 +22,15 @@ test('opening Before/After marks the draft without clearing it',()=>{
   assert.doesNotMatch(controller,/function open\(\)[\s\S]*?\.clear\(/);
 });
 
-test('Continue routes a Before/After draft centrally through logical navigation',()=>{
-  assert.match(navigation,/async function resumeDraft\(\)/);
-  assert.match(navigation,/state\.screen==='beforeafter'/);
-  assert.match(navigation,/navigation\.reset\(\[STATES\.HOME,STATES\.MENU,STATES\.BEFORE_AFTER\]\)/);
-  assert.doesNotMatch(navigation,/state\.screen==='beforeafter'[\s\S]{0,160}CosmoBeforeAfter\?\.open/);
+test('Continue restores a Before/After draft into the workspace menu without route coupling',()=>{
+  const start=navigation.indexOf('async function resumeDraft()');
+  const end=navigation.indexOf("home.querySelector('#flow-new')",start);
+  assert.ok(start>=0&&end>start,'resumeDraft should exist before Home handlers');
+  const resume=navigation.slice(start,end);
+  assert.match(resume,/navigation\.reset\(\[STATES\.HOME,STATES\.MENU\]\)/);
+  assert.doesNotMatch(resume,/state\.screen/);
+  assert.doesNotMatch(resume,/STATES\.(AI|PUBLISH|BEFORE_AFTER)/);
+  assert.doesNotMatch(resume,/CosmoBeforeAfter\?\.open/);
   assert.match(navigation,/continueButton\.addEventListener\('click',\(\)=>\{void resumeDraft\(\)\}\)/);
   assert.doesNotMatch(bootstrap,/draft-resume-router\.js/);
 });
