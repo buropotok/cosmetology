@@ -1,4 +1,4 @@
-export function createResize({ handle, slots, state, composite, onRender }) {
+export function createResize({ handle, slots, state, geometry, composite, onRender }) {
   // Telegram iOS/WKWebView is reliable with window-level pointer tracking here; avoid pointer capture.
   let active = null;
   let renderFrame = 0;
@@ -18,6 +18,7 @@ export function createResize({ handle, slots, state, composite, onRender }) {
   }
 
   function cleanupPointerListeners() {
+    window.removeEventListener('pointerdown', onForeignPointerDown, true);
     window.removeEventListener('pointermove', onPointerMove, true);
     window.removeEventListener('pointerup', onPointerEnd, true);
     window.removeEventListener('pointercancel', onPointerEnd, true);
@@ -27,6 +28,7 @@ export function createResize({ handle, slots, state, composite, onRender }) {
   function applyPointer(event) {
     if (!active || event.pointerId !== active.pointerId) return false;
     if (event.cancelable) event.preventDefault();
+    const anchors = geometry.captureViewportAnchors();
     const width = slots.getBoundingClientRect().width;
     const minHeight = width / (16 / 9);
     const maxHeight = Math.max(minHeight, window.innerHeight - 120);
@@ -35,6 +37,7 @@ export function createResize({ handle, slots, state, composite, onRender }) {
     state.selectedRatio = 'custom';
     slots.style.height = `${next}px`;
     slots.style.aspectRatio = 'auto';
+    geometry.preserveViewportAnchors(anchors);
     composite.clearCommitted();
     scheduleRender();
     return true;
@@ -50,6 +53,13 @@ export function createResize({ handle, slots, state, composite, onRender }) {
     cleanupPointerListeners();
   }
 
+  function onForeignPointerDown(event) {
+    if (!active) return;
+    const target = event.target;
+    if (target === handle || (target && handle.contains?.(target))) return;
+    cleanupPointerListeners();
+  }
+
   function onPointerDown(event) {
     if (event.button != null && event.button !== 0) return;
     if (event.cancelable) event.preventDefault();
@@ -60,6 +70,7 @@ export function createResize({ handle, slots, state, composite, onRender }) {
       startY: event.clientY,
       startHeight: slots.getBoundingClientRect().height,
     };
+    window.addEventListener('pointerdown', onForeignPointerDown, true);
     window.addEventListener('pointermove', onPointerMove, { capture: true, passive: false });
     window.addEventListener('pointerup', onPointerEnd, true);
     window.addEventListener('pointercancel', onPointerEnd, true);
