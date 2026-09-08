@@ -9,6 +9,7 @@ test('Before/After draft is a real third state with editable payload', () => {
   const service = fs.readFileSync(new URL('../worker/src/services/miniapp-drafts.ts', import.meta.url), 'utf8');
   const draftStore = read('./draft-store.js');
   const beforeAfter = read('./before-after.js');
+  const beforeAfterState = read('./before-after/state.js');
   const bridge = read('./before-after-bridge.js');
   const controller = read('./before-after-controller.js');
 
@@ -19,7 +20,7 @@ test('Before/After draft is a real third state with editable payload', () => {
   assert.match(draftStore, /setBeforeAfterState/);
   assert.match(beforeAfter, /getDraftSnapshot/);
   assert.match(beforeAfter, /restoreDraft/);
-  assert.match(beforeAfter, /imageIndex/);
+  assert.match(beforeAfterState, /imageIndex/);
   assert.match(bridge, /cosmo-before-after-change/);
   assert.match(bridge, /saveOverlay/);
   assert.match(bridge, /saveStage/);
