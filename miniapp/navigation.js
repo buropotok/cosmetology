@@ -44,13 +44,30 @@ async function showNewPostLoadError(){
 let newPostEntryPromise;
 async function loadNewPostEntry(){
   if(window.CosmoComposerView)return window.CosmoComposerView;
-  newPostEntryPromise??=import('/new-post-entry.js');
+  if(!newPostEntryPromise){
+    newPostEntryPromise=import('/new-post-entry.js').catch(error=>{
+      newPostEntryPromise=undefined;
+      throw error;
+    });
+  }
   await newPostEntryPromise;
-  if(!window.CosmoComposerView)throw new Error('New Post entry did not initialize');
+  if(!window.CosmoComposerView){
+    newPostEntryPromise=undefined;
+    throw new Error('New Post entry did not initialize');
+  }
   return window.CosmoComposerView;
 }
+async function getNewPostEntryOrReport(){
+  try{return await loadNewPostEntry()}
+  catch(error){
+    console.error('New Post entry failed to load',error);
+    await showNewPostLoadError();
+    return null;
+  }
+}
 async function commitNewPost(draft){
-  const composerView=await loadNewPostEntry();
+  const composerView=await getNewPostEntryOrReport();
+  if(!composerView)return;
   if(draft?.clear)await draft.clear();
   else draft?.cancelRestore?.();
   window.dispatchEvent(new CustomEvent('cosmo-new-post',{detail:{source:'flow-new'}}));
@@ -71,9 +88,6 @@ async function openNewPost(){
     if(!state||state.loadStatus!=='ready'){await showDraftLoadError();return}
     if(state.hasDraft&&!(await confirmDraftReplacement()))return;
     await commitNewPost(draft);
-  }catch(error){
-    console.error('New Post entry failed to load',error);
-    await showNewPostLoadError();
   }finally{newPostInFlight=false;button.disabled=false}
 }
 async function resumeDraft(){
@@ -83,15 +97,11 @@ async function resumeDraft(){
     window.CosmoBeforeAfter?.open?.();
     return;
   }
-  try{
-    const composerView=await loadNewPostEntry();
-    router.show('composer');
-    if(state.screen==='ai')composerView.showAi();
-    else composerView.showEditor({focus:false});
-  }catch(error){
-    console.error('New Post entry failed to load',error);
-    await showNewPostLoadError();
-  }
+  const composerView=await getNewPostEntryOrReport();
+  if(!composerView)return;
+  router.show('composer');
+  if(state.screen==='ai')composerView.showAi();
+  else composerView.showEditor({focus:false});
 }
 home.querySelector('#flow-new').addEventListener('click',()=>{void openNewPost()});
 continueButton.addEventListener('click',()=>{void resumeDraft()});
