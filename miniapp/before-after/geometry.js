@@ -23,5 +23,27 @@ export function createGeometry({ slots, editor, stage, photos }) {
       if (photo.scale < min) photo.scale = min;
     }
   }
-  return { setEditorGeometryFromRect, setEditorGeometry, fit, refitForComposite };
+  function captureViewportAnchors() {
+    const anchors = {};
+    for (const role of ['before', 'after']) {
+      if (!photos[role]) continue;
+      const slot = document.querySelector(`[data-slot=${role}]`);
+      if (!slot) continue;
+      const rect = slot.getBoundingClientRect();
+      anchors[role] = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    }
+    return anchors;
+  }
+  function preserveViewportAnchors(anchors) {
+    for (const role of ['before', 'after']) {
+      const photo = photos[role], anchor = anchors?.[role];
+      if (!photo || !anchor) continue;
+      const slot = document.querySelector(`[data-slot=${role}]`);
+      if (!slot) continue;
+      const rect = slot.getBoundingClientRect();
+      photo.x += anchor.x - (rect.left + rect.width / 2);
+      photo.y += anchor.y - (rect.top + rect.height / 2);
+    }
+  }
+  return { setEditorGeometryFromRect, setEditorGeometry, fit, refitForComposite, captureViewportAnchors, preserveViewportAnchors };
 }
