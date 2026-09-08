@@ -42,7 +42,8 @@ test('cancel has no committed new-post side effects',()=>{
   assert.match(committed,/await draft\.clear\(\)/);
   assert.match(committed,/cosmo-new-post/);
   assert.match(committed,/cosmo-ai-wizard-reset/);
-  assert.match(committed,/router\.show\('composer'\)/);
+  assert.match(committed,/navigation\.reset\(\[STATES\.HOME,STATES\.MENU\]\)/);
+  assert.doesNotMatch(committed,/router\.show\('composer'\)/);
 });
 
 test('New Post ignores repeated clicks while a transition is in flight',()=>{

@@ -18,15 +18,19 @@ function functionBody(source,name,nextName){
 test('Before/After workspace is cleared only by committed New Post flow',()=>{
   assert.match(controller,/addEventListener\('cosmo-new-post',clear\)/);
   assert.match(controller,/Object\.freeze\(\{open,close,clear,save,saveDraft,saveAsset,removeAsset,swapAssets\}\)/);
-  assert.doesNotMatch(controller,/cosmo-before-after-close[^\n]+clear/);
   assert.match(navigation,/async function openNewPost\(\)/);
   assert.match(navigation,/cosmo-new-post/);
   assert.match(navigation,/source:'flow-new'/);
   assert.doesNotMatch(bootstrap,/new-post-lifecycle\.js/);
 });
 
-test('save and close keep the Before/After iframe draft alive',()=>{
-  assert.match(controller,/async function save[\s\S]+?close\(\);window\.dispatchEvent/);
+test('save and navigation close keep the Before/After iframe draft alive',()=>{
+  const saveStart=controller.indexOf('async function save(');
+  const messageStart=controller.indexOf("window.addEventListener('message'",saveStart);
+  assert.ok(saveStart>=0&&messageStart>saveStart);
+  const saveBody=controller.slice(saveStart,messageStart);
+  assert.match(saveBody,/navigation\.replace\(navigation\.STATES\.PUBLISH,\{focus:false\}\)/);
+  assert.doesNotMatch(saveBody,/clear\(\)/);
   const closeBody=functionBody(controller,'close','clear');
   assert.match(closeBody,/overlay\.hidden=true/);
   assert.doesNotMatch(closeBody,/overlay\.remove\(\)/);

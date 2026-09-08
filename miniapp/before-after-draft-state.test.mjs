@@ -30,13 +30,14 @@ test('Before/After draft is a real third state with editable payload', () => {
   assert.match(controller, /setScreen\?\.\('publish'\)/);
 });
 
-test('successful Before/After save returns to Composer, not Home', () => {
+test('successful Before/After save returns to Publisher through logical navigation, not Home', () => {
   const controller = read('./before-after-controller.js');
   const saveStart = controller.indexOf('async function save(');
   const messageStart = controller.indexOf("window.addEventListener('message'", saveStart);
   assert.ok(saveStart >= 0 && messageStart > saveStart);
   const saveBody = controller.slice(saveStart, messageStart);
   assert.match(saveBody, /setScreen\?\.\('publish'\)/);
-  assert.match(saveBody, /CosmoRouter\?\.show\?\.\('composer'\)/);
+  assert.match(saveBody, /navigation\.replace\(navigation\.STATES\.PUBLISH,\{focus:false\}\)/);
+  assert.doesNotMatch(saveBody, /CosmoRouter\?\.show\?\.\('composer'\)/);
   assert.doesNotMatch(saveBody, /CosmoRouter\?\.show\?\.\('home'\)/);
 });
