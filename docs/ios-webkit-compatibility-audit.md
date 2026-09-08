@@ -25,16 +25,31 @@ Home, **четыре высоких риска**, способных забло�
 сценарий, и несколько визуальных/эксплуатационных рисков.
 
 Главный вывод: самая вероятная причина полностью неработающего приложения на iOS
-сейчас — не отдельная WebKit API, а последовательный bootstrap. Home создаётся
-только внутри `navigation.js`, однако до него ожидаются onboarding, settings,
-Composer и Before/After. Ошибка загрузки или выполнения любого из этих модулей
-отклоняет общий promise, а пользователю не показывается локальная ошибка.
+до исправления была связана не с отдельной WebKit API, а с последовательным
+bootstrap. В рамках исправления shell отделён от feature runtimes; оставшиеся
+пункты ниже сохраняются как реестр рисков и критериев регрессии.
+
+## Зафиксированная архитектура загрузки
+
+- `bootstrap.js` загружает только Telegram gateway, router и Home navigation.
+- Settings загружается через `settings-runtime.js` при открытии экрана.
+- New Post/Composer загружается через `new-post-runtime.js` при выборе New Post
+  или Continue.
+- Before/After controller загружается только при входе в Before/After.
+- Onboarding имеет собственный `onboarding-runtime.js`, общий для Settings и
+  publishing integration, но не является условием запуска Home.
+- Rich editor больше не загружается из AI mock-модуля: его lifecycle принадлежит
+  `composer-rich-editor-runtime.js`.
+- Ошибка publishing integration оставляет редактор доступным, но блокирует кнопки
+  публикации и показывает локальное сообщение.
 
 ## Критические риски (P0)
 
 ### P0.1. Опциональные feature-модули блокируют Home
 
-**Наблюдение.** `bootstrap.js` последовательно ожидает `loadPlatform()`,
+**Статус: исправлено архитектурным разделением runtime; защищается тестами.**
+
+**Исходное наблюдение.** `bootstrap.js` последовательно ожидал `loadPlatform()`,
 `loadOnboardingAndSettings()`, `loadAppShell()`, `loadComposerRuntime()` и
 `loadRuntimeIntegrations()`. При этом `loadAppShell()` до `navigation.js`
 загружает Before/After и AI-модули, а Home создаётся и показывается только при
@@ -64,16 +79,17 @@ import обрабатывать на границе конкретной фун�
 
 ### P0.2. Не определён и не проверяется JavaScript target для WKWebView
 
+**Статус: частично снижено — `??=` удалён из bootstrap, но support target и
+транспиляция всё ещё не зафиксированы.**
+
 **Наблюдение.** Mini App отдается как набор исходных ES modules без build-step или
-legacy bundle. В критическом bootstrap есть оператор `??=`, а в критических
-модулях широко используются optional chaining, nullish coalescing, dynamic
+legacy bundle. В критических модулях используются optional chaining, dynamic
 `import()` и async functions.
 
 **Почему опасно.** На WKWebView, который не понимает хотя бы один синтаксический
 конструкт, файл не начинает выполняться вообще. Feature detection не помогает при
-parse-time ошибке. Особенно опасен `??=` непосредственно в `bootstrap.js`: при
-несовместимом JavaScriptCore не будет ни promise готовности, ни Home, ни сообщения
-об ошибке.
+parse-time ошибке. При несовместимом JavaScriptCore не будет ни promise готовности,
+ни Home, ни сообщения об ошибке.
 
 **Рекомендация.** Явно зафиксировать минимальную iOS-версию, поддерживаемую
 продуктом, и добавить проверяемый browserslist/target. Либо транспилировать весь
@@ -87,6 +103,8 @@ smoke test открывает Home на самой старой поддержи
 ## Высокие риски (P1)
 
 ### P1.1. Нестандартное значение `behavior: 'instant'` находится в навигации
+
+**Статус: исправлено; router использует совместимый `scrollTo(0, 0)`.**
 
 `app-router.js` вызывает `window.scrollTo({behavior:'instant'})` при каждом
 переходе, включая первый показ Home. Такое же значение применяется при закрытии

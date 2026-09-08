@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 
 const css=await readFile(new URL('./compact-workspace.css',import.meta.url),'utf8');
-const bootstrap=await readFile(new URL('./bootstrap.js',import.meta.url),'utf8');
+const runtime=await readFile(new URL('./new-post-runtime.js',import.meta.url),'utf8');
 
 test('AI and Composer keep 2px outer gutters with comfortable panel content spacing',()=>{
   assert.match(css,/\.publish-ai-wizard\{margin:2px;padding:14px 2px;border-radius:12px\}/);
@@ -14,7 +14,7 @@ test('AI and Composer keep 2px outer gutters with comfortable panel content spac
   assert.match(css,/#composer-screen\.approved-composer \.composer-bodytext\{padding:12px 14px!important\}/);
   assert.doesNotMatch(css,/onboarding/i);
   assert.doesNotMatch(css,/settings-/i);
-  assert.match(bootstrap,/href='\/compact-workspace\.css'/);
+  assert.match(runtime,/'\/compact-workspace\.css'/);
 });
 
 test('AI prompt is one full-width input surface with a circular bottom-right send button',()=>{

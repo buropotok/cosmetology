@@ -3,11 +3,11 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 const css = readFileSync(new URL('./telegram-quote-preview.css', import.meta.url), 'utf8');
-const bootstrap = readFileSync(new URL('./bootstrap.js', import.meta.url), 'utf8');
+const runtime = readFileSync(new URL('./new-post-runtime.js', import.meta.url), 'utf8');
 
-test('loads Telegram quote styling at bootstrap', () => {
-  assert.match(bootstrap, /telegram-quote-preview\.css/);
-  assert.match(bootstrap, /data-cosmo-telegram-quotes/);
+test('loads Telegram quote styling with the New Post runtime', () => {
+  assert.match(runtime, /telegram-quote-preview\.css/);
+  assert.match(runtime, /cosmo-telegram-quotes/);
 });
 
 test('styles both AI preview and Tiptap quotes as light Telegram-like cards', () => {

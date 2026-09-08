@@ -35,7 +35,7 @@
     soloIndex=null;soloFile=null;const current=ensureOverlay('dual');window.CosmoSofaDraft?.setScreen?.('beforeafter');frameBridge()?.resetTransient?.();restoreIntoFrame();current.hidden=false;document.documentElement.style.overflow='hidden';return true
   }
   function destroySolo(){if(!overlay)return;overlay.remove();overlay=null;soloIndex=null;soloFile=null;currentMode='dual'}
-  function close(){if(!overlay)return;frameBridge()?.resetTransient?.();if(currentMode==='solo')destroySolo();else overlay.hidden=true;document.documentElement.style.overflow='';window.scrollTo({top:0,behavior:'instant'})}
+  function close(){if(!overlay)return;frameBridge()?.resetTransient?.();if(currentMode==='solo')destroySolo();else overlay.hidden=true;document.documentElement.style.overflow='';window.scrollTo(0,0)}
   function clear(){if(!overlay)return;overlay.remove();overlay=null;soloIndex=null;soloFile=null;currentMode='dual';document.documentElement.style.overflow=''}
   function authHeaders(){if(!webApp?.initData)throw new Error('Telegram Mini App недоступен. Не удалось сохранить изображение.');return{Authorization:`tma ${webApp.initData}`}}
   function baseDraftBody(){const snapshot=window.CosmoComposerState?.getSnapshot?.()||{},aux=window.CosmoAiWizardState?.getSnapshot?.()||null,body=new FormData();body.set('text',typeof snapshot.content==='string'?snapshot.content:'');body.set('platform',snapshot.platform==='vk'?'vk':'telegram');body.set('activePhotoIndex',String(snapshot.activePhotoIndex||0));body.set('screen','beforeafter');body.set('imagesChanged','0');if(aux)body.set('aiState',JSON.stringify(aux));return body}

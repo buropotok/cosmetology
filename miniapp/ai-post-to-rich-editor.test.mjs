@@ -5,7 +5,7 @@ import {readFile} from 'node:fs/promises';
 const transfer=await readFile(new URL('./ai-post-editor-transfer.js',import.meta.url),'utf8');
 const responseUi=await readFile(new URL('./ai-response-ui.js',import.meta.url),'utf8');
 const tiptap=await readFile(new URL('./composer-tiptap.js',import.meta.url),'utf8');
-const bootstrap=await readFile(new URL('./bootstrap.js',import.meta.url),'utf8');
+const runtime=await readFile(new URL('./new-post-runtime.js',import.meta.url),'utf8');
 
 test('ready PostDocument v2 exposes primary edit and publish action',()=>{
   assert.match(transfer,/Редактировать и опубликовать/);
@@ -35,5 +35,5 @@ test('AI response keeps canonical PostDocument for direct Tiptap transfer',()=>{
   assert.match(tiptap,/function postToTiptap\(doc\)/);
   assert.match(tiptap,/function restoreDraft\(value\)/);
   assert.match(tiptap,/editor\.commands\.setContent\(postToTiptap\(doc\)/);
-  assert.match(bootstrap,/ai-post-editor-transfer\.js/);
+  assert.match(runtime,/ai-post-editor-transfer\.js/);
 });
