@@ -2,234 +2,300 @@
 
 ## Status
 
-Architecture decision for the Cosmo Sofa Mini App draft runtime and Home UX.
+Architecture decision for the Cosmo Sofa Mini App draft runtime, Home UX, session restoration, and navigation semantics.
 
-This document describes the selected client-side lifecycle for loading, consuming, refreshing, saving, and invalidating the active server-side draft. It complements `publication-history-and-drafts.md`, which describes persistence/history semantics on the backend.
+This document complements `publication-history-and-drafts.md`, which describes persistence/history semantics on the backend.
 
-## Purpose of the draft
+## Core model
 
-The server-side draft is primarily a recovery mechanism for an interrupted Mini App session. It allows a user who closed or lost the app to reopen it and continue from the last persisted state.
+The server-side draft is a **recovery snapshot of the working session**. It is not the live source of truth while the Mini App remains open.
 
-The draft is **not** the live source of truth while the user is actively working inside AI, Composer, Before/After, or another editing feature. After a draft snapshot has been restored into the owning feature states, those feature states become the active working state and continue autosaving changes to the backend.
+The client session contains the current working state of all relevant features, including AI, Publisher/Composer, and Before/After. Those feature states remain authoritative during the active Mini App session and are persisted to the server by the draft/autosave subsystem.
 
-A downloaded draft snapshot is therefore temporary. Once it has been used to initialize the current working state, it must not be treated as a durable local cache of the server draft. Any user edit can make that downloaded snapshot stale immediately.
+The central rule is:
 
-## Selected lifecycle
+> Draft restores a working session, not a navigation route.
 
-### 1. Cold start
+A stored `screen` value may remain as metadata or for compatibility while the implementation is migrated, but it must not decide which feature the user is forced into after Continue.
 
-On initial Mini App startup, after the prerequisites required for draft access are available, the client loads the **full active draft**, not only an existence flag.
+## Home startup
 
-During this initial load only, show the blocking draft-loading modal (`Запрос ваших черновиков`).
+Home is part of the critical application shell and must not wait for full draft materialization.
 
-The load must obtain everything required to restore the last user-visible state, including the draft payload and required media. When it completes:
+On Mini App startup:
 
-- if a draft exists, restore the relevant working state and mark Continue as available;
-- if no draft exists, Home has no Continue action;
-- if loading fails, the initial-load UI may offer retry/skip according to the existing UX.
+- render Home as soon as its true shell prerequisites are ready;
+- show `Новый пост` immediately;
+- show `Продолжить с черновика` when lightweight startup data says that a recoverable draft exists;
+- do **not** download the full draft payload or its media merely to render Home;
+- do **not** show the old blocking draft-loading modal during normal startup.
 
-The important UX invariant is:
+The lightweight draft-existence signal should come from already-required startup data where practical. Do not add a heavy feature-runtime dependency to bootstrap solely to discover the draft.
 
-> After a successful cold-start draft load, pressing Continue must be immediate and must not cause a second server fetch.
+If no recoverable draft is known to exist, Continue is hidden.
 
-Do **not** split cold start into `check draft exists` followed by a second full load after Continue. That would add unnecessary latency to the primary recovery scenario.
+## Continue semantics
 
-### 2. Consuming a loaded snapshot
+### First Continue after a fresh application start
 
-When the user presses Continue after cold start, navigation uses the already restored draft state to enter the appropriate feature (AI, Composer, Before/After, etc.).
+When no live client session has yet been restored, pressing Continue performs the expensive recovery operation:
 
-The downloaded draft snapshot has now served its purpose. The application should conceptually treat it as consumed. The active feature state is now authoritative for the current session.
+```text
+Home
+  -> Continue
+  -> "Восстанавливаем сессию…"
+  -> full draft load, including required media
+  -> restore AI + Publisher/Composer + Before/After working buffers
+  -> New Post menu
+```
 
-The client must not rely on the original downloaded draft remaining current after this point. A single text edit, image movement, AI-state change, or other persisted edit can make it obsolete.
+The recovery UI belongs to this explicit Continue operation. It must not be a generic global reaction to any draft request.
 
-### 3. Active work and autosave
+After successful restoration, navigation always opens the standard New Post menu with the three feature choices. The user chooses where to continue.
 
-While the user works, the owning feature states are the live state. The draft subsystem persists those changes to the backend using autosave/flush behavior.
+Do not automatically jump to AI, Publisher, or Before/After based on `draft.screen`.
 
-Successful persistence means that a recoverable server draft exists. It does **not** mean that an old downloaded draft snapshot is still valid for future navigation.
+### Continue while a live session exists
 
-The Home UI may retain lightweight knowledge that a draft exists, but it must not treat an old restored payload as a valid cache after active work has changed it.
+Returning to Home does not destroy the current client session. Therefore, when a live session already exists:
 
-### 4. Returning to Home during the same session
+```text
+Home -> Continue -> New Post menu
+```
 
-Returning to Home must **not** block Home behind the global draft-loading modal.
+This transition is immediate. It performs no draft reload and shows no recovery spinner/modal.
 
-Home appears immediately. `Новый пост` remains active and usable regardless of draft refresh activity.
+The server draft remains the recovery copy for a future interrupted/restarted application, not a cache that must be re-read every time Home is visited.
 
-If the application knows that a recoverable draft exists, the Continue control is shown immediately but is temporarily disabled while the latest draft snapshot is loaded in the background. The loading indication should live inside the Continue control (for example, a small spinner/loading state), not in a global modal.
+## New Post semantics
+
+`Новый пост` and `Продолжить с черновика` enter the **same New Post workspace**. The difference is only how the session buffer is prepared.
+
+```text
+New Post  -> empty/reset session    -> New Post menu
+Continue  -> restored/live session -> New Post menu
+```
+
+Starting New Post must:
+
+1. invalidate any pending session restore;
+2. abort its active network operation where possible;
+3. clear/reset the live client session;
+4. clear/replace the recoverable server draft according to persistence semantics;
+5. open the same New Post menu used by Continue.
+
+New Post must not wait for an older restore to finish.
+
+## Active session and autosave
+
+Once a session exists in the frontend, feature-owned state is live state:
+
+- AI owns its current generation/work state;
+- Publisher/Composer owns post content and completed media attached to the post;
+- Before/After owns its current unfinished editing state;
+- the draft subsystem persists recovery snapshots of those states;
+- navigation owns only logical screen/location state.
+
+Returning to Home is navigation only. It must not trigger a full draft refresh and must not replace live state with a server snapshot that may lag behind the current session.
+
+If the Mini App is closed or interrupted, the next Continue can reconstruct the session from the latest persisted server draft.
+
+## Restore cancellation and stale completion
+
+Session restoration is asynchronous and must be safe if its lifecycle is invalidated.
+
+Cancellation requires both:
+
+- physical cancellation with `AbortController` where supported; and
+- logical invalidation with a monotonically changing generation/token or equivalent operation identity.
+
+`AbortController` is an optimization, not the correctness guarantee. A request may already have reached the server, media decoding may already be in progress, or WebView cancellation may behave differently across platforms.
+
+After every meaningful asynchronous stage that can lead to state mutation, verify that the restore operation is still current before applying its result.
+
+Required invariant:
+
+> After New Post or another lifecycle transition invalidates a restore, no completion from that restore may mutate the new client session, draft state, Home state, or navigation state.
+
+This includes an old draft response arriving late, a delayed request returning `null` after a clear, media finishing after navigation, and out-of-order restore attempts.
+
+## Navigation is a logical state machine
+
+Navigation must be defined by logical product states, not by physical DOM containers, iframes, or whichever element happened to be visible previously.
+
+The current New Post workflow has these logical states:
+
+```text
+HOME
+  |
+  +-- New Post -------------------+
+  |                               |
+  +-- Continue -- restore/live ---+
+                                  v
+                           NEW_POST_MENU
+                                  |
+                    +-------------+-------------+
+                    |             |             |
+                    v             v             v
+                   AI          PUBLISH    BEFORE_AFTER
+                    |             |             |
+                   Back          Back          Back
+                    +-------------+-------------+
+                                  v
+                           NEW_POST_MENU
+                                  |
+                                 Back
+                                  v
+                                 HOME
+```
+
+`NEW_POST_MENU`, `AI`, `PUBLISH`, and `BEFORE_AFTER` are distinct navigation states even if some of them currently reuse the same Composer DOM or if Before/After is physically rendered in an iframe.
+
+### Authoritative Back transitions
+
+The required transitions are:
+
+| Current logical state | Back destination |
+| --- | --- |
+| `BEFORE_AFTER` | `NEW_POST_MENU` |
+| `AI` | `NEW_POST_MENU` |
+| `PUBLISH` | `NEW_POST_MENU` |
+| `NEW_POST_MENU` | `HOME` |
+| `HOME` | platform/application-shell behavior |
+
+Telegram BackButton, in-app Back controls, and feature-specific controls must all resolve through the same authoritative navigation semantics rather than independently manipulating visibility.
+
+The way a session was created does not alter this chain. A restored session and a new empty session use the same navigation graph.
+
+## Contextual tools and future navigation
+
+The navigation model must support features being entered from more than one parent context without rewriting draft logic.
+
+Before/After is conceptually an **image-editing tool**, not inherently a top-level post type. It is currently reachable from the New Post menu, but it may also be exposed from Publisher next to actions such as `Создать фото` so that a post can contain multiple completed Before/After collages.
+
+A future Publisher flow can therefore be:
+
+```text
+PUBLISH
+   |
+   +-- Create photo
+   |
+   +-- Before/After
+          |
+          v
+   BEFORE_AFTER_EDITOR
+       |          |
+      Back       Done
+       |          |
+       v          v
+    PUBLISH   rendered image
+                  |
+                  v
+          Publisher.images[]
+```
+
+This requires **contextual return navigation**. Before/After must not hard-code `Back -> Composer` or `Back -> New Post menu`. Its return destination is the navigation context from which the tool was opened.
+
+For example:
+
+```text
+NEW_POST_MENU -> BEFORE_AFTER -> Back -> NEW_POST_MENU
+PUBLISH       -> BEFORE_AFTER -> Back -> PUBLISH
+```
+
+This is still one navigation system: the router/state machine records the legitimate parent context for the tool invocation rather than letting the feature invent its own back stack.
+
+## Before/After ownership and completed results
+
+Before/After owns only its current editable work. The draft should persist the latest unfinished Before/After state so that an interrupted session can recover that work.
+
+When the user finishes a collage (`Готово` or equivalent):
+
+1. Before/After renders/produces the completed image result;
+2. the result is transferred through an explicit data contract to Publisher;
+3. Publisher becomes the owner of that completed image as part of the post;
+4. the draft/autosave mechanism persists the updated Publisher state;
+5. Before/After remains available to start/edit another image according to its own lifecycle.
+
+Therefore multiple completed collages do not require the draft to maintain an archive of multiple Before/After editor states. They are ordinary completed Publisher media items. The draft needs to preserve the current unfinished Before/After work plus Publisher's already accepted results.
 
 Conceptually:
 
 ```text
-Feature -> Back -> Home immediately
-                    |
-                    +-- New Post: enabled
-                    |
-                    +-- Continue: visible, disabled, loading
-                                      |
-                               refresh full draft
-                                      |
-                               restore snapshot
-                                      |
-                              Continue: enabled
+Before/After working state -- Done --> rendered image --> Publisher media
+         |
+         +-- recovery snapshot preserves unfinished work
 ```
 
-This keeps Home responsive while still preserving the invariant that Continue only opens a fully restored, current snapshot.
+This preserves ownership boundaries and makes it possible to add, move, or reuse image-editing tools without changing recovery semantics.
 
-### 5. Continue after an in-session return to Home
+## Separation of responsibilities
 
-The background refresh starts when Home is entered, not when Continue is clicked.
+The architecture must keep four concerns separate:
 
-Therefore:
+### Session
 
-- while refresh is pending, Continue is disabled and shows loading;
-- after refresh succeeds and a draft exists, Continue becomes enabled;
-- pressing enabled Continue is immediate and performs no additional draft fetch;
-- if refresh reports that no draft exists, Continue disappears;
-- if refresh fails, Continue must not silently open stale state. The UI should expose a local retry/error state without blocking New Post or the rest of Home.
+The aggregate live working context composed of feature-owned states. It survives navigation to Home while the Mini App remains alive.
 
-The exact visual treatment of the local error/retry state may be refined during implementation, but it must remain scoped to draft resume rather than becoming a blocking Home modal.
+### Draft
 
-## Loading UI ownership
+The persisted recovery representation of the session. It can reconstruct the session after interruption but does not choose the route.
 
-There are two intentionally different loading contexts.
+### Navigation
 
-### Initial application load
+The authoritative logical state machine. It decides screen transitions and Back destinations without scraping feature DOM or depending on iframe/container structure.
 
-- Full draft load.
-- Blocking global draft-loading modal is allowed.
-- Purpose: establish recoverable initial application state before the first recovery decision.
+### Feature result transfer
 
-### In-session Home refresh
+A feature such as Before/After produces structured output through an explicit contract. Once accepted, the receiving owner (Publisher in this case) owns the completed result.
 
-- Full draft refresh in the background.
-- No global modal.
-- Home is immediately usable.
-- New Post stays enabled.
-- Continue alone reflects pending/error/ready state.
+The central product invariant is:
 
-The global draft-loading modal must therefore be owned by the **initial draft-load lifecycle**, not by a generic `loadStatus === loading` condition that can also occur later in the session.
-
-## New Post semantics
-
-Starting a New Post invalidates the current recovery operation and clears/replaces the active draft according to the existing persistence model.
-
-If a Home draft refresh is in progress when the user presses New Post:
-
-1. immediately invalidate the in-flight restore generation;
-2. abort the active fetch with `AbortController` where possible;
-3. proceed with the New Post clear/reset operation;
-4. ignore every completion from the invalidated load, regardless of whether it returns an old draft, `null`, an error, or an abort result.
-
-New Post must not wait for the Home refresh to finish.
-
-## Race-condition invariant
-
-Cancellation requires **both physical cancellation and logical invalidation**.
-
-`AbortController` is an optimization that may stop unnecessary network or decoding work. It is not the correctness guarantee: the request may already have reached the server or the response may already be in flight, and WebView cancellation behavior can vary.
-
-A monotonically changing load/restore generation (or equivalent operation token) is the correctness mechanism. Every asynchronous stage that could mutate state must verify that its operation is still current before applying its result.
-
-Required invariant:
-
-> After New Post/clear invalidates a draft load, no result from that older load may mutate draft state, feature state, Home state, or Continue state.
-
-This covers both important races:
-
-### Old response arrives after New Post
-
-The server may have already returned the previous draft before the clear request. Even if those bytes reach the client later, the old generation is stale and the result is discarded.
-
-### Clear reaches the server before an earlier GET
-
-The clear/delete operation may overtake a delayed draft GET. That GET may then return no draft. Its result is still associated with the invalidated generation and must not overwrite the new lifecycle state.
-
-The application must be correct in either ordering.
-
-## State model
-
-Implementation names may differ, but the draft subsystem must distinguish these concepts rather than infer them from unrelated DOM state:
-
-- whether a recoverable server draft is known to exist (`hasDraft` or equivalent);
-- whether the current resume snapshot is loading, ready, consumed/stale, or failed;
-- whether the current load operation is still valid (generation/token);
-- the current restore target/screen needed for navigation after a successful load.
-
-Do not equate `hasDraft` with `snapshot is currently loaded and safe to resume`.
-
-A useful conceptual state machine is:
-
-```text
-no-draft
-
-known-draft / loading
-        -> ready
-        -> error
-        -> no-draft
-
-ready
-        -> consumed/stale when work resumes
-
-consumed/stale
-        -> loading on next Home entry
-```
-
-The exact implementation should remain as small as possible and should not duplicate state already owned by the draft subsystem.
-
-## Navigation contract
-
-Navigation should consume a public draft-resume contract rather than infer draft readiness from feature-private DOM.
-
-Home/navigation needs only enough information to render and route:
-
-- no draft -> hide Continue;
-- refresh pending -> show disabled Continue with loading state;
-- current snapshot ready -> enable Continue;
-- refresh failed -> local retry/error behavior;
-- Continue -> route using the restored target state;
-- New Post -> invalidate any pending restore before clearing/resetting.
-
-Feature modules remain responsible for their own live editing state after restoration.
-
-## Memory and stale data
-
-Do not intentionally retain a downloaded draft payload merely as a cache after it has initialized the live feature state. It is expected to become stale almost immediately during active work and has no authority after consumption.
-
-Implementation should release references that are no longer required, especially downloaded `File`/Blob objects, when doing so does not conflict with the feature state that legitimately owns those objects after restoration.
-
-This does **not** mean deleting the server-side draft. Server persistence continues normally for recovery. It means avoiding a second, stale client-side draft copy with ambiguous ownership.
+> Session stores the work, Draft recovers the session, Navigation moves the user, and completed tool results move to their owning feature through explicit data contracts.
 
 ## Implementation constraints for the refactor
 
-The upcoming refactor should preserve these constraints:
+The upcoming refactor must preserve these constraints:
 
-- cold-start Continue remains immediate after the initial modal completes;
-- no extra existence-only request is added before the cold-start full load;
-- returning to Home does not show the global draft modal;
-- Home/New Post remains usable during an in-session draft refresh;
-- Continue cannot open stale state;
-- New Post cancels/invalidates an in-flight refresh and cannot be overwritten by its late completion;
-- cancellation correctness does not depend only on `AbortController`;
-- late/out-of-order completions are tested;
-- iOS/WKWebView and Android WebView behavior are both considered;
-- draft UI/state ownership remains inside the draft/Home lifecycle rather than leaking into unrelated feature modules.
+- Home startup is not blocked by full draft loading;
+- full recovery starts only when Continue actually needs to restore a missing live session;
+- recovery restores the complete available session, not only the previously active screen;
+- successful recovery opens `NEW_POST_MENU`, never auto-routes by `draft.screen`;
+- Continue from Home is immediate while a live session exists;
+- returning to Home does not refresh/reload the draft;
+- New Post and Continue use the same workspace/navigation entry point after preparing different session contents;
+- New Post invalidates any pending restore and cannot be overwritten by late completion;
+- correctness does not depend only on `AbortController`;
+- AI, Publish, and Before/After all return Back to `NEW_POST_MENU` when entered from that menu;
+- `NEW_POST_MENU` returns Back to Home;
+- Before/After can later be invoked from Publisher with `Back -> PUBLISH` without changing draft semantics;
+- completed Before/After images become Publisher-owned media;
+- unfinished Before/After editing state remains recoverable in the draft;
+- navigation behavior is independent of iframe/DOM implementation details;
+- iOS/WKWebView and Android WebView behavior are both considered.
 
 ## Required tests
 
 At minimum, the refactor should cover:
 
-1. cold start with a draft: full load occurs once and Continue uses the restored state without another fetch;
-2. cold start without a draft;
-3. cold-start load failure/retry/skip behavior;
-4. return to Home with a known draft: Home is immediately usable, New Post enabled, Continue disabled/loading until refresh completes;
-5. successful Home refresh enables Continue and Continue performs no second fetch;
-6. Home refresh returning no draft removes Continue;
-7. Home refresh failure does not block Home/New Post and does not allow stale resume;
-8. New Post during Home refresh invalidates and aborts that refresh;
-9. a stale draft response arriving after New Post is ignored;
-10. a delayed GET that reaches the server after clear and returns `null` cannot corrupt the New Post lifecycle;
-11. repeated Home entries do not allow older refresh completions to overwrite newer state;
-12. navigation away/unmount during a refresh cannot apply stale completion to a new screen lifecycle.
+1. startup renders Home without a full draft fetch;
+2. startup with a known draft shows Continue without materializing the full draft;
+3. first Continue with no live session performs one full restore and shows `Восстанавливаем сессию…`;
+4. successful restore populates AI, Publisher/Composer, and Before/After state and opens `NEW_POST_MENU` regardless of stored `draft.screen`;
+5. restore failure remains local to Continue and does not corrupt Home;
+6. returning from a feature to Home preserves the live session;
+7. Continue from Home with a live session opens `NEW_POST_MENU` immediately without a draft fetch;
+8. New Post creates/resets an empty session and opens the same `NEW_POST_MENU`;
+9. New Post during restore invalidates and aborts that restore;
+10. a stale draft response or media completion after New Post is ignored;
+11. `AI -> Back -> NEW_POST_MENU -> Back -> HOME`;
+12. `PUBLISH -> Back -> NEW_POST_MENU -> Back -> HOME`;
+13. `BEFORE_AFTER -> Back -> NEW_POST_MENU -> Back -> HOME` when BA was opened from the menu;
+14. restored sessions use the same Back chains as newly created sessions;
+15. repeated `Home -> Continue -> NEW_POST_MENU` is immediate while the live session exists;
+16. contextual invocation `PUBLISH -> BEFORE_AFTER -> Back -> PUBLISH`;
+17. completing Before/After transfers the rendered image to Publisher without making navigation depend on BA internals;
+18. multiple completed Before/After collages can coexist as Publisher media while the draft contains only the current unfinished BA editing state;
+19. navigation away/unmount during restore cannot apply stale completion to a new lifecycle.
 
-These tests should validate behavior and ownership rather than freezing accidental import order or private DOM structure.
+Tests should validate observable behavior, ownership, and the logical navigation contract rather than accidental import order, private DOM structure, or iframe implementation details.
