@@ -43,7 +43,12 @@ test('loader is transient and reset on reopen',()=>{
   assert.doesNotMatch(bridge,/localStorage|sessionStorage/);
 });
 
-test('Before/After identifies its draft mode explicitly',()=>{
+test('Before/After identifies its draft mode explicitly without making it a resume route',()=>{
   assert.match(controller,/body\.set\('screen','beforeafter'\)/);
-  assert.match(navigation,/state\.screen==='beforeafter'/);
+  const start=navigation.indexOf('async function resumeDraft()');
+  const end=navigation.indexOf("home.querySelector('#flow-new')",start);
+  assert.ok(start>=0&&end>start,'resumeDraft should exist before Home handlers');
+  const resume=navigation.slice(start,end);
+  assert.doesNotMatch(resume,/state\.screen/);
+  assert.match(resume,/navigation\.reset\(\[STATES\.HOME,STATES\.MENU\]\)/);
 });
