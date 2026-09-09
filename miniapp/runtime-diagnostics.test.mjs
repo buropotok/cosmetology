@@ -4,6 +4,7 @@ import {readFile} from 'node:fs/promises';
 
 const diagnostics=await readFile(new URL('./runtime-diagnostics.js',import.meta.url),'utf8');
 const editorRuntime=await readFile(new URL('./composer-editor-runtime.js',import.meta.url),'utf8');
+const bootstrap=await readFile(new URL('./bootstrap.js',import.meta.url),'utf8');
 
 test('runtime diagnostics keeps one session snapshot and sends cumulative events without blocking loads',()=>{
   assert.match(diagnostics,/const ENDPOINT='\/api\/miniapp\/runtime-diagnostics'/);
@@ -20,6 +21,18 @@ test('runtime diagnostics keeps one session snapshot and sends cumulative events
 
   const snapshot=diagnostics.slice(diagnostics.indexOf('function snapshot()'),diagnostics.indexOf('async function deliver'));
   assert.doesNotMatch(snapshot,/initData/);
+});
+
+test('runtime diagnostics creates the session artifact at bootstrap when Telegram auth exists',()=>{
+  assert.match(diagnostics,/export function startRuntimeDiagnostics\(\)/);
+  assert.match(diagnostics,/event:'session_started',stage:'application\.startup',module:'runtime-diagnostics',status:'loaded'/);
+  assert.match(diagnostics,/if\(!hasTelegramAuth\(\)\)return Object\.freeze\(\{started:false,reason:'telegram_auth_missing'\}\)/);
+  assert.match(diagnostics,/if\(!initialDeliveryQueued\)\{initialDeliveryQueued=true;queueDelivery\(\)\}/);
+  assert.match(bootstrap,/function startRuntimeDiagnostics\(\)\{\s*void import\('\/runtime-diagnostics\.js'\)/s);
+  assert.match(bootstrap,/\.then\(diagnostics=>diagnostics\.startRuntimeDiagnostics\?\.\(\)\)/);
+  const start=bootstrap.slice(bootstrap.indexOf('async function start()'));
+  assert.ok(start.indexOf('startRuntimeDiagnostics();')<start.indexOf('await loadPlatform()'));
+  assert.doesNotMatch(start,/await startRuntimeDiagnostics\(\)/);
 });
 
 test('generic runtime loader records loading, loaded, failed and dependency skips as explicit stages',()=>{
