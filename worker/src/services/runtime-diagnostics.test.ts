@@ -43,7 +43,7 @@ describe('runtime diagnostic artifacts',()=>{
   });
 
   it('overwrites the same session artifact with the cumulative snapshot after each event delivery',async()=>{
-    const put=vi.fn(async()=>undefined),env={ARTIFACTS:{put}} as unknown as Env;
+    const put=vi.fn(async()=>undefined),env={LOGS:{put}} as unknown as Env;
     const snapshot=normalizeRuntimeDiagnosticSnapshot(rawSnapshot);
     await expect(storeRuntimeDiagnosticSnapshot(env,snapshot,'2026-09-09T11:59:00.000Z')).resolves.toEqual({key:'runtime-logs/2026-09-09/2026-09-09_ios_session-1788950000123.log',eventCount:3});
     expect(put).toHaveBeenCalledOnce();

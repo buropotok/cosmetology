@@ -13,11 +13,11 @@ describe('runtime diagnostics integration',()=>{
     expect(entry).toContain('saveRuntimeDiagnostics(req,env)');
   });
 
-  it('uses a dedicated artifacts binding instead of treating logs as post images',()=>{
-    expect(file('worker/src/types.ts')).toContain('ARTIFACTS:R2Bucket');
+  it('uses the dedicated runtime log bucket instead of treating logs as post images',()=>{
+    expect(file('worker/src/types.ts')).toContain('LOGS:R2Bucket');
     const wrangler=file('worker/wrangler.jsonc');
-    expect(wrangler).toContain('"binding": "ARTIFACTS"');
-    expect(wrangler).toContain('"bucket_name": "cosmetology-publisher-images"');
-    expect(file('worker/src/services/runtime-diagnostics.ts')).toContain('env.ARTIFACTS.put');
+    expect(wrangler).toContain('"binding": "LOGS"');
+    expect(wrangler).toContain('"bucket_name": "cosmetology-runtime-artifacts"');
+    expect(file('worker/src/services/runtime-diagnostics.ts')).toContain('env.LOGS.put');
   });
 });
