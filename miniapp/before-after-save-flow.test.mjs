@@ -17,6 +17,12 @@ test('Before After shows a blocking save loader',()=>{
   assert.match(bridge,/showLoader\(\)/);
 });
 
+test('Before After empty slot content is centered as individual grid items',()=>{
+  const emptyRule=css.match(/\.empty\{([^}]*)\}/)?.[1]||'';
+  assert.match(emptyRule,/place-content:center/,'empty slot group should remain centered in the slot');
+  assert.match(emptyRule,/place-items:center/,'plus and caption should each be centered on the slot axis');
+});
+
 test('Before After appends to Composer before shared draft persistence',()=>{
   const saveStart=controller.indexOf('async function save(');
   const saveBody=controller.slice(saveStart,controller.indexOf("window.addEventListener('message'",saveStart));
