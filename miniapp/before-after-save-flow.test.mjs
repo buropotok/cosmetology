@@ -18,7 +18,8 @@ test('Before After shows a blocking save loader',()=>{
 });
 
 test('Before After empty slot content is centered as individual grid items',()=>{
-  const emptyRule=css.match(/\.empty\{([^}]*)\}/)?.[1]||'';
+  const emptyRule=css.match(/(?:^|})\.empty\{([^}]*)\}/)?.[1]||'';
+  assert.match(emptyRule,/display:grid/,'empty slot should use grid layout');
   assert.match(emptyRule,/place-content:center/,'empty slot group should remain centered in the slot');
   assert.match(emptyRule,/place-items:center/,'plus and caption should each be centered on the slot axis');
 });
