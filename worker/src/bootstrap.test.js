@@ -33,7 +33,7 @@ describe('Mini App bootstrap',()=>{
     expect(navigation).toContain("import('/composer-editor-runtime.js')");
     expect(loader).toContain('export function loadComposerEditorRuntime()');
     expect(loader).toContain('runtimePromise=undefined');
-    const ordered=['composer-tiptap.js','composer-tiptap-draft-bridge.js','composer-tiptap-fixes.js'];
+    const ordered=['composer-tiptap.js','composer-tiptap-placeholder.js','composer-editor-keyboard-layout.js','composer-tiptap-fixes.js'];
     for(let i=1;i<ordered.length;i++)expect(loader.indexOf(ordered[i-1])).toBeLessThan(loader.indexOf(ordered[i]));
     expect(loader).not.toContain('mock-ai-svg');
     expect(navigation).not.toContain("ai.id='ai-screen'");
