@@ -7,6 +7,7 @@ const wrangler=readFileSync(new URL('../../wrangler.jsonc',import.meta.url),'utf
 describe('Mini App AI request cancellation',()=>{
   it('forwards the incoming request signal to every Gemini generation call',()=>{
     expect(source.match(/abortSignal: req\.signal/g)).toHaveLength(3);
+    expect(source.match(/if \(req\.signal\.aborted\) throw new Error\('AI request aborted'\);/g)).toHaveLength(3);
     expect(source).toContain("const cancelled = req.signal.aborted");
     expect(source).toContain("cancelled ? 'AI_GENERATION_CANCELLED' : 'AI_GENERATION_FAILED'");
     expect(source).toContain('if (cancelled) return { cancelled: true }');

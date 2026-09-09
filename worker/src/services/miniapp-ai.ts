@@ -102,6 +102,7 @@ export async function generateMiniAppAiReply(req: Request, env: Env) {
       const result = await generateText({ model: google(model), tools: { google_search: google.tools.googleSearch({}) }, abortSignal: req.signal, prompt });
       const text = result.text.trim();
       if (!text) throw new Error('Gemini returned an empty response');
+      if (req.signal.aborted) throw new Error('AI request aborted');
       await setAiGenerationStatus(env, userId, kind, 'succeeded');
       return { discovery: parseDiscovery(text) };
     }
@@ -114,6 +115,7 @@ export async function generateMiniAppAiReply(req: Request, env: Env) {
     });
     const groundedText = grounded.text.trim();
     if (!groundedText) throw new Error('Gemini returned an empty grounded response');
+    if (req.signal.aborted) throw new Error('AI request aborted');
 
     const formatted = await generateText({
       model: google(model),
