@@ -1,17 +1,19 @@
 import type {PostBlock,PostDocument,PostListItem,PostNestedList,TextRun} from '../../../shared/post-document';
 import {safeLink} from '../../../shared/post-document';
 
-const PLACEHOLDER_HOSTS=new Set(['example.com','example.org','example.net','www.example.com','www.example.org','www.example.net','localhost']);
+const PLACEHOLDER_DOMAINS=['example.com','example.org','example.net','localhost'];
 const PRIVATE_HOST=/^(?:127(?:\.\d{1,3}){3}|10(?:\.\d{1,3}){3}|192\.168(?:\.\d{1,3}){2}|169\.254(?:\.\d{1,3}){2}|172\.(?:1[6-9]|2\d|3[01])(?:\.\d{1,3}){2}|0\.0\.0\.0|\[?::1\]?)$/i;
+
+function isPlaceholderHost(host:string):boolean{return PLACEHOLDER_DOMAINS.some(domain=>host===domain||host.endsWith(`.${domain}`))}
 
 export function isPlausiblePublicUrl(value:string):boolean{
   const normalized=safeLink(value);
   if(!normalized)return false;
   const host=new URL(normalized).hostname.toLowerCase();
-  return !!host&&!PLACEHOLDER_HOSTS.has(host)&&!host.endsWith('.localhost')&&!PRIVATE_HOST.test(host);
+  return !!host&&!isPlaceholderHost(host)&&!PRIVATE_HOST.test(host);
 }
 
-async function isReachable(value:string,fetcher:typeof fetch):Promise<boolean>{
+export async function isReachablePublicUrl(value:string,fetcher:typeof fetch=fetch):Promise<boolean>{
   if(!isPlausiblePublicUrl(value))return false;
   const controller=new AbortController();
   const timeout=setTimeout(()=>controller.abort(),3000);
@@ -39,7 +41,7 @@ export async function sanitizePostDocumentLinks(document:PostDocument,fetcher:ty
   const runs:TextRun[][]=[];result.blocks.forEach(block=>collectRuns(block,runs));
   runs.forEach(group=>group.forEach(run=>run.marks?.forEach(mark=>{if(mark.type==='link')urls.add(mark.href)})));
   const verdict=new Map<string,boolean>();
-  await Promise.all([...urls].map(async url=>verdict.set(url,await isReachable(url,fetcher))));
+  await Promise.all([...urls].map(async url=>verdict.set(url,await isReachablePublicUrl(url,fetcher))));
   if(result.buttons)result.buttons=result.buttons.filter(button=>verdict.get(button.url)===true);
   runs.forEach(group=>group.forEach(run=>{if(run.marks)run.marks=run.marks.filter(mark=>mark.type!=='link'||verdict.get(mark.href)===true);if(run.marks?.length===0)delete run.marks}));
   return result;
