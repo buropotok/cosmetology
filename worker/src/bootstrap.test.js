@@ -17,7 +17,7 @@ describe('Mini App bootstrap',()=>{
       'settings.js','composer-mockup.js','navigation.js','composer-screen.js',
       'composer-editor-stability.js','composer-image-manager.js','before-after-bridge.js',
       'diagnostics-fetch.js','composer-state.js','draft-store.js','drafts.js','composer-actions.js','onboarding-flow.js',
-      'ai-mock-transfer.js','build-id.js','vk-return-confirmation.js'
+      'composer-editor-runtime.js','build-id.js','vk-return-confirmation.js'
     ];
     const scriptSources=[...html.matchAll(/<script\b[^>]*\bsrc=["']([^"']+)["'][^>]*>/g)].map(match=>match[1]);
     for(const name of runtimeModules){expect(scriptSources).not.toContain(`/${name}`);const importLiteral=`'/${name}'`;expect(bootstrap.split(importLiteral)).toHaveLength(2)}
@@ -25,7 +25,20 @@ describe('Mini App bootstrap',()=>{
   });
   it('declares explicit startup phases in dependency order',()=>{const bootstrap=miniappFile('bootstrap.js');const phases=['loadPlatform','loadOnboardingAndSettings','loadAppShell','loadComposerRuntime','loadRuntimeIntegrations'];for(const phase of phases)expect(bootstrap).toContain(`async function ${phase}()`);const start=bootstrap.slice(bootstrap.indexOf('async function start()'));for(let i=1;i<phases.length;i++)expect(start.indexOf(`await ${phases[i-1]}()`)).toBeLessThan(start.indexOf(`await ${phases[i]}()`))});
   it('preserves first-party startup order inside bootstrap',()=>{const bootstrap=miniappFile('bootstrap.js');const ordered=['telegram-gateway.js','app-router.js','app.js','account-state.js','onboarding-api.js','onboarding-controller.js','onboarding-view.js','onboarding-router.js','settings.js','composer-mockup.js','navigation.js'];for(let i=1;i<ordered.length;i++)expect(bootstrap.indexOf(ordered[i-1])).toBeLessThan(bootstrap.indexOf(ordered[i]))});
-  it('lets navigation own Home and AI settings buttons and uses the shared file asset',()=>{const navigation=miniappFile('navigation.js'),html=miniappFile('index.html');expect(navigation).toContain("background:transparent url('/assets/icons/settings.svg') center/24px 24px no-repeat");expect(navigation.match(/class=\"cosmo-flow-settings cosmo-settings-button\"/g)).toHaveLength(2);expect(navigation).not.toContain("querySelector('#open-settings')");expect(html).not.toContain('id="open-settings"');expect(html).not.toContain('M19.14 12.94');expect(miniappFile('assets/icons/settings.svg')).toContain('M19.14 12.94')});
+  it('keeps production Tiptap runtime independent from the removed legacy AI mock',()=>{
+    const bootstrap=miniappFile('bootstrap.js'),loader=miniappFile('composer-editor-runtime.js'),navigation=miniappFile('navigation.js');
+    expect(bootstrap).toContain("import('/composer-editor-runtime.js')");
+    expect(bootstrap).not.toContain('ai-mock-transfer.js');
+    const ordered=['composer-tiptap.js','composer-tiptap-draft-bridge.js','composer-tiptap-fixes.js'];
+    for(let i=1;i<ordered.length;i++)expect(loader.indexOf(ordered[i-1])).toBeLessThan(loader.indexOf(ordered[i]));
+    expect(loader).not.toContain('mock-ai-svg');
+    expect(navigation).not.toContain("ai.id='ai-screen'");
+    expect(navigation).not.toContain('mock-ai-svg');
+    expect(navigation).not.toContain('ai-test-input');
+    expect(navigation).not.toContain("'/api/miniapp/ai/chat'");
+    expect(navigation).not.toContain("#flow-edit");
+  });
+  it('lets navigation own the Home settings button and uses the shared file asset',()=>{const navigation=miniappFile('navigation.js'),html=miniappFile('index.html');expect(navigation).toContain("background:transparent url('/assets/icons/settings.svg') center/24px 24px no-repeat");expect(navigation.match(/class=\"cosmo-flow-settings cosmo-settings-button\"/g)).toHaveLength(1);expect(navigation).not.toContain("querySelector('#open-settings')");expect(html).not.toContain('id="open-settings"');expect(html).not.toContain('M19.14 12.94');expect(miniappFile('assets/icons/settings.svg')).toContain('M19.14 12.94')});
   it('loads the persisted onboarding action gate after composer actions',()=>{const bootstrap=miniappFile('bootstrap.js'),flow=miniappFile('onboarding-flow.js');expect(bootstrap.indexOf("'/composer-actions.js'")).toBeLessThan(bootstrap.indexOf("'/onboarding-flow.js'"));expect(flow).toContain("'/api/miniapp/onboarding-intent'");expect(flow).toContain("'/api/miniapp/onboarding-flow'");expect(flow).toContain('showPublishConfirmation');expect(flow).toContain('Диагностика onboarding flow')});
   it('cancels the pending action intent when edit onboarding is backed out',()=>{const flow=miniappFile('onboarding-flow.js'),controller=miniappFile('onboarding-controller.js');expect(controller).toContain("this.finish('cancelled','user_back')");expect(flow).toContain("result?.status==='cancelled'&&result?.reason==='user_back'");expect(flow).toContain("cancel().catch(error=>console.warn('Onboarding intent cancellation failed',error))")});
   it('prepares VK, persists publish intent, and routes VPN fallback through the managed bot',()=>{
