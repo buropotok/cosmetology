@@ -8,7 +8,18 @@ test('Solo leaves one-finger vertical gestures to native page scrolling', () => 
   const source = read('./before-after.js');
   const css = read('./before-after.css');
   assert.match(css, /body\[data-mode=solo\] #slots,body\[data-mode=solo\] \[data-slot=before\]\{touch-action:pan-y\}/);
-  assert.match(source, /if \(mode === 'solo'\) \{\s*if \(previewPointers\.size < 2\) \{ previewGesture = null; previewMoved = false; return; \}\s*event\.preventDefault\(\);/);
+
+  const pointerDownStart = source.indexOf('element.onpointerdown = event => {');
+  const pointerMoveStart = source.indexOf('element.onpointermove = event => {', pointerDownStart);
+  assert.ok(pointerDownStart >= 0 && pointerMoveStart > pointerDownStart);
+
+  const pointerDown = source.slice(pointerDownStart, pointerMoveStart);
+  const oneFingerGuard = 'if (previewPointers.size < 2) { previewGesture = null; previewMoved = false; return; }';
+  const guardIndex = pointerDown.indexOf(oneFingerGuard);
+  const preventDefaultIndex = pointerDown.indexOf('event.preventDefault();', guardIndex + oneFingerGuard.length);
+
+  assert.ok(guardIndex >= 0, 'Solo must return before acquiring a one-finger gesture');
+  assert.ok(preventDefaultIndex > guardIndex, 'Solo must only prevent the native gesture after the one-finger early return');
 });
 
 test('Solo acquires the gesture only with two pointers and pans around their midpoint while zooming', () => {
