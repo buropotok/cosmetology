@@ -24,6 +24,22 @@ Discovery
 
 In `ready_post`, the rendered publication is already a valid publication preview. The user may optionally ask AI to rewrite it before moving to Composer.
 
+## Generation progress and cancellation
+
+Every AI request, including Discovery, initial post generation, `Короче`, and `Другое`, shows a blocking modal while the request is active.
+
+The modal displays `Ищу материалы` with a bold animated dot suffix cycling continuously through `.`, `..`, `...`, then back to `.`. Its only action is `Отмена`.
+
+Cancellation is part of the AI request lifecycle, not a visual close action. Pressing `Отмена` must:
+
+1. abort the browser `fetch` through the request's existing `AbortController`;
+2. close the progress modal and stop its dot timer;
+3. preserve the previous Discovery result or ready post rather than replacing it with a cancellation message;
+4. ignore any stale completion that races with the abort;
+5. propagate the incoming Cloudflare `Request.signal` into every Gemini `generateText` call so a client disconnect can abort the provider request as well.
+
+The Worker enables Cloudflare incoming request cancellation with the `enable_request_signal` compatibility flag. No separate AI "stop prompt" is sent.
+
 ## Ready-post actions
 
 The ready-post state exposes three actions:
@@ -141,3 +157,4 @@ The exact storage shape may follow the existing Draft implementation, but these 
 7. `Редактировать и опубликовать` is the primary ready-post CTA.
 8. Composer receives the canonical PostDocument directly; rendered HTML is never the source of truth.
 9. A generation error is presented with an explicit retry modal rather than forcing the user back through Discovery.
+10. AI generation progress uses one blocking modal owned by the AI Widget, and cancellation aborts the active request without erasing the previous result.

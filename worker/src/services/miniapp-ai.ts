@@ -99,9 +99,10 @@ export async function generateMiniAppAiReply(req: Request, env: Env) {
   try {
     await setAiGenerationStatus(env, userId, kind, 'running');
     if (mode === 'discovery') {
-      const result = await generateText({ model: google(model), tools: { google_search: google.tools.googleSearch({}) }, prompt });
+      const result = await generateText({ model: google(model), tools: { google_search: google.tools.googleSearch({}) }, abortSignal: req.signal, prompt });
       const text = result.text.trim();
       if (!text) throw new Error('Gemini returned an empty response');
+      if (req.signal.aborted) throw new Error('AI request aborted');
       await setAiGenerationStatus(env, userId, kind, 'succeeded');
       return { discovery: parseDiscovery(text) };
     }
@@ -109,24 +110,30 @@ export async function generateMiniAppAiReply(req: Request, env: Env) {
     const grounded = await generateText({
       model: google(model),
       tools: { google_search: google.tools.googleSearch({}) },
+      abortSignal: req.signal,
       prompt,
     });
     const groundedText = grounded.text.trim();
     if (!groundedText) throw new Error('Gemini returned an empty grounded response');
+    if (req.signal.aborted) throw new Error('AI request aborted');
 
     const formatted = await generateText({
       model: google(model),
       system: POST_MARKDOWN_SYSTEM_PROMPT,
+      abortSignal: req.signal,
       prompt: `Преобразуй следующую готовую публикацию в PostMarkdown, сохранив её содержание и сократив при необходимости до 200 слов максимум:\n\n${groundedText}`,
     });
     const markdown = formatted.text.trim();
     if (!markdown) throw new Error('Gemini returned an empty PostMarkdown response');
+    if (req.signal.aborted) throw new Error('AI request aborted');
     const document = await sanitizePostDocumentLinks(parsePostMarkdown(markdown));
     if (!isPostDocument(document)) throw new Error('Gemini returned invalid PostMarkdown');
     await setAiGenerationStatus(env, userId, kind, 'succeeded');
     return { text: JSON.stringify(document, null, 2) };
   } catch (error) {
-    await setAiGenerationStatus(env, userId, kind, 'failed', 'AI_GENERATION_FAILED').catch(statusError => console.error('Failed to persist AI generation failure', statusError));
+    const cancelled = req.signal.aborted;
+    await setAiGenerationStatus(env, userId, kind, 'failed', cancelled ? 'AI_GENERATION_CANCELLED' : 'AI_GENERATION_FAILED').catch(statusError => console.error('Failed to persist AI generation failure', statusError));
+    if (cancelled) return { cancelled: true };
     console.error('Mini App AI generation failed', { provider: 'google', model, mode, error: serializeAiError(error) });
     throw new AppError('AI_GENERATION_FAILED', 'Не удалось получить ответ AI. Попробуйте ещё раз.', 502);
   }
