@@ -11,6 +11,7 @@ describe('publisher link validator',()=>{
     expect(result.buttons).toEqual([]);
     expect(result.blocks[0]).toEqual({type:'paragraph',content:[{text:'Источник'}]});
     expect(fetcher).not.toHaveBeenCalled();
+    expect(isPlausiblePublicUrl('https://docs.example.com/source')).toBe(false);
     expect(isPlausiblePublicUrl('http://127.0.0.1/test')).toBe(false);
     expect(await isReachablePublicUrl('https://example.org/source',fetcher)).toBe(false);
   });

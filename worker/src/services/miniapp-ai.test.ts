@@ -24,6 +24,11 @@ describe('Mini App AI PostMarkdown generation', () => {
     expect(source).toContain('Никогда не используй placeholder-домены');
     expect(source).toContain('Не придумывай URL');
   });
+  it('accepts Discovery source URLs only from Google Search and requires them for news', () => {
+    expect(source).toContain("if(!source)throw new Error('Discovery source was not returned by Google Search')");
+    expect(source).toContain("if(requireSource)throw new Error('Discovery returned an idea without a source')");
+    expect(source).toContain("validateDiscoverySources(parseDiscovery(text),result.sources,kind==='news')");
+  });
   it('verifies grounding sources and appends them after the generated post', () => {
     expect(source).toContain('const sources=await verifiedGroundingSources(grounded.sources)');
     expect(source).toContain("if(!sources.length)throw new Error('Gemini returned no reachable grounding sources')");

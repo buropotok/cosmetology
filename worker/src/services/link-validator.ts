@@ -1,14 +1,16 @@
 import type {PostBlock,PostDocument,PostListItem,PostNestedList,TextRun} from '../../../shared/post-document';
 import {safeLink} from '../../../shared/post-document';
 
-const PLACEHOLDER_HOSTS=new Set(['example.com','example.org','example.net','www.example.com','www.example.org','www.example.net','localhost']);
+const PLACEHOLDER_DOMAINS=['example.com','example.org','example.net','localhost'];
 const PRIVATE_HOST=/^(?:127(?:\.\d{1,3}){3}|10(?:\.\d{1,3}){3}|192\.168(?:\.\d{1,3}){2}|169\.254(?:\.\d{1,3}){2}|172\.(?:1[6-9]|2\d|3[01])(?:\.\d{1,3}){2}|0\.0\.0\.0|\[?::1\]?)$/i;
+
+function isPlaceholderHost(host:string):boolean{return PLACEHOLDER_DOMAINS.some(domain=>host===domain||host.endsWith(`.${domain}`))}
 
 export function isPlausiblePublicUrl(value:string):boolean{
   const normalized=safeLink(value);
   if(!normalized)return false;
   const host=new URL(normalized).hostname.toLowerCase();
-  return !!host&&!PLACEHOLDER_HOSTS.has(host)&&!host.endsWith('.localhost')&&!PRIVATE_HOST.test(host);
+  return !!host&&!isPlaceholderHost(host)&&!PRIVATE_HOST.test(host);
 }
 
 export async function isReachablePublicUrl(value:string,fetcher:typeof fetch=fetch):Promise<boolean>{

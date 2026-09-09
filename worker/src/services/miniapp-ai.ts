@@ -39,7 +39,7 @@ const POST_MARKDOWN_SYSTEM_PROMPT = `Ты преобразуешь уже под
 :::
 Не вкладывай details внутрь details.
 
-CTA-кнопки, если они нужны, записывай только в самом конце публикации в PostMarkdown-формате кнопки. Создавай кнопку только если её точный реальный http/https URL уже буквально присутствует во входной публикации. Не придумывай URL.
+CTA-кнопка использует двойные квадратные скобки вокруг названия и круглые скобки с точным URL из входной публикации. Создавай кнопку только если этот реальный http/https URL уже буквально присутствует во входной публикации. Не придумывай URL.
 После первой кнопки разрешены только другие кнопки.
 
 Не создавай раздел «Источники»: сервер добавит проверенные источники после форматирования.
@@ -85,22 +85,13 @@ function parseDiscovery(text: string):DiscoveryResponse {
   return value as DiscoveryResponse;
 }
 
-async function validateDiscoverySources(discovery:DiscoveryResponse):Promise<DiscoveryResponse>{
-  const ideas=await Promise.all(discovery.ideas.map(async idea=>{
-    if(!idea.source)return idea;
-    if(!await isReachablePublicUrl(idea.source.url))throw new Error('Discovery returned an unreachable source');
-    return idea;
-  }));
-  return {...discovery,ideas};
-}
-
 function sourceLabel(url:string,title:unknown):string{
   const candidate=typeof title==='string'?title.trim():'';
   if(candidate)return candidate;
   try{return new URL(url).hostname.replace(/^www\./,'')}catch{return url}
 }
 
-async function verifiedGroundingSources(rawSources:readonly unknown[]):Promise<VerifiedSource[]>{
+function groundingCandidates(rawSources:readonly unknown[]):VerifiedSource[]{
   const unique=new Map<string,VerifiedSource>();
   for(const raw of rawSources){
     if(!raw||typeof raw!=='object')continue;
@@ -111,7 +102,31 @@ async function verifiedGroundingSources(rawSources:readonly unknown[]):Promise<V
     unique.set(normalized,{name:sourceLabel(normalized,source.title),url:normalized});
     if(unique.size>=MAX_SOURCE_CANDIDATES)break;
   }
-  return (await Promise.all([...unique.values()].map(async source=>({source,reachable:await isReachablePublicUrl(source.url)}))))
+  return [...unique.values()];
+}
+
+async function validateDiscoverySources(discovery:DiscoveryResponse,rawSources:readonly unknown[],requireSource:boolean):Promise<DiscoveryResponse>{
+  const grounded=new Map(groundingCandidates(rawSources).map(source=>[source.url,source]));
+  const used=new Set<string>();
+  const ideas=discovery.ideas.map(idea=>{
+    if(!idea.source){
+      if(requireSource)throw new Error('Discovery returned an idea without a source');
+      return idea;
+    }
+    const normalized=safeLink(idea.source.url);
+    const source=normalized?grounded.get(normalized):undefined;
+    if(!source)throw new Error('Discovery source was not returned by Google Search');
+    used.add(source.url);
+    return {...idea,source};
+  });
+  const verdict=new Map<string,boolean>();
+  await Promise.all([...used].map(async url=>verdict.set(url,await isReachablePublicUrl(url))));
+  if([...used].some(url=>verdict.get(url)!==true))throw new Error('Discovery returned an unreachable source');
+  return {...discovery,ideas};
+}
+
+async function verifiedGroundingSources(rawSources:readonly unknown[]):Promise<VerifiedSource[]>{
+  return (await Promise.all(groundingCandidates(rawSources).map(async source=>({source,reachable:await isReachablePublicUrl(source.url)}))))
     .filter(item=>item.reachable)
     .map(item=>item.source)
     .slice(0,MAX_VERIFIED_SOURCES);
@@ -160,7 +175,7 @@ export async function generateMiniAppAiReply(req: Request, env: Env) {
       });
       const text = result.text.trim();
       if (!text) throw new Error('Gemini returned an empty response');
-      const discovery=await validateDiscoverySources(parseDiscovery(text));
+      const discovery=await validateDiscoverySources(parseDiscovery(text),result.sources,kind==='news');
       await setAiGenerationStatus(env, userId, kind, 'succeeded');
       return { discovery };
     }
