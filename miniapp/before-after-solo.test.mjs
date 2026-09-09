@@ -30,11 +30,14 @@ test('Before After controller keeps its public API stable and destroys each isol
   assert.doesNotMatch(source, /Object\.freeze\(\{[^}]*openSolo/);
 });
 
-test('solo stays hidden until its source file is restored, preventing native file-picker click-through', () => {
+test('solo stays invisible until its source is restored and post-layout fit completes', () => {
   const source = read('./before-after-controller.js');
   assert.match(source, /async function revealSolo\(current\)/);
   assert.match(source, /if\(!await restoreSoloIntoFrame\(\)\)return false/);
-  assert.match(source, /current\.hidden=false;return true/);
+  assert.match(source, /current\.style\.visibility='hidden';current\.hidden=false/);
+  assert.match(source, /await nextPaint\(\)/);
+  assert.match(source, /if\(!await fitSoloIntoFrame\(\)\)/);
+  assert.match(source, /current\.style\.visibility='';return true/);
   assert.match(source, /const current=ensureOverlay\('solo'\);current\.hidden=true/);
   assert.match(source, /void revealSolo\(current\)/);
 });

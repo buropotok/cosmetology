@@ -8,11 +8,21 @@
     const restore=frameBridge()?.restoreSolo?.(soloFile,soloIndex);if(!restore)return false;
     try{await restore;return true}catch(error){debugLog('SOLO RESTORE rejected',{message:error?.message||String(error),index:soloIndex});return false}
   }
+  async function fitSoloIntoFrame(){
+    if(currentMode!=='solo')return false;
+    const fit=frameBridge()?.fitSolo?.();if(!fit)return false;
+    try{await fit;return true}catch(error){debugLog('SOLO FIT rejected',{message:error?.message||String(error),index:soloIndex});return false}
+  }
   async function revealSolo(current){
     if(currentMode!=='solo'||overlay!==current)return false;
     if(!await restoreSoloIntoFrame())return false;
     if(currentMode!=='solo'||overlay!==current)return false;
-    current.hidden=false;return true
+    current.style.visibility='hidden';current.hidden=false;
+    await nextPaint();
+    if(currentMode!=='solo'||overlay!==current){current.hidden=true;current.style.visibility='';return false}
+    if(!await fitSoloIntoFrame()){current.hidden=true;current.style.visibility='';return false}
+    if(currentMode!=='solo'||overlay!==current){current.hidden=true;current.style.visibility='';return false}
+    current.style.visibility='';return true
   }
   function ensureOverlay(mode='dual'){
     if(overlay&&currentMode===mode)return overlay;
