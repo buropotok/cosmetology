@@ -1,5 +1,6 @@
 import {Editor,Mark,Node,mergeAttributes} from 'https://esm.sh/@tiptap/core@3.0.2';
 import StarterKit from 'https://esm.sh/@tiptap/starter-kit@3.0.2';
+import {postDocumentToTiptap,tiptapToPostDocument} from './post-document-tiptap-adapter.js';
 
 (()=>{
   const diag=(kind,data={})=>window.CosmoDiagnostics?.log?.(kind,data);
@@ -55,21 +56,8 @@ import StarterKit from 'https://esm.sh/@tiptap/starter-kit@3.0.2';
   const Details=Node.create({name:'details',group:'block',content:'detailsSummary detailsBody',isolating:true,parseHTML(){return[{tag:'details'}]},renderHTML({HTMLAttributes}){return['details',mergeAttributes(HTMLAttributes),0]}});
 
   const plainDocument=value=>({type:'doc',content:String(value||'').replace(/\r\n?/g,'\n').split('\n').map(line=>({type:'paragraph',content:line?[{type:'text',text:line}]:undefined}))});
-  const markToPost=mark=>mark.type==='strike'?{type:'strikethrough'}:mark.type==='link'?{type:'link',href:mark.attrs?.href||''}:{type:mark.type};
-  function inlineRuns(node){const runs=[];const visit=n=>{if(n.type==='text'&&n.text){const marks=(n.marks||[]).map(markToPost).filter(m=>['bold','italic','underline','strikethrough','spoiler','link'].includes(m.type));runs.push(marks.length?{text:n.text,marks}:{text:n.text});return}if(n.type==='hardBreak'){runs.push({text:'\n'});return}for(const child of n.content||[])visit(child)};visit(node);return runs}
-  const listType=node=>node.type==='orderedList'?'ordered_list':'bullet_list';
-  const normalizeListItem=node=>{const first=(node.content||[]).find(n=>n.type==='paragraph'),item={content:first?inlineRuns(first):[]};const nested=(node.content||[]).find(n=>n.type==='orderedList'||n.type==='bulletList');if(nested)item.children={type:listType(nested),items:(nested.content||[]).filter(n=>n.type==='listItem').map(normalizeListItem)};return item};
-  function nodeToPostBlock(node){if(node.type==='paragraph')return{type:'paragraph',content:inlineRuns(node)};if(node.type==='heading')return{type:'heading',content:inlineRuns(node)};if(node.type==='orderedList'||node.type==='bulletList')return{type:listType(node),items:(node.content||[]).filter(n=>n.type==='listItem').map(normalizeListItem)};if(node.type==='blockquote'){const blocks=(node.content||[]).map(nodeToPostBlock).filter(Boolean);return{type:'quote',blocks:blocks.length?blocks:[{type:'paragraph',content:[]}]}}if(node.type==='details'){const summary=(node.content||[]).find(n=>n.type==='detailsSummary'),body=(node.content||[]).find(n=>n.type==='detailsBody'),blocks=(body?.content||[]).map(nodeToPostBlock).filter(Boolean);return{type:'details',title:summary?inlineRuns(summary):[{text:'Подробнее'}],blocks:blocks.length?blocks:[{type:'paragraph',content:[]}]}}return null}
-  function nodeText(node){return (node.content||[]).map(child=>child.type==='text'?(child.text||''):child.type==='hardBreak'?'\n':nodeText(child)).join(childSeparator(node))}
-  function childSeparator(node){return ['doc','blockquote','detailsBody'].includes(node.type)?'\n':''}
   let buttons=[];
-  function toPostDocument(){const blocks=(editor.getJSON().content||[]).map(nodeToPostBlock).filter(Boolean);if(!blocks.length)blocks.push({type:'paragraph',content:[{text:''}]});return{schemaVersion:2,blocks,...(buttons.length?{buttons:[...buttons]}:{})}}
-  function postToTiptap(doc){
-    const runNodes=runs=>(runs||[]).flatMap(run=>{if(!run.text)return[];const marks=(run.marks||[]).map(mark=>mark.type==='strikethrough'?{type:'strike'}:mark.type==='link'?{type:'link',attrs:{href:mark.href,target:'_blank',rel:'noopener noreferrer nofollow',class:null}}:{type:mark.type});return[{type:'text',text:run.text,marks:marks.length?marks:undefined}]});
-    const listItem=(raw,parentType)=>{const item=Array.isArray(raw)?{content:raw}:raw,content=[{type:'paragraph',content:runNodes(item.content)}],children=item.children;if(children){const nested=Array.isArray(children)?{type:parentType,items:children}:children;content.push({type:nested.type==='ordered_list'?'orderedList':'bulletList',content:(nested.items||[]).map(child=>listItem(child,nested.type))})}return{type:'listItem',content}};
-    const blockNode=block=>{if(block.type==='paragraph')return{type:'paragraph',content:runNodes(block.content)};if(block.type==='heading')return{type:'heading',attrs:{level:1},content:runNodes(block.content)};if(block.type==='ordered_list'||block.type==='bullet_list')return{type:block.type==='ordered_list'?'orderedList':'bulletList',content:(block.items||[]).map(item=>listItem(item,block.type))};if(block.type==='quote'){const body=Array.isArray(block.blocks)?block.blocks.map(blockNode).filter(Boolean):[{type:'paragraph',content:runNodes(block.content||[])}];return{type:'blockquote',content:body.length?body:[{type:'paragraph'}]}}if(block.type==='details'){const body=(block.blocks||[]).map(blockNode).filter(Boolean);return{type:'details',content:[{type:'detailsSummary',content:runNodes(block.title?.length?block.title:[{text:'Подробнее'}])},{type:'detailsBody',content:body.length?body:[{type:'paragraph'}]}]}}return null};
-    const content=(doc?.blocks||[]).map(blockNode).filter(Boolean);return{type:'doc',content:content.length?content:[{type:'paragraph'}]}
-  }
+  function toPostDocument(){return tiptapToPostDocument(editor.getJSON(),buttons)}
 
   let syncing=false;
   function syncTextarea(){const value=editor.getText({blockSeparator:'\n'});if(text.value===value)return;syncing=true;text.value=value;text.dispatchEvent(new Event('input',{bubbles:true}));syncing=false}
@@ -93,7 +81,7 @@ import StarterKit from 'https://esm.sh/@tiptap/starter-kit@3.0.2';
     input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();submit()}else if(e.key==='Escape'){e.preventDefault();closeButtonEditor()}});backdrop.addEventListener('mousedown',e=>{if(e.target===backdrop)closeButtonEditor()});renderStep();
   }
 
-  function restoreDraft(value){if(typeof value!=='string'||!value.startsWith(DRAFT_PREFIX))return false;try{const payload=JSON.parse(value.slice(DRAFT_PREFIX.length)),doc=payload?.document;if(doc?.schemaVersion!==1&&doc?.schemaVersion!==2)return false;buttons=Array.isArray(doc.buttons)?doc.buttons:[];editor.commands.setContent(postToTiptap(doc),{emitUpdate:true});renderButtons();diag('tiptap-draft-restored',{blocks:doc.blocks?.length||0,buttons:buttons.length,schemaVersion:doc.schemaVersion});return true}catch(error){diag('tiptap-draft-error',{error:error?.message||String(error)});return false}}
+  function restoreDraft(value){if(typeof value!=='string'||!value.startsWith(DRAFT_PREFIX))return false;try{const payload=JSON.parse(value.slice(DRAFT_PREFIX.length)),doc=payload?.document;if(doc?.schemaVersion!==1&&doc?.schemaVersion!==2)return false;buttons=Array.isArray(doc.buttons)?doc.buttons:[];editor.commands.setContent(postDocumentToTiptap(doc),{emitUpdate:true});renderButtons();diag('tiptap-draft-restored',{blocks:doc.blocks?.length||0,buttons:buttons.length,schemaVersion:doc.schemaVersion});return true}catch(error){diag('tiptap-draft-error',{error:error?.message||String(error)});return false}}
   function restorePlain(value){buttons=[];renderButtons();editor.commands.setContent(plainDocument(value),{emitUpdate:true})}
   function draftValue(){return DRAFT_PREFIX+JSON.stringify({version:3,document:toPostDocument()})}
   function clear(){buttons=[];renderButtons();editor.commands.clearContent(true)}

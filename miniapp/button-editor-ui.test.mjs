@@ -3,6 +3,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 const source=fs.readFileSync(new URL('./composer-tiptap.js',import.meta.url),'utf8');
+const adapterSource=fs.readFileSync(new URL('./post-document-tiptap-adapter.js',import.meta.url),'utf8');
+const adapterUrl=`data:text/javascript;base64,${Buffer.from(adapterSource).toString('base64')}`;
+const {tiptapToPostDocument}=await import(adapterUrl);
 
 test('link button uses persistent editor footer and two-step modal without changing PostDocument buttons contract',()=>{
   assert.match(source,/const buttonDock=document\.createElement\('div'\);buttonDock\.className='composer-button-dock'/);
@@ -14,7 +17,12 @@ test('link button uses persistent editor footer and two-step modal without chang
   assert.match(source,/buttons\.push\(\{text:draft\.text,url:draft\.url\}\)/);
   assert.match(source,/buttons\[index\]=\{text:draft\.text,url:draft\.url\}/);
   assert.match(source,/buttons\.splice\(index,1\)/);
-  assert.match(source,/return\{schemaVersion:2,blocks,\.\.\.\(buttons\.length\?\{buttons:\[\.\.\.buttons\]\}:\{\}\)\}/);
+
+  const tiptapDocument={type:'doc',content:[{type:'paragraph',content:[{type:'text',text:'Текст'}]}]};
+  const buttons=[{text:'Подробнее',url:'https://example.com/'}];
+  assert.deepEqual(tiptapToPostDocument(tiptapDocument,buttons).buttons,buttons);
+  assert.equal('buttons' in tiptapToPostDocument(tiptapDocument,[]),false);
+
   assert.doesNotMatch(source,/prompt\('Текст кнопки'/);
   assert.doesNotMatch(source,/prompt\('Ссылка кнопки'/);
 });
