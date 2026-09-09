@@ -18,6 +18,12 @@ function loadWorkspaceStyles(){
   document.head.insertAdjacentHTML('beforeend','<style>#flow-continue[hidden]{display:none!important}.cosmo-home-mark{width:228px!important;height:228px!important}</style>');
 }
 
+function startRuntimeDiagnostics(){
+  void import('/runtime-diagnostics.js')
+    .then(diagnostics=>diagnostics.startRuntimeDiagnostics?.())
+    .catch(error=>console.warn('Runtime diagnostics failed to start',error));
+}
+
 async function loadPlatform(){
   await import('/telegram-gateway.js');
   await import('/app-router.js');
@@ -70,6 +76,7 @@ async function loadRuntimeIntegrations(){
 
 async function start(){
   loadWorkspaceStyles();
+  startRuntimeDiagnostics();
   await loadPlatform();
   await loadOnboardingAndSettings();
   await loadAppShell();

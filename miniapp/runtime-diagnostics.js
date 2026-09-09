@@ -8,6 +8,8 @@ const transportFetch=typeof window.fetch==='function'?window.fetch.bind(window):
 const events=[];
 let sequence=0;
 let deliveryQueue=Promise.resolve();
+let sessionEventRecorded=false;
+let initialDeliveryQueued=false;
 
 function detectDeviceType(){
   const platform=String(telegram?.platform||'').toLowerCase();
@@ -23,6 +25,7 @@ const deviceType=detectDeviceType();
 const clock=()=>typeof performance?.now==='function'?performance.now():Date.now();
 function redactSecrets(value){return String(value||'').replace(/\btma\s+[^\s]+/gi,'tma [redacted]').replace(/\b(access[_-]?token|api[_-]?key|token)\s*[:=]\s*[^\s&,;]+/gi,'$1=[redacted]')}
 const errorText=error=>redactSecrets(error?.message||error||'Unknown error').replace(/[\r\n]+/g,' ').slice(0,MAX_ERROR_LENGTH);
+const hasTelegramAuth=()=>Boolean(window.Telegram?.WebApp?.initData);
 
 function snapshot(){
   return{
@@ -52,14 +55,33 @@ function queueDelivery(){
   deliveryQueue=deliveryQueue.catch(()=>undefined).then(()=>deliver(data)).catch(()=>undefined);
 }
 
-export function recordRuntimeDiagnostic({event='module_load',stage,module,status,durationMs,error}={}){
-  if(!stage||!module||!status)return null;
+function appendEvent({event,stage,module,status,durationMs,error}){
   const entry={seq:++sequence,time:new Date().toISOString(),event:String(event),stage:String(stage),module:String(module),status:String(status)};
   if(Number.isFinite(durationMs))entry.durationMs=Math.max(0,Math.round(durationMs));
   if(error)entry.error=errorText(error);
   events.push(entry);
   if(events.length>MAX_EVENTS)events.splice(0,events.length-MAX_EVENTS);
-  queueDelivery();
+  return entry;
+}
+
+function ensureSessionEvent(){
+  if(sessionEventRecorded)return;
+  sessionEventRecorded=true;
+  appendEvent({event:'session_started',stage:'application.startup',module:'runtime-diagnostics',status:'loaded'});
+}
+
+export function startRuntimeDiagnostics(){
+  ensureSessionEvent();
+  if(!hasTelegramAuth())return Object.freeze({started:false,reason:'telegram_auth_missing'});
+  if(!initialDeliveryQueued){initialDeliveryQueued=true;queueDelivery()}
+  return Object.freeze({started:true,sessionNumber,sessionStartedAt,deviceType});
+}
+
+export function recordRuntimeDiagnostic({event='module_load',stage,module,status,durationMs,error}={}){
+  if(!stage||!module||!status)return null;
+  ensureSessionEvent();
+  const entry=appendEvent({event,stage,module,status,durationMs,error});
+  if(hasTelegramAuth())queueDelivery();
   return Object.freeze({...entry});
 }
 
