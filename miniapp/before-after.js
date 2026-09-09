@@ -64,7 +64,17 @@ async function fitSoloSource() {
   restoreLayoutStyles();
   await new Promise(resolve => requestAnimationFrame(resolve));
   const rect = document.querySelector('[data-slot=before]')?.getBoundingClientRect();
-  if (rect?.width > 0 && rect?.height > 0) geometry.fit(photo, rect);
+  if (rect?.width > 0 && rect?.height > 0) geometry.fitContain(photo, rect);
+}
+function applySoloFit(kind) {
+  if (mode !== 'solo') return;
+  const photo = state.photos.before, rect = document.querySelector('[data-slot=before]')?.getBoundingClientRect();
+  if (!photo || !rect?.width || !rect?.height) return;
+  const method = kind === 'width' ? 'fitWidth' : kind === 'height' ? 'fitHeight' : kind === 'contain' ? 'fitContain' : null;
+  if (!method) return;
+  geometry[method](photo, rect);
+  composite.clearCommitted();
+  render();
 }
 function configureMode() {
   document.body.dataset.mode = mode;
@@ -72,9 +82,11 @@ function configureMode() {
   file.disabled = true;
   document.querySelectorAll('.empty').forEach(element => { element.style.display = 'none'; });
   document.querySelector('header strong').textContent = 'Фото';
-  const controls = document.createElement('section'); controls.className = 'solo-rotation'; controls.innerHTML = '<div><strong>Поворот</strong><span id="soloAngle">0°</span></div>';
-  const slider = rotation.cloneNode(true); slider.id = 'soloRotation'; controls.append(slider); slots.after(controls);
+  const controls = document.createElement('section'); controls.className = 'solo-rotation'; controls.innerHTML = '<div class="solo-rotation-head"><strong>Поворот</strong><span id="soloAngle">0°</span></div>';
+  const slider = rotation.cloneNode(true); slider.id = 'soloRotation'; slider.min = '-180'; slider.max = '180'; slider.step = '1'; controls.append(slider);
+  const fitActions = document.createElement('div'); fitActions.className = 'solo-fit-actions'; fitActions.innerHTML = '<button type="button" data-solo-fit="width">По ширине</button><button type="button" data-solo-fit="height">По высоте</button><button type="button" data-solo-fit="contain">Вписать целиком</button>'; controls.append(fitActions); slots.after(controls);
   slider.addEventListener('input', () => { const photo = state.photos.before; if (!photo) return; photo.rotation = Number(slider.value); controls.querySelector('#soloAngle').textContent = `${slider.value}°`; composite.clearCommitted(); render(); });
+  fitActions.querySelectorAll('[data-solo-fit]').forEach(button => button.addEventListener('click', () => applySoloFit(button.dataset.soloFit)));
 }
 
 document.querySelectorAll('[data-ratio]').forEach(button => button.onclick = () => applyRatio(button.dataset.ratio));
