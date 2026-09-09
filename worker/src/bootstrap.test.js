@@ -9,7 +9,7 @@ const miniappFile=name=>readFileSync(resolve(repositoryRoot,'miniapp',name),'utf
 beforeAll(async()=>{await import('../../miniapp/diagnostics-fetch.js')});
 
 describe('Mini App bootstrap',()=>{
-  it('is the only loader for first-party runtime modules',()=>{
+  it('is the only loader for first-party startup modules',()=>{
     const html=miniappFile('index.html'),bootstrap=miniappFile('bootstrap.js');
     const runtimeModules=[
       'telegram-gateway.js','app-router.js','app.js','account-state.js',
@@ -17,18 +17,22 @@ describe('Mini App bootstrap',()=>{
       'settings.js','composer-mockup.js','navigation.js','composer-screen.js',
       'composer-editor-stability.js','composer-image-manager.js','before-after-bridge.js',
       'diagnostics-fetch.js','composer-state.js','draft-store.js','drafts.js','composer-actions.js','onboarding-flow.js',
-      'composer-editor-runtime.js','build-id.js','vk-return-confirmation.js'
+      'build-id.js','vk-return-confirmation.js'
     ];
     const scriptSources=[...html.matchAll(/<script\b[^>]*\bsrc=["']([^"']+)["'][^>]*>/g)].map(match=>match[1]);
     for(const name of runtimeModules){expect(scriptSources).not.toContain(`/${name}`);const importLiteral=`'/${name}'`;expect(bootstrap.split(importLiteral)).toHaveLength(2)}
+    expect(bootstrap).not.toContain("import('/composer-editor-runtime.js')");
+    expect(scriptSources).not.toContain('/composer-editor-runtime.js');
     expect(scriptSources).toContain('/bootstrap.js');expect(scriptSources).toHaveLength(2);expect(scriptSources).toContain('https://telegram.org/js/telegram-web-app.js');expect(miniappFile('composer-mockup.js')).not.toContain("import('/navigation.js')");expect(miniappFile('drafts.js')).not.toContain("import('/navigation.js')");
   });
   it('declares explicit startup phases in dependency order',()=>{const bootstrap=miniappFile('bootstrap.js');const phases=['loadPlatform','loadOnboardingAndSettings','loadAppShell','loadComposerRuntime','loadRuntimeIntegrations'];for(const phase of phases)expect(bootstrap).toContain(`async function ${phase}()`);const start=bootstrap.slice(bootstrap.indexOf('async function start()'));for(let i=1;i<phases.length;i++)expect(start.indexOf(`await ${phases[i-1]}()`)).toBeLessThan(start.indexOf(`await ${phases[i]}()`))});
   it('preserves first-party startup order inside bootstrap',()=>{const bootstrap=miniappFile('bootstrap.js');const ordered=['telegram-gateway.js','app-router.js','app.js','account-state.js','onboarding-api.js','onboarding-controller.js','onboarding-view.js','onboarding-router.js','settings.js','composer-mockup.js','navigation.js'];for(let i=1;i<ordered.length;i++)expect(bootstrap.indexOf(ordered[i-1])).toBeLessThan(bootstrap.indexOf(ordered[i]))});
-  it('keeps production Tiptap runtime independent from the removed legacy AI mock',()=>{
+  it('defers production Tiptap runtime to the New Post lifecycle',()=>{
     const bootstrap=miniappFile('bootstrap.js'),loader=miniappFile('composer-editor-runtime.js'),navigation=miniappFile('navigation.js');
-    expect(bootstrap).toContain("import('/composer-editor-runtime.js')");
-    expect(bootstrap).not.toContain('ai-mock-transfer.js');
+    expect(bootstrap).not.toContain("import('/composer-editor-runtime.js')");
+    expect(navigation).toContain("import('/composer-editor-runtime.js')");
+    expect(loader).toContain('export function loadComposerEditorRuntime()');
+    expect(loader).toContain('runtimePromise=undefined');
     const ordered=['composer-tiptap.js','composer-tiptap-draft-bridge.js','composer-tiptap-fixes.js'];
     for(let i=1;i<ordered.length;i++)expect(loader.indexOf(ordered[i-1])).toBeLessThan(loader.indexOf(ordered[i]));
     expect(loader).not.toContain('mock-ai-svg');

@@ -62,7 +62,6 @@ async function loadComposerRuntime(){
 
 async function loadRuntimeIntegrations(){
   await Promise.all([
-    import('/composer-editor-runtime.js'),
     import('/ai-post-editor-transfer.js'),
     import('/build-id.js'),
     import('/vk-return-confirmation.js')
