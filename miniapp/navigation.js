@@ -9,13 +9,19 @@ if(!composer||!text||!imageInput)return;
 
 const style=document.createElement('style');
 style.textContent=`
-.cosmo-flow-screen{--c-bg:#f2f2f7;--c-card:#fff;--c-text:#111;--c-muted:#6e6e73;--c-line:#e5e5ea;--c-blue:#2481cc;color:var(--c-text);background:var(--c-bg);margin:-22px -18px -24px;padding:calc(22px + env(safe-area-inset-top)) 16px calc(30px + env(safe-area-inset-bottom));min-height:100vh;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",sans-serif;box-sizing:border-box}.cosmo-flow-screen[hidden]{display:none!important}.cosmo-flow-nav{height:42px;display:flex;align-items:center;justify-content:center;position:relative}.cosmo-flow-nav .cosmo-logo{position:absolute;left:0;width:36px;height:36px;background:url('/assets/icons/cosmo-sofa.svg') center/contain no-repeat}.cosmo-flow-nav .cosmo-settings-button{position:absolute;top:1px;right:0;width:40px;height:40px;margin:0;padding:8px;border:0;border-radius:0;background:transparent url('/assets/icons/settings.svg') center/24px 24px no-repeat;display:grid;place-items:center;appearance:none}.cosmo-flow-nav h1{font-size:17px;font-weight:700;margin:0}.cosmo-home-hero{padding:42px 4px 28px;text-align:center}.cosmo-home-mark{width:76px;height:76px;margin:0 auto 18px;background:url('/assets/icons/cosmo-sofa.svg') center/contain no-repeat}.cosmo-home-hero h2{font-size:28px;margin:0 0 8px}.cosmo-home-hero p{color:var(--c-muted);font-size:15px;line-height:1.45;margin:0}.cosmo-flow-actions{display:grid;gap:11px}.cosmo-primary,.cosmo-secondary{width:100%;border:0;border-radius:12px;padding:15px 16px;font:700 16px/1.2 inherit}.cosmo-primary{background:var(--c-blue);color:#fff}.cosmo-secondary{background:#fff;color:var(--c-blue)}.cosmo-composer-back{position:absolute!important;left:0!important;width:auto!important;height:36px!important;border:0!important;background:transparent!important;color:var(--c-blue)!important;font:600 15px/1 inherit!important;padding:8px 4px!important;z-index:3}.approved-composer .composer-nav::before{display:none!important}.cosmo-draft-loading{position:absolute;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;gap:10px;background:rgba(255,255,255,.88);border-radius:inherit;font:600 14px/1.2 inherit;color:#555}.cosmo-draft-loading[hidden]{display:none!important}.cosmo-draft-spinner{width:20px;height:20px;border:2px solid #cfd4d8;border-top-color:var(--c-blue);border-radius:50%;animation:cosmo-spin .8s linear infinite}@keyframes cosmo-spin{to{transform:rotate(360deg)}}
+.cosmo-flow-screen{--c-bg:#f2f2f7;--c-card:#fff;--c-text:#111;--c-muted:#6e6e73;--c-line:#e5e5ea;--c-blue:#2481cc;color:var(--c-text);background:var(--c-bg);margin:-22px -18px -24px;padding:calc(22px + env(safe-area-inset-top)) 16px calc(30px + env(safe-area-inset-bottom));min-height:100vh;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",sans-serif;box-sizing:border-box}.cosmo-flow-screen[hidden]{display:none!important}.cosmo-flow-nav{height:42px;display:flex;align-items:center;justify-content:center;position:relative}.cosmo-flow-nav .cosmo-logo{position:absolute;left:0;width:36px;height:36px;background:url('/assets/icons/cosmo-sofa.svg') center/contain no-repeat}.cosmo-flow-nav .cosmo-settings-button{position:absolute;top:1px;right:0;width:40px;height:40px;margin:0;padding:8px;border:0;border-radius:0;background:transparent url('/assets/icons/settings.svg') center/24px 24px no-repeat;display:grid;place-items:center;appearance:none}.cosmo-flow-nav h1{font-size:17px;font-weight:700;margin:0}.cosmo-home-hero{padding:42px 4px 28px;text-align:center}.cosmo-home-mark{width:76px;height:76px;margin:0 auto 18px;background:url('/assets/icons/cosmo-sofa.svg') center/contain no-repeat}.cosmo-home-hero h2{font-size:28px;margin:0 0 8px}.cosmo-home-hero p{color:var(--c-muted);font-size:15px;line-height:1.45;margin:0}.cosmo-flow-actions{display:grid;gap:11px}.cosmo-primary,.cosmo-secondary{width:100%;border:0;border-radius:12px;padding:15px 16px;font:700 16px/1.2 inherit}.cosmo-primary{background:var(--c-blue);color:#fff}.cosmo-secondary{background:#fff;color:var(--c-blue)}.cosmo-composer-back{position:absolute!important;left:0!important;width:auto!important;height:36px!important;border:0!important;background:transparent!important;color:var(--c-blue)!important;font:600 15px/1 inherit!important;padding:8px 4px!important;z-index:3}.approved-composer .composer-nav::before{display:none!important}.cosmo-draft-loading{position:absolute;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;gap:10px;background:rgba(255,255,255,.88);border-radius:inherit;font:600 14px/1.2 inherit;color:#555}.cosmo-draft-loading[hidden]{display:none!important}.cosmo-draft-spinner{width:20px;height:20px;border:2px solid #cfd4d8;border-top-color:var(--c-blue);border-radius:50%;animation:cosmo-spin .8s linear infinite}.cosmo-preparation-overlay{position:fixed;inset:0;z-index:10050;display:grid;place-items:center;background:rgba(242,242,247,.84);padding:24px}.cosmo-preparation-overlay[hidden]{display:none!important}.cosmo-preparation-card{min-width:160px;display:flex;align-items:center;justify-content:center;gap:11px;padding:16px 20px;border-radius:16px;background:#fff;box-shadow:0 12px 36px rgba(0,0,0,.16);font:600 15px/1.2 inherit;color:#333}.cosmo-preparation-card .cosmo-draft-spinner{flex:0 0 auto}@keyframes cosmo-spin{to{transform:rotate(360deg)}}
 `;
 document.head.append(style);
 
 const home=document.createElement('section');home.id='home-screen';home.className='cosmo-flow-screen';home.innerHTML=`<header class="cosmo-flow-nav"><span class="cosmo-logo" aria-hidden="true"></span><h1>Cosmo Sofa</h1><button class="cosmo-flow-settings cosmo-settings-button" type="button" aria-label="Настройки"></button></header><div class="cosmo-home-hero"><div class="cosmo-home-mark" aria-hidden="true"></div><h2>Создайте публикацию</h2><p>Подготовьте новый материал или вернитесь к сохранённому черновику.</p></div><div class="cosmo-flow-actions"><button id="flow-new" class="cosmo-primary" type="button">Новый пост</button><button id="flow-continue" class="cosmo-secondary" type="button">Продолжить</button></div>`;
 document.querySelector('main')?.prepend(home);
 const continueButton=home.querySelector('#flow-continue');
+let preparationOverlay;
+function getPreparationOverlay(){
+  if(preparationOverlay)return preparationOverlay;
+  preparationOverlay=document.createElement('div');preparationOverlay.className='cosmo-preparation-overlay';preparationOverlay.hidden=true;preparationOverlay.setAttribute('role','status');preparationOverlay.setAttribute('aria-live','polite');preparationOverlay.innerHTML='<div class="cosmo-preparation-card"><span class="cosmo-draft-spinner" aria-hidden="true"></span><span>Подготовка…</span></div>';document.body.append(preparationOverlay);
+  return preparationOverlay;
+}
 function syncDraftState(state=window.CosmoSofaDraft?.getState?.()){
   const loading=document.querySelector('#cosmo-draft-loading');if(loading)loading.hidden=!state?.restoring;imageInput.disabled=Boolean(state?.restoring)
 }
@@ -35,6 +41,39 @@ async function showDraftLoadError(){
 }
 async function showNewPostLoadError(){
   await popup({title:'Новый пост недоступен',message:'Не удалось открыть создание публикации. Попробуйте ещё раз.',buttons:[{id:'ok',type:'ok',text:'ОК'}]});
+}
+const PREPARATION_MIN_MS=450;
+let editorPreparationPromise,editorPrepared=false;
+function prepareNewPostRuntime(){
+  if(editorPrepared)return Promise.resolve(true);
+  if(!editorPreparationPromise){
+    const startupReady=window.CosmoMiniAppReady||Promise.resolve();
+    editorPreparationPromise=Promise.resolve(startupReady)
+      .then(()=>import('/composer-editor-runtime.js'))
+      .then(module=>module.loadComposerEditorRuntime())
+      .then(()=>{editorPrepared=true;return true})
+      .catch(error=>{editorPreparationPromise=undefined;throw error});
+  }
+  return editorPreparationPromise;
+}
+function settlePreparation(){return prepareNewPostRuntime().then(()=>({ok:true}),error=>({ok:false,error}))}
+function wait(ms){return new Promise(resolve=>setTimeout(resolve,ms))}
+async function prepareNewPostOrReport(preparation=settlePreparation()){
+  if(editorPrepared)return true;
+  const overlay=getPreparationOverlay();overlay.hidden=false;
+  const started=Date.now();
+  try{
+    const prepared=await preparation;
+    if(!prepared.ok)throw prepared.error;
+    const remaining=PREPARATION_MIN_MS-(Date.now()-started);
+    if(remaining>0)await wait(remaining);
+    return true;
+  }catch(error){
+    overlay.hidden=true;
+    console.error('New Post preparation failed',error);
+    await showNewPostLoadError();
+    return false;
+  }finally{overlay.hidden=true}
 }
 let newPostEntryPromise;
 async function loadNewPostEntry(){
@@ -102,13 +141,15 @@ async function openNewPost(){
   if(newPostInFlight)return;
   newPostInFlight=true;
   const button=home.querySelector('#flow-new');button.disabled=true;
+  const preparation=settlePreparation();
   try{
     const draft=window.CosmoSofaDraft;
-    if(!draft){await commitNewPost(draft);return}
+    if(!draft){if(await prepareNewPostOrReport(preparation))await commitNewPost(draft);return}
     let state;
     try{state=draft.whenReady?await draft.whenReady():draft.getState?.()}catch{await showDraftLoadError();return}
     if(!state||state.loadStatus!=='ready'){await showDraftLoadError();return}
     if(state.hasDraft&&!(await confirmDraftReplacement()))return;
+    if(!(await prepareNewPostOrReport(preparation)))return;
     await commitNewPost(draft);
   }finally{newPostInFlight=false;button.disabled=false}
 }
@@ -118,9 +159,12 @@ async function resumeDraft(){
   const draft=window.CosmoSofaDraft,overlay=window.CosmoDraftLoadingOverlay;
   if(!draft?.load)return;
   resumeInFlight=true;continueButton.disabled=true;overlay?.showLoading?.();
+  const preparation=settlePreparation();
   try{
     let restored;
     try{restored=await draft.load()}catch{overlay?.hide?.();await showDraftLoadError();return}
+    const prepared=await preparation;
+    if(!prepared.ok){overlay?.hide?.();console.error('New Post preparation failed',prepared.error);await showNewPostLoadError();return}
     const state=draft.getState?.();
     if(!restored||!state?.hasDraft){
       if(overlay?.showEmpty)await overlay.showEmpty();
