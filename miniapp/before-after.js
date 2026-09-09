@@ -66,6 +66,13 @@ async function fitSoloSource() {
   const rect = document.querySelector('[data-slot=before]')?.getBoundingClientRect();
   if (rect?.width > 0 && rect?.height > 0) geometry.fitContain(photo, rect);
 }
+async function refitSoloSource() {
+  if (mode !== 'solo' || !state.photos.before) return false;
+  await fitSoloSource();
+  composite.clearCommitted();
+  render();
+  return true;
+}
 function applySoloFit(kind) {
   if (mode !== 'solo') return;
   const photo = state.photos.before, rect = document.querySelector('[data-slot=before]')?.getBoundingClientRect();
@@ -136,7 +143,7 @@ document.querySelectorAll('[data-slot]').forEach(element => {
 
 window.cosmoBeforeAfterCompositeBlob = () => composite.publicBlob();
 window.CosmoBeforeAfterState = Object.freeze({ getDraftSnapshot: () => state.snapshot(), restoreDraft: async (saved, files = []) => { await state.restore(saved, files, watermarks.find); await fitSoloSource(); restoreLayoutStyles(); composite.clearCommitted(); render(); } });
-window.CosmoBeforeAfterSolo = Object.freeze({ setSourceIndex(index) { if (mode === 'solo') document.body.dataset.sourceIndex = String(index); } });
+window.CosmoBeforeAfterSolo = Object.freeze({ setSourceIndex(index) { if (mode === 'solo') document.body.dataset.sourceIndex = String(index); }, fitSource: refitSoloSource });
 function returnToPublisher() { try { sessionStorage.setItem('cosmo-return-screen', 'composer'); } catch {} location.href = '/'; }
 $('back').onclick = returnToPublisher; $('finish').onclick = returnToPublisher;
 window.addEventListener('beforeunload', () => { resize.destroy(); for (const role of ['before', 'after']) if (state.photos[role]) URL.revokeObjectURL(state.photos[role].url); wmCarousel.querySelectorAll('[data-url]').forEach(button => URL.revokeObjectURL(button.dataset.url)); if (compositeResult.dataset.url) URL.revokeObjectURL(compositeResult.dataset.url); });
