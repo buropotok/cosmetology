@@ -18,11 +18,11 @@ export async function isReachablePublicUrl(value:string,fetcher:typeof fetch=fet
   const controller=new AbortController();
   const timeout=setTimeout(()=>controller.abort(),3000);
   try{
-    const options={redirect:'follow' as const,signal:controller.signal};
-    const head=await fetcher(value,{...options,method:'HEAD'});
-    if(head.status>=200&&head.status<400)return true;
-    const get=await fetcher(value,{...options,method:'GET',headers:{Range:'bytes=0-0'}});
-    return get.status>=200&&get.status<400;
+    let response=await fetcher(value,{method:'HEAD',redirect:'follow',signal:controller.signal});
+    if(response.status===405||response.status===501){
+      response=await fetcher(value,{method:'GET',redirect:'follow',signal:controller.signal,headers:{Range:'bytes=0-0'}});
+    }
+    return response.status>=200&&response.status<400;
   }catch{return false}finally{clearTimeout(timeout)}
 }
 

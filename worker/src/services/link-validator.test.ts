@@ -24,9 +24,9 @@ describe('publisher link validator',()=>{
     expect(await isReachablePublicUrl('https://clinic.example.ru/article',fetcher)).toBe(true);
   });
 
-  it('falls back to a ranged GET when HEAD cannot verify the page',async()=>{
+  it('falls back to a ranged GET when HEAD is unsupported',async()=>{
     const fetcher=vi.fn<typeof fetch>()
-      .mockResolvedValueOnce(new Response(null,{status:403}))
+      .mockResolvedValueOnce(new Response(null,{status:405}))
       .mockResolvedValueOnce(new Response(null,{status:206}));
     expect(await isReachablePublicUrl('https://journal.example.ru/article',fetcher)).toBe(true);
     expect(fetcher).toHaveBeenNthCalledWith(1,'https://journal.example.ru/article',expect.objectContaining({method:'HEAD',redirect:'follow'}));

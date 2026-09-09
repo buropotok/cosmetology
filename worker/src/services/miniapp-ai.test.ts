@@ -19,8 +19,13 @@ describe('Mini App AI PostMarkdown generation', () => {
     expect(source).not.toContain('Output.object');
     expect(source).not.toContain('post_document_schema.json');
   });
-  it('removes placeholder URL examples from production prompts', () => {
+  it('keeps compact details and trailing-button PostMarkdown semantics without placeholder URLs', () => {
+    expect(source).toContain(':::details Короткий заголовок');
+    expect(source).toContain('CTA-кнопка использует двойные квадратные скобки');
+    expect(source).toContain('После первой кнопки разрешены только другие кнопки');
     expect(source).not.toMatch(/https?:\/\/(?:www\.)?example\.(?:com|org|net)/i);
+  });
+  it('tells the formatter never to invent URLs', () => {
     expect(source).toContain('Никогда не используй placeholder-домены');
     expect(source).toContain('Не придумывай URL');
   });
