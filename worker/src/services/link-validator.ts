@@ -58,7 +58,7 @@ export async function sanitizePostDocumentLinks(document:PostDocument,fetcher:ty
   if(result.buttons)result.buttons=result.buttons.flatMap(button=>{const resolved=verdict.get(button.url);return resolved?[{...button,url:resolved}]:[]});
   runs.forEach(group=>group.forEach(run=>{
     if(!run.marks)return;
-    const marks:typeof run.marks=[];
+    const marks:NonNullable<typeof run.marks>=[];
     for(const mark of run.marks){
       if(mark.type!=='link'){marks.push(mark);continue}
       const resolved=verdict.get(mark.href);
