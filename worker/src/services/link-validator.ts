@@ -13,17 +13,30 @@ export function isPlausiblePublicUrl(value:string):boolean{
   return !!host&&!isPlaceholderHost(host)&&!PRIVATE_HOST.test(host);
 }
 
-export async function isReachablePublicUrl(value:string,fetcher:typeof fetch=fetch):Promise<boolean>{
-  if(!isPlausiblePublicUrl(value))return false;
+function successfulResponseUrl(response:Response,fallback:string):string|null{
+  if(response.status<200||response.status>=400)return null;
+  const candidate=response.url||fallback;
+  if(!isPlausiblePublicUrl(candidate))return null;
+  return safeLink(candidate);
+}
+
+export async function resolveReachablePublicUrl(value:string,fetcher:typeof fetch=fetch):Promise<string|null>{
+  const normalized=safeLink(value);
+  if(!normalized||!isPlausiblePublicUrl(normalized))return null;
   const controller=new AbortController();
   const timeout=setTimeout(()=>controller.abort(),3000);
   try{
-    let response=await fetcher(value,{method:'HEAD',redirect:'follow',signal:controller.signal});
-    if(response.status===405||response.status===501){
-      response=await fetcher(value,{method:'GET',redirect:'follow',signal:controller.signal,headers:{Range:'bytes=0-0'}});
-    }
-    return response.status>=200&&response.status<400;
-  }catch{return false}finally{clearTimeout(timeout)}
+    const options={redirect:'follow' as const,signal:controller.signal};
+    const head=await fetcher(normalized,{...options,method:'HEAD'});
+    const resolvedHead=successfulResponseUrl(head,normalized);
+    if(resolvedHead)return resolvedHead;
+    const get=await fetcher(normalized,{...options,method:'GET',headers:{Range:'bytes=0-0'}});
+    return successfulResponseUrl(get,normalized);
+  }catch{return null}finally{clearTimeout(timeout)}
+}
+
+export async function isReachablePublicUrl(value:string,fetcher:typeof fetch=fetch):Promise<boolean>{
+  return await resolveReachablePublicUrl(value,fetcher)!==null;
 }
 
 function collectRuns(block:PostBlock,out:TextRun[][]){
@@ -40,9 +53,19 @@ export async function sanitizePostDocumentLinks(document:PostDocument,fetcher:ty
   result.buttons?.forEach(button=>urls.add(button.url));
   const runs:TextRun[][]=[];result.blocks.forEach(block=>collectRuns(block,runs));
   runs.forEach(group=>group.forEach(run=>run.marks?.forEach(mark=>{if(mark.type==='link')urls.add(mark.href)})));
-  const verdict=new Map<string,boolean>();
-  await Promise.all([...urls].map(async url=>verdict.set(url,await isReachablePublicUrl(url,fetcher))));
-  if(result.buttons)result.buttons=result.buttons.filter(button=>verdict.get(button.url)===true);
-  runs.forEach(group=>group.forEach(run=>{if(run.marks)run.marks=run.marks.filter(mark=>mark.type!=='link'||verdict.get(mark.href)===true);if(run.marks?.length===0)delete run.marks}));
+  const verdict=new Map<string,string|null>();
+  await Promise.all([...urls].map(async url=>verdict.set(url,await resolveReachablePublicUrl(url,fetcher))));
+  if(result.buttons)result.buttons=result.buttons.flatMap(button=>{const resolved=verdict.get(button.url);return resolved?[{...button,url:resolved}]:[]});
+  runs.forEach(group=>group.forEach(run=>{
+    if(!run.marks)return;
+    const marks:NonNullable<typeof run.marks>=[];
+    for(const mark of run.marks){
+      if(mark.type!=='link'){marks.push(mark);continue}
+      const resolved=verdict.get(mark.href);
+      if(resolved)marks.push({type:'link',href:resolved});
+    }
+    run.marks=marks;
+    if(!run.marks.length)delete run.marks;
+  }));
   return result;
 }

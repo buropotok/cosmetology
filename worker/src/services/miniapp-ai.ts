@@ -5,7 +5,7 @@ import { isPostDocument, safeLink, type PostDocument } from '../../../shared/pos
 import { parsePostMarkdown } from '../../../shared/post-markdown';
 import { AppError, type Env } from '../types';
 import { resolveMiniAppAiUser, setAiGenerationStatus, type AiGenerationKind } from './ai-generation-status';
-import { isReachablePublicUrl, sanitizePostDocumentLinks } from './link-validator';
+import { resolveReachablePublicUrl, sanitizePostDocumentLinks } from './link-validator';
 
 const DEFAULT_MODEL = 'gemini-2.5-flash';
 const MAX_MESSAGE_LENGTH = 12000;
@@ -107,29 +107,33 @@ function groundingCandidates(rawSources:readonly unknown[]):VerifiedSource[]{
 
 async function validateDiscoverySources(discovery:DiscoveryResponse,rawSources:readonly unknown[],requireSource:boolean):Promise<DiscoveryResponse>{
   const grounded=new Map(groundingCandidates(rawSources).map(source=>[source.url,source]));
-  const used=new Set<string>();
-  const ideas=discovery.ideas.map(idea=>{
+  const matches=discovery.ideas.map(idea=>{
     if(!idea.source){
       if(requireSource)throw new Error('Discovery returned an idea without a source');
-      return idea;
+      return {idea,source:null};
     }
     const normalized=safeLink(idea.source.url);
     const source=normalized?grounded.get(normalized):undefined;
     if(!source)throw new Error('Discovery source was not returned by Google Search');
-    used.add(source.url);
-    return {...idea,source};
+    return {idea,source};
   });
-  const verdict=new Map<string,boolean>();
-  await Promise.all([...used].map(async url=>verdict.set(url,await isReachablePublicUrl(url))));
-  if([...used].some(url=>verdict.get(url)!==true))throw new Error('Discovery returned an unreachable source');
+  const used=[...new Set(matches.flatMap(match=>match.source?[match.source.url]:[]))];
+  const resolved=new Map<string,string>();
+  await Promise.all(used.map(async url=>{const finalUrl=await resolveReachablePublicUrl(url);if(finalUrl)resolved.set(url,finalUrl)}));
+  if(used.some(url=>!resolved.has(url)))throw new Error('Discovery returned an unreachable source');
+  const ideas=matches.map(match=>match.source?{...match.idea,source:{name:match.source.name,url:resolved.get(match.source.url)!}}:match.idea);
   return {...discovery,ideas};
 }
 
 async function verifiedGroundingSources(rawSources:readonly unknown[]):Promise<VerifiedSource[]>{
-  return (await Promise.all(groundingCandidates(rawSources).map(async source=>({source,reachable:await isReachablePublicUrl(source.url)}))))
-    .filter(item=>item.reachable)
-    .map(item=>item.source)
-    .slice(0,MAX_VERIFIED_SOURCES);
+  const checked=await Promise.all(groundingCandidates(rawSources).map(async source=>({source,url:await resolveReachablePublicUrl(source.url)})));
+  const unique=new Map<string,VerifiedSource>();
+  for(const item of checked){
+    if(!item.url||unique.has(item.url))continue;
+    unique.set(item.url,{name:item.source.name,url:item.url});
+    if(unique.size>=MAX_VERIFIED_SOURCES)break;
+  }
+  return [...unique.values()];
 }
 
 function appendVerifiedSources(document:PostDocument,sources:VerifiedSource[]):PostDocument{
@@ -170,7 +174,6 @@ export async function generateMiniAppAiReply(req: Request, env: Env) {
       const result = await generateText({
         model: google(model),
         tools: { google_search: google.tools.googleSearch({}) },
-        toolChoice: 'required',
         prompt,
       });
       const text = result.text.trim();
@@ -183,7 +186,6 @@ export async function generateMiniAppAiReply(req: Request, env: Env) {
     const grounded = await generateText({
       model: google(model),
       tools: { google_search: google.tools.googleSearch({}) },
-      toolChoice: 'required',
       prompt,
     });
     const groundedText = grounded.text.trim();
