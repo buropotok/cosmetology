@@ -81,7 +81,7 @@ export function initComposerEditorKeyboardLayout({
   };
   const activate=()=>{
     if(!mobile)return;
-    clearTimeout(blurTimer);
+    win.clearTimeout(blurTimer);
     active=true;
     root.classList.add('is-keyboard-layout');
     updateViewport();
@@ -94,7 +94,7 @@ export function initComposerEditorKeyboardLayout({
   };
   const onFocus=()=>activate();
   const onBlur=()=>{
-    clearTimeout(blurTimer);
+    win.clearTimeout(blurTimer);
     blurTimer=win.setTimeout(()=>{if(!editor.isFocused)deactivate()},0);
   };
   const keepClearFocus=event=>{if(active)event.preventDefault()};
@@ -102,17 +102,19 @@ export function initComposerEditorKeyboardLayout({
   editor.on('focus',onFocus);
   editor.on('blur',onBlur);
   clear.addEventListener('mousedown',keepClearFocus);
+  win.addEventListener('resize',updateViewport);
   viewport?.addEventListener?.('resize',updateViewport);
   viewport?.addEventListener?.('scroll',updateViewport);
 
   const controller={
     update:updateViewport,
     destroy(){
-      clearTimeout(blurTimer);
+      win.clearTimeout(blurTimer);
       deactivate();
       editor.off('focus',onFocus);
       editor.off('blur',onBlur);
       clear.removeEventListener('mousedown',keepClearFocus);
+      win.removeEventListener('resize',updateViewport);
       viewport?.removeEventListener?.('resize',updateViewport);
       viewport?.removeEventListener?.('scroll',updateViewport);
       if(toolbarParent)toolbarParent.insertBefore(toolbar,toolbarNext&&toolbarNext.parentNode===toolbarParent?toolbarNext:null);
