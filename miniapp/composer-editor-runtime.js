@@ -1,6 +1,6 @@
 import {loadRuntimeModule,recordRuntimeDiagnostic,skipRuntimeModule} from './runtime-diagnostics.js';
 
-const RICH_LOADER_VERSION='2026-09-03.16';
+const RICH_LOADER_VERSION='2026-09-09.17';
 const STAGE='new-post.editor-runtime';
 let runtimePromise,runtimeReady=false;
 
@@ -23,6 +23,10 @@ export function loadComposerEditorRuntime(){
         ?await loadRuntimeModule({stage:STAGE,module:'composer-tiptap-draft-bridge',load:()=>import(`/composer-tiptap-draft-bridge.js?v=${encodeURIComponent(RICH_LOADER_VERSION)}`)})
         :skipRuntimeModule({stage:STAGE,module:'composer-tiptap-draft-bridge',dependency:'composer-tiptap'});
 
+      const placeholder=tiptap.ok
+        ?await loadRuntimeModule({stage:STAGE,module:'composer-tiptap-placeholder',load:()=>import(`/composer-tiptap-placeholder.js?v=${encodeURIComponent(RICH_LOADER_VERSION)}`)})
+        :skipRuntimeModule({stage:STAGE,module:'composer-tiptap-placeholder',dependency:'composer-tiptap'});
+
       const fixes=tiptap.ok
         ?await loadRuntimeModule({stage:STAGE,module:'composer-tiptap-fixes',load:()=>import(`/composer-tiptap-fixes.js?v=${encodeURIComponent(RICH_LOADER_VERSION)}`)})
         :skipRuntimeModule({stage:STAGE,module:'composer-tiptap-fixes',dependency:'composer-tiptap'});
@@ -33,7 +37,7 @@ export function loadComposerEditorRuntime(){
       const failure=!tiptap.ok?tiptap.error:!bridge.ok?bridge.error:null;
       recordRuntimeDiagnostic({event:'stage_completed',stage:STAGE,module:'composer-editor-runtime',status:ok?'loaded':'failed',durationMs,error:failure});
       if(!ok)runtimePromise=undefined;
-      return{ok,editor:window.CosmoRichEditor||null,modules:{tiptap,bridge,fixes}};
+      return{ok,editor:window.CosmoRichEditor||null,modules:{tiptap,bridge,placeholder,fixes}};
     })();
   }
   return runtimePromise;
