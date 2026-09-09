@@ -11,16 +11,16 @@ export function isPlausiblePublicUrl(value:string):boolean{
   return !!host&&!PLACEHOLDER_HOSTS.has(host)&&!host.endsWith('.localhost')&&!PRIVATE_HOST.test(host);
 }
 
-async function isReachable(value:string,fetcher:typeof fetch):Promise<boolean>{
+export async function isReachablePublicUrl(value:string,fetcher:typeof fetch=fetch):Promise<boolean>{
   if(!isPlausiblePublicUrl(value))return false;
   const controller=new AbortController();
   const timeout=setTimeout(()=>controller.abort(),3000);
   try{
-    let response=await fetcher(value,{method:'HEAD',redirect:'follow',signal:controller.signal});
-    if(response.status===405||response.status===501){
-      response=await fetcher(value,{method:'GET',redirect:'follow',signal:controller.signal,headers:{Range:'bytes=0-0'}});
-    }
-    return response.status>=200&&response.status<400;
+    const options={redirect:'follow' as const,signal:controller.signal};
+    const head=await fetcher(value,{...options,method:'HEAD'});
+    if(head.status>=200&&head.status<400)return true;
+    const get=await fetcher(value,{...options,method:'GET',headers:{Range:'bytes=0-0'}});
+    return get.status>=200&&get.status<400;
   }catch{return false}finally{clearTimeout(timeout)}
 }
 
@@ -39,7 +39,7 @@ export async function sanitizePostDocumentLinks(document:PostDocument,fetcher:ty
   const runs:TextRun[][]=[];result.blocks.forEach(block=>collectRuns(block,runs));
   runs.forEach(group=>group.forEach(run=>run.marks?.forEach(mark=>{if(mark.type==='link')urls.add(mark.href)})));
   const verdict=new Map<string,boolean>();
-  await Promise.all([...urls].map(async url=>verdict.set(url,await isReachable(url,fetcher))));
+  await Promise.all([...urls].map(async url=>verdict.set(url,await isReachablePublicUrl(url,fetcher))));
   if(result.buttons)result.buttons=result.buttons.filter(button=>verdict.get(button.url)===true);
   runs.forEach(group=>group.forEach(run=>{if(run.marks)run.marks=run.marks.filter(mark=>mark.type!=='link'||verdict.get(mark.href)===true);if(run.marks?.length===0)delete run.marks}));
   return result;
