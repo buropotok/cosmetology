@@ -27,8 +27,8 @@ export function loadComposerEditorRuntime(){
         ?await loadRuntimeModule({stage:STAGE,module:'composer-tiptap-placeholder',load:()=>import(`/composer-tiptap-placeholder.js?v=${encodeURIComponent(RICH_LOADER_VERSION)}`)})
         :skipRuntimeModule({stage:STAGE,module:'composer-tiptap-placeholder',dependency:'composer-tiptap'});
 
-      const keyboardLayout=tiptap.ok
-        ?await loadRuntimeModule({
+      if(tiptap.ok){
+        await loadRuntimeModule({
           stage:STAGE,
           module:'composer-editor-keyboard-layout',
           load:async()=>{
@@ -37,8 +37,10 @@ export function loadComposerEditorRuntime(){
           },
           validate:value=>Boolean(value),
           validationError:'Composer keyboard layout did not initialize'
-        })
-        :skipRuntimeModule({stage:STAGE,module:'composer-editor-keyboard-layout',dependency:'composer-tiptap'});
+        });
+      }else{
+        skipRuntimeModule({stage:STAGE,module:'composer-editor-keyboard-layout',dependency:'composer-tiptap'});
+      }
 
       const fixes=tiptap.ok
         ?await loadRuntimeModule({stage:STAGE,module:'composer-tiptap-fixes',load:()=>import(`/composer-tiptap-fixes.js?v=${encodeURIComponent(RICH_LOADER_VERSION)}`)})
@@ -50,7 +52,7 @@ export function loadComposerEditorRuntime(){
       const failure=!tiptap.ok?tiptap.error:!bridge.ok?bridge.error:null;
       recordRuntimeDiagnostic({event:'stage_completed',stage:STAGE,module:'composer-editor-runtime',status:ok?'loaded':'failed',durationMs,error:failure});
       if(!ok)runtimePromise=undefined;
-      return{ok,editor:window.CosmoRichEditor||null,modules:{tiptap,bridge,placeholder,keyboardLayout,fixes}};
+      return{ok,editor:window.CosmoRichEditor||null,modules:{tiptap,bridge,placeholder,fixes}};
     })();
   }
   return runtimePromise;
