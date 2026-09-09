@@ -26,7 +26,7 @@ const resize = createResize({ handle: cropHandle, slots, state, geometry, compos
 
 function render() {
   slots.dataset.layout = state.layout;
-  document.querySelectorAll('[data-layout]').forEach(button => button.classList.toggle('selected', button.dataset.layout === state.layout));
+  document.querySelectorAll('.toolbar [data-layout]').forEach(button => button.classList.toggle('selected', button.dataset.layout === state.layout));
   document.querySelectorAll('[data-ratio]').forEach(button => button.classList.toggle('selected', button.dataset.ratio === state.selectedRatio));
   for (const role of ['before', 'after']) {
     const element = document.querySelector(`[data-slot=${role}]`), image = element.querySelector('img'), photo = state.photos[role];
@@ -78,7 +78,7 @@ function configureMode() {
 }
 
 document.querySelectorAll('[data-ratio]').forEach(button => button.onclick = () => applyRatio(button.dataset.ratio));
-document.querySelectorAll('[data-layout]').forEach(button => button.onclick = () => { state.layout = button.dataset.layout; slots.dataset.layout = state.layout; applyRatio(state.selectedRatio); });
+document.querySelectorAll('.toolbar [data-layout]').forEach(button => button.onclick = () => { state.layout = button.dataset.layout; slots.dataset.layout = state.layout; applyRatio(state.selectedRatio); });
 let pending = 'before';
 file.onchange = () => {
   if (mode === 'solo') { file.value = ''; return; }
