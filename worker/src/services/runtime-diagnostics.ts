@@ -86,7 +86,7 @@ export function renderRuntimeDiagnosticLog(snapshot:RuntimeDiagnosticSnapshot,up
 
 export async function storeRuntimeDiagnosticSnapshot(env:Env,snapshot:RuntimeDiagnosticSnapshot,updatedAt=new Date().toISOString()){
   const key=runtimeDiagnosticKey(snapshot),body=renderRuntimeDiagnosticLog(snapshot,updatedAt);
-  await env.ARTIFACTS.put(key,body,{httpMetadata:{contentType:'text/plain; charset=utf-8'}});
+  await env.LOGS.put(key,body,{httpMetadata:{contentType:'text/plain; charset=utf-8'}});
   return{key,eventCount:snapshot.events.length};
 }
 
