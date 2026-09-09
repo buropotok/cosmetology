@@ -75,13 +75,14 @@ async function fitSoloSource() {
   restoreLayoutStyles();
   await new Promise(resolve => requestAnimationFrame(resolve));
   const rect = document.querySelector('[data-slot=before]')?.getBoundingClientRect();
-  if (rect?.width > 0 && rect?.height > 0) { geometry.fitContain(photo, rect); showSoloGestureHint(); }
+  if (rect?.width > 0 && rect?.height > 0) geometry.fitContain(photo, rect);
 }
 async function refitSoloSource() {
   if (mode !== 'solo' || !state.photos.before) return false;
   await fitSoloSource();
   composite.clearCommitted();
   render();
+  showSoloGestureHint();
   return true;
 }
 function applySoloFit(kind) {
