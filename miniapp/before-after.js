@@ -23,6 +23,17 @@ let editor;
 const watermarks = createWatermarks({ $, carousel: wmCarousel, fileInput: wmFile, state, getEditor: () => editor, composite, authHeaders, loadImage, showError, onRender: render });
 editor = createEditor({ $, editor: editorElement, stage, editImage, wmImage, rotation, opacity, opacityControl, photos: state.photos, state, geometry, composite, loadImage, onRender: render });
 const resize = createResize({ handle: cropHandle, slots, state, geometry, composite, onRender: render });
+let soloGestureHint = null, soloGestureHintTimer = 0, soloGestureHintShown = false;
+function hideSoloGestureHint() {
+  if (soloGestureHintTimer) { clearTimeout(soloGestureHintTimer); soloGestureHintTimer = 0; }
+  soloGestureHint?.classList.add('is-hidden');
+}
+function showSoloGestureHint() {
+  if (mode !== 'solo' || !soloGestureHint || soloGestureHintShown) return;
+  soloGestureHintShown = true;
+  soloGestureHint.classList.remove('is-hidden');
+  soloGestureHintTimer = window.setTimeout(() => { soloGestureHintTimer = 0; soloGestureHint?.classList.add('is-hidden'); }, 1800);
+}
 
 function render() {
   slots.dataset.layout = state.layout;
@@ -64,7 +75,7 @@ async function fitSoloSource() {
   restoreLayoutStyles();
   await new Promise(resolve => requestAnimationFrame(resolve));
   const rect = document.querySelector('[data-slot=before]')?.getBoundingClientRect();
-  if (rect?.width > 0 && rect?.height > 0) geometry.fitContain(photo, rect);
+  if (rect?.width > 0 && rect?.height > 0) { geometry.fitContain(photo, rect); showSoloGestureHint(); }
 }
 async function refitSoloSource() {
   if (mode !== 'solo' || !state.photos.before) return false;
@@ -89,6 +100,11 @@ function configureMode() {
   file.disabled = true;
   document.querySelectorAll('.empty').forEach(element => { element.style.display = 'none'; });
   document.querySelector('header strong').textContent = 'Фото';
+  soloGestureHint = document.createElement('div');
+  soloGestureHint.className = 'solo-gesture-hint is-hidden';
+  soloGestureHint.setAttribute('aria-hidden', 'true');
+  soloGestureHint.innerHTML = '<img src="/assets/two-finger-swipe-left.svg" alt="" draggable="false">';
+  slots.append(soloGestureHint);
   const controls = document.createElement('section'); controls.className = 'solo-rotation'; controls.innerHTML = '<div class="solo-rotation-head"><strong>Поворот</strong><span id="soloAngle">0°</span></div>';
   const slider = rotation.cloneNode(true); slider.id = 'soloRotation'; slider.min = '-180'; slider.max = '180'; slider.step = '1'; controls.append(slider);
   const fitActions = document.createElement('div'); fitActions.className = 'solo-fit-actions'; fitActions.innerHTML = '<button type="button" data-solo-fit="width">По ширине</button><button type="button" data-solo-fit="height">По высоте</button><button type="button" data-solo-fit="contain">Вписать целиком</button>'; controls.append(fitActions); slots.after(controls);
@@ -143,7 +159,7 @@ document.querySelectorAll('[data-slot]').forEach(element => {
     previewSlot = role; previewPointers.set(event.pointerId, point(event));
     if (mode === 'solo') {
       if (previewPointers.size < 2) { previewGesture = null; previewMoved = false; return; }
-      event.preventDefault(); for (const pointerId of previewPointers.keys()) element.setPointerCapture?.(pointerId); previewMoved = false; previewBegin(role); return;
+      hideSoloGestureHint(); event.preventDefault(); for (const pointerId of previewPointers.keys()) element.setPointerCapture?.(pointerId); previewMoved = false; previewBegin(role); return;
     }
     event.preventDefault(); element.setPointerCapture?.(event.pointerId); previewStarted = performance.now(); previewMoved = false; previewBegin(role);
   };
@@ -185,5 +201,5 @@ window.CosmoBeforeAfterState = Object.freeze({ getDraftSnapshot: () => state.sna
 window.CosmoBeforeAfterSolo = Object.freeze({ setSourceIndex(index) { if (mode === 'solo') document.body.dataset.sourceIndex = String(index); }, fitSource: refitSoloSource });
 function returnToPublisher() { try { sessionStorage.setItem('cosmo-return-screen', 'composer'); } catch {} location.href = '/'; }
 $('back').onclick = returnToPublisher; $('finish').onclick = returnToPublisher;
-window.addEventListener('beforeunload', () => { resize.destroy(); for (const role of ['before', 'after']) if (state.photos[role]) URL.revokeObjectURL(state.photos[role].url); wmCarousel.querySelectorAll('[data-url]').forEach(button => URL.revokeObjectURL(button.dataset.url)); if (compositeResult.dataset.url) URL.revokeObjectURL(compositeResult.dataset.url); });
+window.addEventListener('beforeunload', () => { if (soloGestureHintTimer) clearTimeout(soloGestureHintTimer); resize.destroy(); for (const role of ['before', 'after']) if (state.photos[role]) URL.revokeObjectURL(state.photos[role].url); wmCarousel.querySelectorAll('[data-url]').forEach(button => URL.revokeObjectURL(button.dataset.url)); if (compositeResult.dataset.url) URL.revokeObjectURL(compositeResult.dataset.url); });
 configureMode(); applyRatio(state.selectedRatio); watermarks.load();
