@@ -60,18 +60,20 @@ test('solo is source-only and fits the canvas to the source photo aspect ratio',
   assert.match(source, /geometry\.fit\(photo, rect\)/);
 });
 
-test('solo photo taps are geometry no-ops after custom resize while deliberate drag still pans', () => {
+test('solo shares the Dual gesture lifecycle while tap only opens the nested editor in Dual', () => {
   const source = read('./before-after.js');
+  assert.match(source, /event\.preventDefault\(\); element\.setPointerCapture\?\.\(event\.pointerId\); previewSlot = role; previewStarted = performance\.now\(\)/);
+  assert.doesNotMatch(source, /if \(mode !== 'solo'\) element\.setPointerCapture/);
+  assert.doesNotMatch(source, /if \(!previewMoved && mode === 'solo'\) element\.setPointerCapture/);
   assert.match(source, /if \(!previewMoved && distance <= 5\) return;/);
-  assert.match(source, /if \(!previewMoved && mode === 'solo'\) element\.setPointerCapture\?\.\(event\.pointerId\)/);
-  assert.match(source, /if \(moved\) state\.notify\(\); if \(mode === 'solo'\) return;/);
-  assert.match(source, /const tap = !moved && performance\.now\(\) - previewStarted < 350; if \(tap && role && state\.photos\[role\]\) editor\.openPhoto\(role\)/);
+  assert.match(source, /const tap = !moved && performance\.now\(\) - previewStarted < 350; if \(mode === 'dual' && tap && role && state\.photos\[role\]\) editor\.openPhoto\(role\)/);
 });
 
 test('solo photo taps stay inline and expose main rotation UI', () => {
   const source = read('./before-after.js');
   const css = read('./before-after.css');
-  assert.match(source, /if \(mode === 'solo'\) return; const tap = !moved/);
+  assert.match(source, /if \(mode === 'dual' && tap && role && state\.photos\[role\]\) editor\.openPhoto\(role\)/);
+  assert.doesNotMatch(source, /if \(mode === 'solo'\) return; const tap/);
   assert.match(source, /className = 'solo-rotation'/);
   assert.match(css, /body\[data-mode=solo\] \[data-slot=after\]/);
   assert.match(css, /\.solo-rotation/);
@@ -93,7 +95,7 @@ test('watermark stays live when the photo moves and is composited fresh on expor
 test('solo keeps watermark editing in the dedicated editor while photo taps stay inline', () => {
   const source = read('./before-after.js');
   const watermarks = read('./before-after/watermarks.js');
-  assert.match(source, /if \(mode === 'solo'\) return; const tap = !moved/);
-  assert.match(source, /if \(tap && role && state\.photos\[role\]\) editor\.openPhoto\(role\)/);
+  assert.match(source, /if \(mode === 'dual' && tap && role && state\.photos\[role\]\) editor\.openPhoto\(role\)/);
+  assert.doesNotMatch(source, /if \(tap && role && state\.photos\[role\]\) editor\.openPhoto\(role\)/);
   assert.match(watermarks, /await getEditor\(\)\.openWatermark\(\)/);
 });
