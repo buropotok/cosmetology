@@ -1,12 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
+
 const source = readFileSync(new URL('./miniapp-ai.ts', import.meta.url), 'utf8');
+
 describe('Mini App AI PostMarkdown generation', () => {
-  it('keeps discovery on the existing parsed response path', () => {
-    expect(source).toContain("if (mode === 'discovery')");
-    expect(source).toContain('return { discovery }');
+  it('keeps the original discovery flow', () => {
+    expect(source).toContain("const prompt = mode === 'discovery' ? `${message}");
+    expect(source).toContain('return { discovery: parseDiscovery(text) }');
+    expect(source).not.toContain('GROUNDING_REQUIREMENTS');
+    expect(source).not.toContain("toolChoice: 'required'");
   });
-  it('uses Google Search grounding without requiring a formal tool call', () => {
+
+  it('keeps Google Search grounding separate from PostMarkdown formatting', () => {
     const groundedStart = source.indexOf('const grounded = await generateText({');
     const formattedStart = source.indexOf('const formatted = await generateText({');
     expect(groundedStart).toBeGreaterThanOrEqual(0);
@@ -14,36 +19,18 @@ describe('Mini App AI PostMarkdown generation', () => {
     const groundedCall = source.slice(groundedStart, formattedStart);
     const formattedCall = source.slice(formattedStart, source.indexOf('const markdown = formatted.text.trim()', formattedStart));
     expect(groundedCall).toContain("tools: { google_search: google.tools.googleSearch({}) }");
-    expect(source).not.toContain("toolChoice: 'required'");
     expect(formattedCall).not.toContain('google_search');
-    expect(source).not.toContain('Output.object');
-    expect(source).not.toContain('post_document_schema.json');
   });
-  it('keeps compact details and trailing-button PostMarkdown semantics without placeholder URLs', () => {
-    expect(source).toContain(':::details Короткий заголовок');
-    expect(source).toContain('CTA-кнопка использует двойные квадратные скобки');
-    expect(source).toContain('После первой кнопки разрешены только другие кнопки');
+
+  it('does not teach Gemini placeholder URLs', () => {
     expect(source).not.toMatch(/https?:\/\/(?:www\.)?example\.(?:com|org|net)/i);
+    expect(source).toContain('[текст](URL)');
+    expect(source).toContain('[[Название кнопки]](URL)');
   });
-  it('tells the formatter never to invent URLs', () => {
-    expect(source).toContain('Никогда не используй placeholder-домены');
-    expect(source).toContain('Не придумывай URL');
-  });
-  it('accepts Discovery source URLs only from Google Search, resolves redirects, and requires sources for news', () => {
-    expect(source).toContain("if(!source)throw new Error('Discovery source was not returned by Google Search')");
-    expect(source).toContain("if(requireSource)throw new Error('Discovery returned an idea without a source')");
-    expect(source).toContain('const finalUrl=await resolveReachablePublicUrl(url)');
-    expect(source).toContain("validateDiscoverySources(parseDiscovery(text),result.sources,kind==='news')");
-  });
-  it('verifies grounding sources, resolves their final URLs, and appends them after the generated post', () => {
-    expect(source).toContain('url:await resolveReachablePublicUrl(source.url)');
-    expect(source).toContain("if(!sources.length)throw new Error('Gemini returned no reachable grounding sources')");
-    expect(source).toContain("{type:'heading',content:[{text:'Источники'}]}");
-    expect(source).toContain("{type:'bullet_list',items:sources.map(source=>[{text:source.name,marks:[{type:'link',href:source.url}]}])}");
-  });
-  it('sanitizes any model-authored links before returning canonical PostDocument JSON', () => {
-    expect(source).toContain('const sanitized=await sanitizePostDocumentLinks(parsed)');
-    expect(source).toContain('const document=appendVerifiedSources(sanitized,sources)');
+
+  it('validates model-authored links without changing the generation prompt flow', () => {
+    expect(source).toContain("import { sanitizePostDocumentLinks } from './link-validator'");
+    expect(source).toContain('const document = await sanitizePostDocumentLinks(parsePostMarkdown(markdown))');
     expect(source).toContain('isPostDocument(document)');
     expect(source).toContain('JSON.stringify(document, null, 2)');
   });
