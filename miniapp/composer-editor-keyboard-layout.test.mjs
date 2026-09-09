@@ -37,6 +37,8 @@ test('Composer keyboard layout anchors controls and keeps overflowing text scrol
   assert.match(source,/overflow-y:auto!important/);
   assert.match(source,/\.composer-editor-footer\{display:none!important\}/);
   assert.match(source,/\.composer-tool-panel\{top:auto!important;bottom:43px!important\}/);
+  assert.match(source,/win\.addEventListener\('resize',updateViewport\)/);
+  assert.match(source,/win\.removeEventListener\('resize',updateViewport\)/);
   assert.match(source,/viewport\?\.addEventListener\?\.\('resize',updateViewport\)/);
   assert.match(source,/viewport\?\.addEventListener\?\.\('scroll',updateViewport\)/);
   assert.match(source,/editor\.off\('focus',onFocus\)/);
