@@ -6,6 +6,7 @@ import { saveBeforeAfterAsset, removeBeforeAfterAsset, swapBeforeAfterAssets } f
 import { generateMiniAppAiReply } from './services/miniapp-ai';
 import { getMiniAppNewsGenerationStatus } from './services/ai-generation-status';
 import { generateMiniAppImage } from './services/miniapp-image-generation';
+import { saveRuntimeDiagnostics } from './services/runtime-diagnostics';
 import { validateTelegramMiniAppInitData } from './services/telegram-miniapp-auth';
 import { resolveOrCreateTelegramIdentity } from './services/telegram-identity';
 import { decryptManagedBotToken } from './services/managed-bot-crypto';
@@ -45,6 +46,7 @@ async function prepareVkLink(req: Request, env: Env) {
 export default { async fetch(req: Request, env: Env, ctx: ExecutionContext) {
   const url = new URL(req.url);
   try {
+    if (req.method === 'POST' && url.pathname === '/api/miniapp/runtime-diagnostics') return json(await saveRuntimeDiagnostics(req,env));
     if (req.method === 'POST' && url.pathname === '/api/miniapp/ai/chat') return json(await generateMiniAppAiReply(req, env));
     if (req.method === 'GET' && url.pathname === '/api/miniapp/news/status') return json(await getMiniAppNewsGenerationStatus(req, env));
     if (req.method === 'POST' && url.pathname === '/api/miniapp/ai/image') return generateMiniAppImage(req, env);

@@ -20,12 +20,14 @@ test('Tiptap is prepared from the first New Post or Continue interaction instead
   assert.doesNotMatch(bootstrap,/import\(['"]\/composer-editor-runtime\.js['"]\)/);
   assert.match(navigation,/function prepareNewPostRuntime\(\)/);
   assert.match(navigation,/function settlePreparation\(\)\{return prepareNewPostRuntime\(\)/);
-  assert.match(navigation,/import\(['"]\/composer-editor-runtime\.js['"]\)/);
+  assert.match(navigation,/import\(['"]\/runtime-diagnostics\.js['"]\)/);
+  assert.match(navigation,/module:'composer-editor-runtime',load:\(\)=>import\(['"]\/composer-editor-runtime\.js['"]\)/);
   assert.match(editorRuntime,/export function loadComposerEditorRuntime\(\)/);
   assert.match(navigation,/function getPreparationOverlay\(\)/);
   assert.match(navigation,/Подготовка…/);
 
   const prepare=navigation.slice(navigation.indexOf('function prepareNewPostRuntime()'),navigation.indexOf('function settlePreparation()'));
+  assert.ok(prepare.indexOf('window.CosmoMiniAppReady')>=0);
   assert.ok(prepare.indexOf('window.CosmoMiniAppReady')<prepare.indexOf("import('/composer-editor-runtime.js')"));
 
   const newPost=navigation.slice(navigation.indexOf('async function openNewPost()'),navigation.indexOf('let resumeInFlight=false'));
@@ -41,17 +43,34 @@ test('Tiptap is prepared from the first New Post or Continue interaction instead
   assert.ok(resume.indexOf('const prepared=await preparation')<resume.indexOf('navigation.reset([STATES.HOME,STATES.MENU])'));
 });
 
-test('editor preparation is cached and retryable after a load failure',()=>{
-  assert.match(navigation,/let editorPreparationPromise,editorPrepared=false/);
-  assert.match(navigation,/if\(editorPrepared\)return Promise\.resolve\(true\)/);
-  assert.match(navigation,/editorPreparationPromise=undefined;throw error/);
-  assert.match(editorRuntime,/let runtimePromise,runtimeReady=false/);
-  assert.match(editorRuntime,/if\(runtimeReady\)return Promise\.resolve\(window\.CosmoRichEditor\)/);
-  assert.match(editorRuntime,/runtimePromise=undefined/);
-  assert.match(editorRuntime,/runtimeReady=false/);
+test('editor module failures are logged, skipped where dependent, and do not block New Post',()=>{
+  assert.match(navigation,/let diagnosticsPromise,editorPreparationPromise,editorPrepared=false/);
+  assert.match(navigation,/if\(editorPrepared\)return Promise\.resolve\(\{ok:true,cached:true\}\)/);
+  assert.match(navigation,/if\(!editorPrepared\)editorPreparationPromise=undefined/);
+  assert.match(navigation,/return\{ok:false,error\}/);
+
+  assert.match(editorRuntime,/loadRuntimeModule/);
+  assert.match(editorRuntime,/skipRuntimeModule/);
+  assert.match(editorRuntime,/const bridge=tiptap\.ok/);
+  assert.match(editorRuntime,/const fixes=tiptap\.ok/);
+  assert.match(editorRuntime,/dependency:'composer-tiptap'/);
+  assert.match(editorRuntime,/const ok=tiptap\.ok&&bridge\.ok/);
+  assert.match(editorRuntime,/if\(!ok\)runtimePromise=undefined/);
+
+  const prepareUi=navigation.slice(navigation.indexOf('async function prepareNewPostOrReport'),navigation.indexOf('let newPostEntryPromise'));
+  assert.match(prepareUi,/completed with module failures/);
+  assert.doesNotMatch(prepareUi,/showNewPostLoadError/);
+  assert.match(prepareUi,/return true/);
+
+  const resumeStart=navigation.indexOf('async function resumeDraft()');
+  const resumeEnd=navigation.indexOf("home.querySelector('#flow-new')",resumeStart);
+  assert.ok(resumeStart>=0&&resumeEnd>resumeStart,'resumeDraft should exist before Home handlers');
+  const resume=navigation.slice(resumeStart,resumeEnd);
+  assert.match(resume,/completed with module failures/);
+  assert.doesNotMatch(resume,/prepared.*showNewPostLoadError/);
 });
 
-test('New Post load failure is contained and retryable',()=>{
+test('New Post entry load failure remains contained and retryable',()=>{
   assert.match(navigation,/New Post entry failed to load/);
   assert.match(navigation,/showNewPostLoadError/);
   assert.match(navigation,/newPostEntryPromise=undefined/);
