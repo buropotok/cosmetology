@@ -1,6 +1,6 @@
 import {loadRuntimeModule,recordRuntimeDiagnostic,skipRuntimeModule} from './runtime-diagnostics.js';
 
-const RICH_LOADER_VERSION='2026-09-09.17';
+const RICH_LOADER_VERSION='2026-09-09.18';
 const STAGE='new-post.editor-runtime';
 let runtimePromise,runtimeReady=false;
 
@@ -26,6 +26,21 @@ export function loadComposerEditorRuntime(){
       const placeholder=tiptap.ok
         ?await loadRuntimeModule({stage:STAGE,module:'composer-tiptap-placeholder',load:()=>import(`/composer-tiptap-placeholder.js?v=${encodeURIComponent(RICH_LOADER_VERSION)}`)})
         :skipRuntimeModule({stage:STAGE,module:'composer-tiptap-placeholder',dependency:'composer-tiptap'});
+
+      if(tiptap.ok){
+        await loadRuntimeModule({
+          stage:STAGE,
+          module:'composer-editor-keyboard-layout',
+          load:async()=>{
+            const module=await import(`/composer-editor-keyboard-layout.js?v=${encodeURIComponent(RICH_LOADER_VERSION)}`);
+            return module.initComposerEditorKeyboardLayout();
+          },
+          validate:value=>Boolean(value),
+          validationError:'Composer keyboard layout did not initialize'
+        });
+      }else{
+        skipRuntimeModule({stage:STAGE,module:'composer-editor-keyboard-layout',dependency:'composer-tiptap'});
+      }
 
       const fixes=tiptap.ok
         ?await loadRuntimeModule({stage:STAGE,module:'composer-tiptap-fixes',load:()=>import(`/composer-tiptap-fixes.js?v=${encodeURIComponent(RICH_LOADER_VERSION)}`)})
