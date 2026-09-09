@@ -49,7 +49,7 @@ test('solo bridge accepts a parent-window image file and does not persist Before
   assert.doesNotMatch(source, /file instanceof File/);
 });
 
-test('solo is source-only and fits the canvas to the source photo aspect ratio', () => {
+test('solo is source-only, matches the canvas to the source ratio and contains the imported image', () => {
   const source = read('./before-after.js');
   assert.match(source, /file\.disabled = true/);
   assert.match(source, /document\.querySelectorAll\('\.empty'\)\.forEach\(element => \{ element\.style\.display = 'none'; \}\)/);
@@ -57,7 +57,18 @@ test('solo is source-only and fits the canvas to the source photo aspect ratio',
   assert.match(source, /element\.onclick = event => \{ if \(mode === 'solo'\) return;/);
   assert.match(source, /return width > 0 && height > 0 \? `\$\{width\}\/\$\{height\}` : '16\/9'/);
   assert.match(source, /state\.selectedRatio = sourceRatio\(photo\)/);
-  assert.match(source, /geometry\.fit\(photo, rect\)/);
+  assert.match(source, /geometry\.fitContain\(photo, rect\)/);
+});
+
+test('solo exposes deterministic fit controls and a full-turn rotation slider', () => {
+  const source = read('./before-after.js');
+  const css = read('./before-after.css');
+  assert.match(source, /slider\.min = '-180'; slider\.max = '180'; slider\.step = '1'/);
+  assert.match(source, /data-solo-fit="width">По ширине/);
+  assert.match(source, /data-solo-fit="height">По высоте/);
+  assert.match(source, /data-solo-fit="contain">Вписать целиком/);
+  assert.match(source, /kind === 'width' \? 'fitWidth' : kind === 'height' \? 'fitHeight' : kind === 'contain' \? 'fitContain'/);
+  assert.match(css, /\.solo-fit-actions/);
 });
 
 test('solo shares the Dual gesture lifecycle while tap only opens the nested editor in Dual', () => {

@@ -8,10 +8,33 @@ export function createGeometry({ slots, editor, stage, photos }) {
     stage.dataset.geometryScale = String(scale);
   }
   const setEditorGeometry = role => setEditorGeometryFromRect(document.querySelector(`[data-slot=${role}]`).getBoundingClientRect());
+  function rotatedSize(photo) {
+    const width = photo.img.naturalWidth, height = photo.img.naturalHeight;
+    const angle = (Number(photo.rotation) || 0) * Math.PI / 180;
+    const cos = Math.abs(Math.cos(angle)), sin = Math.abs(Math.sin(angle));
+    return { width: width * cos + height * sin, height: width * sin + height * cos };
+  }
+  function centerAtScale(photo, scale) {
+    photo.scale = scale;
+    photo.x = photo.y = 0;
+    photo.fitted = true;
+  }
   function fit(photo, rect) {
     photo.scale = Math.max(rect.width / photo.img.naturalWidth, rect.height / photo.img.naturalHeight);
     photo.x = photo.y = 0;
     photo.fitted = true;
+  }
+  function fitWidth(photo, rect) {
+    const size = rotatedSize(photo);
+    centerAtScale(photo, rect.width / size.width);
+  }
+  function fitHeight(photo, rect) {
+    const size = rotatedSize(photo);
+    centerAtScale(photo, rect.height / size.height);
+  }
+  function fitContain(photo, rect) {
+    const size = rotatedSize(photo);
+    centerAtScale(photo, Math.min(rect.width / size.width, rect.height / size.height));
   }
   function refitForComposite() {
     for (const role of ['before', 'after']) {
@@ -45,5 +68,5 @@ export function createGeometry({ slots, editor, stage, photos }) {
       photo.y += anchor.y - (rect.top + rect.height / 2);
     }
   }
-  return { setEditorGeometryFromRect, setEditorGeometry, fit, refitForComposite, captureViewportAnchors, preserveViewportAnchors };
+  return { setEditorGeometryFromRect, setEditorGeometry, fit, fitWidth, fitHeight, fitContain, refitForComposite, captureViewportAnchors, preserveViewportAnchors };
 }
