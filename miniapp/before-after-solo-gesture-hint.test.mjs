@@ -13,8 +13,9 @@ test('solo gesture hint uses the provided SVG and never intercepts photo gesture
 
   assert.equal(hash, '4d7ab60e2b066a90b3a09bdc595335ac216272f0c73628b731af331fbfd9438e');
   assert.match(source, /soloGestureHint\.innerHTML = '<img src="\/assets\/two-finger-swipe-left\.svg" alt="" draggable="false">'/);
-  assert.match(source, /if \(rect\?\.width > 0 && rect\?\.height > 0\) \{ geometry\.fitContain\(photo, rect\); showSoloGestureHint\(\); \}/);
-  assert.match(source, /soloGestureHintTimer = window\.setTimeout\([^;]+1800\)/);
+  assert.match(source, /await fitSoloSource\(\);\s*composite\.clearCommitted\(\);\s*render\(\);\s*showSoloGestureHint\(\)/);
+  assert.match(source, /soloGestureHintTimer = window\.setTimeout\(/);
+  assert.match(source, /}, 1800\);/);
   assert.match(source, /hideSoloGestureHint\(\); event\.preventDefault\(\); for \(const pointerId of previewPointers\.keys\(\)\)/);
   assert.match(source, /if \(soloGestureHintTimer\) clearTimeout\(soloGestureHintTimer\); resize\.destroy\(\)/);
   assert.match(css, /\.solo-gesture-hint\{[^}]*pointer-events:none[^}]*transition:opacity \.5s ease/);
