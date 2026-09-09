@@ -74,13 +74,14 @@ test('solo exposes deterministic fit controls and a full-turn rotation slider', 
   assert.match(css, /\.solo-fit-actions/);
 });
 
-test('solo shares the Dual gesture lifecycle while tap only opens the nested editor in Dual', () => {
+test('solo reserves one-finger gestures for page scroll while Dual keeps one-finger pan', () => {
   const source = read('./before-after.js');
-  assert.match(source, /event\.preventDefault\(\); element\.setPointerCapture\?\.\(event\.pointerId\); previewSlot = role; previewStarted = performance\.now\(\)/);
-  assert.doesNotMatch(source, /if \(mode !== 'solo'\) element\.setPointerCapture/);
-  assert.doesNotMatch(source, /if \(!previewMoved && mode === 'solo'\) element\.setPointerCapture/);
-  assert.match(source, /if \(!previewMoved && distance <= 5\) return;/);
-  assert.match(source, /const tap = !moved && performance\.now\(\) - previewStarted < 350; if \(mode === 'dual' && tap && role && state\.photos\[role\]\) editor\.openPhoto\(role\)/);
+  const css = read('./before-after.css');
+  assert.match(css, /body\[data-mode=solo\] #slots,body\[data-mode=solo\] \[data-slot=before\]\{touch-action:pan-y\}/);
+  assert.match(source, /if \(mode === 'solo'\) \{\s*if \(previewPointers\.size < 2\) \{ previewGesture = null; previewMoved = false; return; \}/);
+  assert.match(source, /if \(mode === 'solo'\) \{\s*if \(points\.length < 2\) return;\s*event\.preventDefault\(\)/);
+  assert.match(source, /event\.preventDefault\(\); element\.setPointerCapture\?\.\(event\.pointerId\); previewStarted = performance\.now\(\); previewMoved = false; previewBegin\(role\)/);
+  assert.match(source, /if \(mode === 'dual' && tap && role && state\.photos\[role\]\) editor\.openPhoto\(role\)/);
 });
 
 test('solo photo taps stay inline and expose main rotation UI', () => {
