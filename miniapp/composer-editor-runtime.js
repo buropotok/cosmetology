@@ -1,6 +1,6 @@
 import {loadRuntimeModule,recordRuntimeDiagnostic,skipRuntimeModule} from './runtime-diagnostics.js';
 
-const RICH_LOADER_VERSION='2026-09-09.18';
+const RICH_LOADER_VERSION='2026-09-10.1';
 const STAGE='new-post.editor-runtime';
 let runtimePromise,runtimeReady=false;
 
@@ -19,9 +19,10 @@ export function loadComposerEditorRuntime(){
         validationError:'Tiptap editor did not initialize'
       });
 
-      const bridge=tiptap.ok
-        ?await loadRuntimeModule({stage:STAGE,module:'composer-tiptap-draft-bridge',load:()=>import(`/composer-tiptap-draft-bridge.js?v=${encodeURIComponent(RICH_LOADER_VERSION)}`)})
-        :skipRuntimeModule({stage:STAGE,module:'composer-tiptap-draft-bridge',dependency:'composer-tiptap'});
+      if(tiptap.ok){
+        const pendingContent=window.CosmoComposerState?.consumePendingEditorContent?.();
+        if(typeof pendingContent==='string')window.CosmoRichEditor?.restoreDraft?.(pendingContent);
+      }
 
       const placeholder=tiptap.ok
         ?await loadRuntimeModule({stage:STAGE,module:'composer-tiptap-placeholder',load:()=>import(`/composer-tiptap-placeholder.js?v=${encodeURIComponent(RICH_LOADER_VERSION)}`)})
@@ -46,13 +47,13 @@ export function loadComposerEditorRuntime(){
         ?await loadRuntimeModule({stage:STAGE,module:'composer-tiptap-fixes',load:()=>import(`/composer-tiptap-fixes.js?v=${encodeURIComponent(RICH_LOADER_VERSION)}`)})
         :skipRuntimeModule({stage:STAGE,module:'composer-tiptap-fixes',dependency:'composer-tiptap'});
 
-      const ok=tiptap.ok&&bridge.ok;
+      const ok=tiptap.ok;
       runtimeReady=ok;
       const durationMs=(typeof performance?.now==='function'?performance.now():Date.now())-started;
-      const failure=!tiptap.ok?tiptap.error:!bridge.ok?bridge.error:null;
+      const failure=!tiptap.ok?tiptap.error:null;
       recordRuntimeDiagnostic({event:'stage_completed',stage:STAGE,module:'composer-editor-runtime',status:ok?'loaded':'failed',durationMs,error:failure});
       if(!ok)runtimePromise=undefined;
-      return{ok,editor:window.CosmoRichEditor||null,modules:{tiptap,bridge,placeholder,fixes}};
+      return{ok,editor:window.CosmoRichEditor||null,modules:{tiptap,placeholder,fixes}};
     })();
   }
   return runtimePromise;

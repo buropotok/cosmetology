@@ -5,6 +5,8 @@ import {readFile} from 'node:fs/promises';
 const bootstrap=await readFile(new URL('./bootstrap.js',import.meta.url),'utf8');
 const navigation=await readFile(new URL('./navigation.js',import.meta.url),'utf8');
 const editorRuntime=await readFile(new URL('./composer-editor-runtime.js',import.meta.url),'utf8');
+const composerState=await readFile(new URL('./composer-state.js',import.meta.url),'utf8');
+const draftStore=await readFile(new URL('./draft-store.js',import.meta.url),'utf8');
 
 test('New Post entry is not part of the startup bootstrap path',()=>{
   assert.doesNotMatch(bootstrap,/import\(['"]\/new-post-entry\.js['"]\)/);
@@ -43,6 +45,16 @@ test('Tiptap is prepared from the first New Post or Continue interaction instead
   assert.ok(resume.indexOf('const prepared=await preparation')<resume.indexOf('navigation.reset([STATES.HOME,STATES.MENU])'));
 });
 
+test('draft persistence hands pending rich content directly to Tiptap without a fetch bridge',()=>{
+  assert.match(composerState,/function currentContent\(\)\{try\{return getRichEditor\(\)\?\.draftValue\?\.\(\)\|\|text\.value/);
+  assert.match(draftStore,/body\.set\('text',snapshot\.content\)/);
+  assert.match(composerState,/consumePendingEditorContent\(\)\{const value=pendingEditorContent;pendingEditorContent=null;return value\}/);
+  assert.match(composerState,/reset\(\)\{\s*pendingEditorContent=null/);
+  assert.match(editorRuntime,/const pendingContent=window\.CosmoComposerState\?\.consumePendingEditorContent\?\.\(\)/);
+  assert.match(editorRuntime,/window\.CosmoRichEditor\?\.restoreDraft\?\.\(pendingContent\)/);
+  assert.doesNotMatch(editorRuntime,/composer-tiptap-draft-bridge/);
+});
+
 test('editor module failures are logged, skipped where dependent, and do not block New Post',()=>{
   assert.match(navigation,/let diagnosticsPromise,editorPreparationPromise,editorPrepared=false/);
   assert.match(navigation,/if\(editorPrepared\)return Promise\.resolve\(\{ok:true,cached:true\}\)/);
@@ -51,10 +63,9 @@ test('editor module failures are logged, skipped where dependent, and do not blo
 
   assert.match(editorRuntime,/loadRuntimeModule/);
   assert.match(editorRuntime,/skipRuntimeModule/);
-  assert.match(editorRuntime,/const bridge=tiptap\.ok/);
   assert.match(editorRuntime,/const fixes=tiptap\.ok/);
   assert.match(editorRuntime,/dependency:'composer-tiptap'/);
-  assert.match(editorRuntime,/const ok=tiptap\.ok&&bridge\.ok/);
+  assert.match(editorRuntime,/const ok=tiptap\.ok/);
   assert.match(editorRuntime,/if\(!ok\)runtimePromise=undefined/);
 
   const prepareUi=navigation.slice(navigation.indexOf('async function prepareNewPostOrReport'),navigation.indexOf('let newPostEntryPromise'));
