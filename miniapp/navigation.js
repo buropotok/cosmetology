@@ -43,20 +43,46 @@ async function showNewPostLoadError(){
   await popup({title:'Новый пост недоступен',message:'Не удалось открыть создание публикации. Попробуйте ещё раз.',buttons:[{id:'ok',type:'ok',text:'ОК'}]});
 }
 const PREPARATION_MIN_MS=450;
-let editorPreparationPromise,editorPrepared=false;
+const PREPARATION_STAGE='new-post.preparation';
+let diagnosticsPromise,editorPreparationPromise,editorPrepared=false;
+function loadRuntimeDiagnostics(){
+  if(!diagnosticsPromise)diagnosticsPromise=import('/runtime-diagnostics.js').catch(error=>{diagnosticsPromise=undefined;console.warn('Runtime diagnostics failed to load',error);return null});
+  return diagnosticsPromise;
+}
 function prepareNewPostRuntime(){
-  if(editorPrepared)return Promise.resolve(true);
+  if(editorPrepared)return Promise.resolve({ok:true,cached:true});
   if(!editorPreparationPromise){
     const startupReady=window.CosmoMiniAppReady||Promise.resolve();
     editorPreparationPromise=Promise.resolve(startupReady)
-      .then(()=>import('/composer-editor-runtime.js'))
-      .then(module=>module.loadComposerEditorRuntime())
-      .then(()=>{editorPrepared=true;return true})
-      .catch(error=>{editorPreparationPromise=undefined;throw error});
+      .then(async()=>{
+        const diagnostics=await loadRuntimeDiagnostics();
+        diagnostics?.recordRuntimeDiagnostic({event:'stage_started',stage:PREPARATION_STAGE,module:'new-post',status:'loading'});
+        let result;
+        if(diagnostics?.loadRuntimeModule){
+          const runtime=await diagnostics.loadRuntimeModule({stage:PREPARATION_STAGE,module:'composer-editor-runtime',load:()=>import('/composer-editor-runtime.js')});
+          if(runtime.ok){
+            try{result=await runtime.value.loadComposerEditorRuntime()}catch(error){result={ok:false,error}}
+          }else result={ok:false,error:runtime.error};
+        }else{
+          try{const runtime=await import('/composer-editor-runtime.js');result=await runtime.loadComposerEditorRuntime()}catch(error){result={ok:false,error}}
+        }
+        diagnostics?.recordRuntimeDiagnostic({event:'stage_completed',stage:PREPARATION_STAGE,module:'new-post',status:result?.ok?'loaded':'failed',error:result?.ok?undefined:result?.error});
+        return result||{ok:false};
+      })
+      .then(result=>{
+        editorPrepared=Boolean(result?.ok);
+        if(!editorPrepared)editorPreparationPromise=undefined;
+        return result;
+      })
+      .catch(error=>{
+        editorPreparationPromise=undefined;
+        console.error('New Post runtime preparation failed',error);
+        return{ok:false,error};
+      });
   }
   return editorPreparationPromise;
 }
-function settlePreparation(){return prepareNewPostRuntime().then(()=>({ok:true}),error=>({ok:false,error}))}
+function settlePreparation(){return prepareNewPostRuntime().catch(error=>({ok:false,error}))}
 function wait(ms){return new Promise(resolve=>setTimeout(resolve,ms))}
 async function prepareNewPostOrReport(preparation=settlePreparation()){
   if(editorPrepared)return true;
@@ -64,15 +90,13 @@ async function prepareNewPostOrReport(preparation=settlePreparation()){
   const started=Date.now();
   try{
     const prepared=await preparation;
-    if(!prepared.ok)throw prepared.error;
+    if(!prepared?.ok)console.warn('New Post preparation completed with module failures',prepared?.error||prepared);
     const remaining=PREPARATION_MIN_MS-(Date.now()-started);
     if(remaining>0)await wait(remaining);
     return true;
   }catch(error){
-    overlay.hidden=true;
-    console.error('New Post preparation failed',error);
-    await showNewPostLoadError();
-    return false;
+    console.error('New Post preparation failed unexpectedly',error);
+    return true;
   }finally{overlay.hidden=true}
 }
 let newPostEntryPromise;
@@ -164,7 +188,7 @@ async function resumeDraft(){
     let restored;
     try{restored=await draft.load()}catch{overlay?.hide?.();await showDraftLoadError();return}
     const prepared=await preparation;
-    if(!prepared.ok){overlay?.hide?.();console.error('New Post preparation failed',prepared.error);await showNewPostLoadError();return}
+    if(!prepared?.ok)console.warn('Continue preparation completed with module failures',prepared?.error||prepared);
     const state=draft.getState?.();
     if(!restored||!state?.hasDraft){
       if(overlay?.showEmpty)await overlay.showEmpty();
