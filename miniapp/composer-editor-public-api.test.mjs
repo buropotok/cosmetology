@@ -24,12 +24,13 @@ test('ComposerState owns pending restore until the rich editor lifecycle is read
   assert.doesNotMatch(state,/#text|text\.value|HTMLTextAreaElement|consumePendingEditorContent/);
 });
 
-test('legacy textarea is only a pre-runtime mount boundary and is replaced inside New Post runtime',()=>{
+test('legacy textarea remains available until New Post editor runtime succeeds',()=>{
   assert.match(mockup,/const text=document\.querySelector\('#text'\)/);
   assert.match(runtime,/function prepareEditorHost\(\)/);
   assert.match(runtime,/document\.querySelector\('#text'\)/);
-  assert.match(runtime,/legacyText\.parentNode\?\.replaceChild\(host,legacyText\)/);
-  assert.match(runtime,/const host=prepareEditorHost\(\)/);
+  assert.match(runtime,/legacyText\.parentNode\.insertBefore\(host,legacyText\)/);
+  assert.match(runtime,/if\(tiptap\.ok\)mount\.legacyText\?\.remove\(\)/);
+  assert.match(runtime,/else if\(mount\.created\)mount\.host\.remove\(\)/);
   assert.doesNotMatch(runtime,/replaceWith\(/);
 });
 
