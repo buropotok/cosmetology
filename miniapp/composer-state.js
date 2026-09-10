@@ -10,17 +10,24 @@ function create({
   if(!text||!imageInput)throw new Error('ComposerState requires composer inputs');
   const listeners=new Set();
   let version=0,activePhotoIndex=0,platform='telegram',pendingEditorContent=null;
+  let unsubscribeRichEditor=()=>{};
   let imageSignature=signature(currentImages());
 
   function currentImages(){return getImageManager()?.getFiles?.()||Array.from(imageInput.files||[]).slice(0,10)}
   function currentContent(){try{return getRichEditor()?.draftValue?.()||text.value}catch{return text.value}}
-  function getSnapshot(){return Object.freeze({content:currentContent(),plainText:text.value,images:currentImages().slice(),activePhotoIndex,platform,version})}
+  function currentPlainText(){try{return getRichEditor()?.getPlainText?.()??text.value}catch{return text.value}}
+  function getSnapshot(){return Object.freeze({content:currentContent(),plainText:currentPlainText(),images:currentImages().slice(),activePhotoIndex,platform,version})}
   function emit(fields,reason){version++;const change=Object.freeze({fields:Object.freeze(fields),reason,version,snapshot:getSnapshot()});listeners.forEach(listener=>listener(change))}
   function onContent(){emit(['content'],'content')}
+  function onTextareaContent(){if(typeof getRichEditor()?.subscribe==='function')return;onContent()}
   function onImages(){const next=signature(currentImages());if(next===imageSignature)return;imageSignature=next;activePhotoIndex=Math.min(activePhotoIndex,Math.max(currentImages().length-1,0));emit(['images','activePhotoIndex'],'images')}
+  function bindRichEditor(){unsubscribeRichEditor();const editor=getRichEditor();unsubscribeRichEditor=editor?.subscribe?.(()=>onContent())||(()=>{})}
+  function onRichReady(){bindRichEditor()}
 
-  text.addEventListener('input',onContent);
+  text.addEventListener('input',onTextareaContent);
   imageInput.addEventListener('change',onImages);
+  window.addEventListener('cosmo-rich-ready',onRichReady);
+  bindRichEditor();
 
   const api={
     getSnapshot,
@@ -51,7 +58,7 @@ function create({
       getImageManager()?.replaceFiles?.([]);platform='telegram';activePhotoIndex=0;imageSignature='';version++;
       window.dispatchEvent(new CustomEvent('cosmo-composer-restore',{detail:getSnapshot()}));
     },
-    dispose(){text.removeEventListener('input',onContent);imageInput.removeEventListener('change',onImages);listeners.clear()},
+    dispose(){unsubscribeRichEditor();window.removeEventListener('cosmo-rich-ready',onRichReady);text.removeEventListener('input',onTextareaContent);imageInput.removeEventListener('change',onImages);listeners.clear()},
   };
   return Object.freeze(api);
 }

@@ -30,8 +30,15 @@
   text.className='composer-bodytext';text.placeholder='Введите текст публикации…';
   const editorFooter=document.createElement('div');editorFooter.className='composer-editor-footer';editorFooter.innerHTML='<button type="button" class="composer-clear">Очистить</button><div class="composer-count">0 символов</div>';
   publicationLabel.after(editor);editor.append(toolbar,text,editorFooter);
-  editorFooter.querySelector('.composer-clear').addEventListener('click',()=>{text.value='';text.dispatchEvent(new Event('input',{bubbles:true}));});
-  const count=editorFooter.querySelector('.composer-count');const updateCount=()=>count.textContent=`${text.value.length} символов`;text.addEventListener('input',updateCount);updateCount();
+  const richEditor=()=>window.CosmoRichEditor;
+  const currentPlainText=()=>{try{return richEditor()?.getPlainText?.()??text.value}catch{return text.value}};
+  const currentSubmissionText=()=>{try{return richEditor()?.getSubmissionValue?.()??text.value}catch{return text.value}};
+  editorFooter.querySelector('.composer-clear').addEventListener('click',()=>{const current=richEditor();if(current?.clear)current.clear();else{text.value='';text.dispatchEvent(new Event('input',{bubbles:true}))}});
+  const count=editorFooter.querySelector('.composer-count');const updateCount=()=>count.textContent=`${currentPlainText().length} символов`;
+  let unsubscribeRichEditor=()=>{};
+  const bindRichEditor=()=>{unsubscribeRichEditor();unsubscribeRichEditor=richEditor()?.subscribe?.(()=>updateCount())||(()=>{});updateCount()};
+  text.addEventListener('input',()=>{if(typeof richEditor()?.subscribe!=='function')updateCount()});
+  window.addEventListener('cosmo-rich-ready',bindRichEditor);bindRichEditor();
 
   const bottom=document.createElement('div');bottom.className='composer-bottom';editor.after(bottom);
   const telegramPreview=document.createElement('button');telegramPreview.type='button';telegramPreview.className='composer-telegram-preview';telegramPreview.textContent='Предпросмотр в Telegram';
@@ -41,10 +48,10 @@
   telegramPreview.addEventListener('click',async()=>{await window.CosmoSofaDraft?.flush?.('preview');
     const webApp=window.Telegram?.WebApp;
     if(!webApp?.initData){status.textContent='Откройте Mini App внутри Telegram.';status.className='error';return}
-    const images=Array.from(imageInput.files||[]).slice(0,10);
-    if(!text.value.trim()&&!images.length){status.textContent='Добавьте текст или изображение.';status.className='error';return}
+    const images=Array.from(imageInput.files||[]).slice(0,10),plainText=currentPlainText();
+    if(!plainText.trim()&&!images.length){status.textContent='Добавьте текст или изображение.';status.className='error';return}
     telegramPreview.disabled=true;telegramPreview.textContent='Отправляем предпросмотр…';status.textContent='Отправляем в личный чат с персональным ботом…';status.className='';
-    const body=new FormData();body.set('text',text.value);images.forEach(file=>body.append('images',file,file.name));
+    const body=new FormData();body.set('text',currentSubmissionText());images.forEach(file=>body.append('images',file,file.name));
     try{const {response,result}=await window.CosmoComposerActions.preview({method:'POST',headers:{Authorization:`tma ${webApp.initData}`},body});if(!response.ok)throw new Error(result?.error?.message||'Не удалось отправить предпросмотр.');status.textContent='Предпросмотр отправлен в личный чат с персональным ботом.';status.className='success';webApp.HapticFeedback?.notificationOccurred('success')}
     catch(error){status.textContent=error instanceof Error?error.message:'Не удалось отправить предпросмотр.';status.className='error';webApp.HapticFeedback?.notificationOccurred('error')}
     finally{telegramPreview.disabled=false;telegramPreview.textContent='Предпросмотр в Telegram'}

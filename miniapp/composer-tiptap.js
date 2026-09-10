@@ -56,16 +56,21 @@ import {postDocumentToTiptap,tiptapToPostDocument} from './post-document-tiptap-
   const Details=Node.create({name:'details',group:'block',content:'detailsSummary detailsBody',isolating:true,parseHTML(){return[{tag:'details'}]},renderHTML({HTMLAttributes}){return['details',mergeAttributes(HTMLAttributes),0]}});
 
   const plainDocument=value=>({type:'doc',content:String(value||'').replace(/\r\n?/g,'\n').split('\n').map(line=>({type:'paragraph',content:line?[{type:'text',text:line}]:undefined}))});
+  const changeListeners=new Set();
   let buttons=[];
+  function getPlainText(){return editor.getText({blockSeparator:'\n'})}
   function toPostDocument(){return tiptapToPostDocument(editor.getJSON(),buttons)}
+  function getSubmissionValue(){return RICH_PREFIX+JSON.stringify(toPostDocument())}
+  function notifyChange(reason='content'){const change=Object.freeze({reason});changeListeners.forEach(listener=>listener(change))}
+  function subscribe(listener){if(typeof listener!=='function')return()=>{};changeListeners.add(listener);return()=>changeListeners.delete(listener)}
 
   let syncing=false;
-  function syncTextarea(){const value=editor.getText({blockSeparator:'\n'});if(text.value===value)return;syncing=true;text.value=value;text.dispatchEvent(new Event('input',{bubbles:true}));syncing=false}
-  const editor=new Editor({element:host,extensions:[StarterKit.configure({heading:{levels:[1]}}),Spoiler,DetailsSummary,DetailsBody,Details],content:plainDocument(text.value),editorProps:{attributes:{spellcheck:'true','aria-label':'Текст публикации'}},onUpdate(){syncTextarea()},onCreate(){syncTextarea()}});
+  function syncTextarea(){const value=getPlainText();if(text.value===value)return;syncing=true;text.value=value;text.dispatchEvent(new Event('input',{bubbles:true}));syncing=false}
+  const editor=new Editor({element:host,extensions:[StarterKit.configure({heading:{levels:[1]}}),Spoiler,DetailsSummary,DetailsBody,Details],content:plainDocument(text.value),editorProps:{attributes:{spellcheck:'true','aria-label':'Текст публикации'}},onUpdate(){syncTextarea();notifyChange('content')},onCreate(){syncTextarea()}});
 
   const buttonDock=document.createElement('div');buttonDock.className='composer-button-dock';buttonDock.setAttribute('aria-label','Кнопки публикации');host.append(buttonDock);
   function renderButtons(){buttonDock.replaceChildren();buttonDock.classList.toggle('has-buttons',buttons.length>0);buttons.forEach((button,index)=>{const el=document.createElement('button');el.type='button';el.className='composer-link-button';el.textContent=button.text||'Ссылка';el.title=button.url||'';el.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();openButtonEditor(index)});buttonDock.append(el)})}
-  function persistButtons(){renderButtons();syncTextarea();window.dispatchEvent(new CustomEvent('cosmo-rich-buttons-change',{detail:{buttons:[...buttons]}}))}
+  function persistButtons(){renderButtons();syncTextarea();notifyChange('buttons');window.dispatchEvent(new CustomEvent('cosmo-rich-buttons-change',{detail:{buttons:[...buttons]}}))}
   function closeButtonEditor(){document.querySelector('.composer-button-modal-backdrop')?.remove()}
   function openButtonEditor(index=null){
     closeButtonEditor();const existing=Number.isInteger(index)?buttons[index]:null;let draft={text:existing?.text||'Ссылка',url:existing?.url||'https://'},step='text';
@@ -81,12 +86,14 @@ import {postDocumentToTiptap,tiptapToPostDocument} from './post-document-tiptap-
     input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();submit()}else if(e.key==='Escape'){e.preventDefault();closeButtonEditor()}});backdrop.addEventListener('mousedown',e=>{if(e.target===backdrop)closeButtonEditor()});renderStep();
   }
 
-  function restoreDraft(value){if(typeof value!=='string'||!value.startsWith(DRAFT_PREFIX))return false;try{const payload=JSON.parse(value.slice(DRAFT_PREFIX.length)),doc=payload?.document;if(doc?.schemaVersion!==1&&doc?.schemaVersion!==2)return false;buttons=Array.isArray(doc.buttons)?doc.buttons:[];editor.commands.setContent(postDocumentToTiptap(doc),{emitUpdate:true});renderButtons();diag('tiptap-draft-restored',{blocks:doc.blocks?.length||0,buttons:buttons.length,schemaVersion:doc.schemaVersion});return true}catch(error){diag('tiptap-draft-error',{error:error?.message||String(error)});return false}}
+  function applyPostDocument(doc){if((doc?.schemaVersion!==1&&doc?.schemaVersion!==2)||!Array.isArray(doc.blocks))return false;buttons=Array.isArray(doc.buttons)?doc.buttons:[];editor.commands.setContent(postDocumentToTiptap(doc),{emitUpdate:true});renderButtons();return true}
+  function setDocument(doc){const applied=applyPostDocument(doc);if(applied)diag('tiptap-document-set',{blocks:doc.blocks.length,buttons:buttons.length,schemaVersion:doc.schemaVersion});return applied}
+  function restoreDraft(value){if(typeof value!=='string'||!value.startsWith(DRAFT_PREFIX))return false;try{const payload=JSON.parse(value.slice(DRAFT_PREFIX.length)),doc=payload?.document;if(!applyPostDocument(doc))return false;diag('tiptap-draft-restored',{blocks:doc.blocks?.length||0,buttons:buttons.length,schemaVersion:doc.schemaVersion});return true}catch(error){diag('tiptap-draft-error',{error:error?.message||String(error)});return false}}
   function restorePlain(value){buttons=[];renderButtons();editor.commands.setContent(plainDocument(value),{emitUpdate:true})}
   function draftValue(){return DRAFT_PREFIX+JSON.stringify({version:3,document:toPostDocument()})}
   function clear(){buttons=[];renderButtons();editor.commands.clearContent(true)}
 
-  text.addEventListener('input',()=>{if(syncing)return;const value=text.value;if(value.startsWith(DRAFT_PREFIX)){restoreDraft(value);return}if(editor.getText({blockSeparator:'\n'})!==value)restorePlain(value)});
+  text.addEventListener('input',()=>{if(syncing)return;const value=text.value;if(value.startsWith(DRAFT_PREFIX)){restoreDraft(value);return}if(getPlainText()!==value)restorePlain(value)});
 
   const menus=[...toolbar.querySelectorAll('.composer-tool-menu')];
   const blockMenu=menus.find(m=>m.querySelector('.composer-menu-trigger')?.textContent?.trim()==='Aa'),blockItems=blockMenu?[...blockMenu.querySelectorAll('.composer-menu-item')]:[];
@@ -110,9 +117,8 @@ import {postDocumentToTiptap,tiptapToPostDocument} from './post-document-tiptap-
   toolbar.querySelector('[title="Повторить"]')?.addEventListener('click',e=>{e.preventDefault();editor.chain().focus().redo().run()});
   const emojiBtn=toolbar.querySelector('[title="Emoji"]');if(emojiBtn){emojiBtn.addEventListener('mousedown',preserve);emojiBtn.addEventListener('click',e=>{e.preventDefault();document.querySelector('.composer-emoji-panel')?.remove();const panel=document.createElement('div');panel.className='composer-emoji-panel';for(const emoji of ['😀','😊','😍','🥰','✨','💫','🌿','🌸','💧','🧴','💆‍♀️','❤️','🤍','👍','🔥','📌','✅','⚠️','💡','👉']){const b=document.createElement('button');b.type='button';b.textContent=emoji;b.addEventListener('mousedown',preserve);b.addEventListener('click',()=>{editor.chain().focus().insertContent(emoji).run();panel.remove()});panel.append(b)}const r=emojiBtn.getBoundingClientRect();panel.style.left=`${Math.max(8,Math.min(innerWidth-228,r.left-170))}px`;panel.style.top=`${Math.max(8,r.top-190)}px`;document.body.append(panel)})}
 
-  const nativeFetch=window.fetch.bind(window);window.fetch=(input,init={})=>{const url=typeof input==='string'?input:input?.url||'';if(init.body instanceof FormData&&(url.includes('/api/miniapp/preview')||url.includes('/api/miniapp/publish'))){const doc=toPostDocument();init.body.set('text',RICH_PREFIX+JSON.stringify(doc));diag('tiptap-publish',{url,blocks:doc.blocks.map(x=>x.type)})}return nativeFetch(input,init)};
   renderButtons();
-  window.CosmoRichEditor={element:host,editor,toPostDocument,sync:syncTextarea,draftValue,restoreDraft,restorePlain,clear,openButtonEditor};
+  window.CosmoRichEditor={element:host,editor,toPostDocument,getPlainText,getSubmissionValue,setDocument,subscribe,sync:syncTextarea,draftValue,restoreDraft,restorePlain,clear,openButtonEditor};
   if(window.__CosmoRichDraftPending){const pending=window.__CosmoRichDraftPending;delete window.__CosmoRichDraftPending;restoreDraft(pending)}
   window.dispatchEvent(new CustomEvent('cosmo-rich-ready'));diag('tiptap-ready',{version:'3.0.2',blockItems:blockItems.length,formatItems:formatItems.length,listItems:listItems.length});
 })();
