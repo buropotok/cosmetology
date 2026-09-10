@@ -32,49 +32,11 @@
   controls.innerHTML=`<h2 class="new-post-entry__title">Новый пост</h2><p class="new-post-entry__subtitle">Выберите способ создания публикации</p><div class="new-post-entry__actions"><button type="button" class="new-post-entry__button" data-new-post-choice="ai"><span class="new-post-entry__icon new-post-entry__icon--ai" aria-hidden="true">✨</span><span>Создать пост с помощью AI</span></button><button type="button" class="new-post-entry__button new-post-entry__button--manual" data-new-post-choice="manual"><span class="new-post-entry__icon" aria-hidden="true"><img src="/assets/icons/manual-edit.svg" alt=""></span><span>Создать пост вручную с нуля</span></button><button type="button" class="new-post-entry__button new-post-entry__button--before-after" data-new-post-choice="before-after"><span class="new-post-entry__icon new-post-entry__pair" aria-hidden="true"><img src="/assets/icons/account-box.svg" alt=""><img src="/assets/icons/account-box.svg" alt=""></span><span>ДО / ПОСЛЕ</span></button></div>`;
   wizard.insertAdjacentElement('beforebegin',controls);
 
-  function publishMode(mode){
-    screen.dataset.publishMode=mode;
-    window.dispatchEvent(new CustomEvent('cosmo-publish-mode',{detail:{mode}}));
-  }
+  function publishMode(mode){screen.dataset.publishMode=mode;window.dispatchEvent(new CustomEvent('cosmo-publish-mode',{detail:{mode}}))}
+  function showEntry(){wizard.hidden=true;composerContent.hidden=true;controls.hidden=false;publishMode('entry')}
+  function showAi(){controls.hidden=true;const state=window.CosmoAiWizardState;if(state?.restore&&state?.getSnapshot){state.restore({...state.getSnapshot(),screen:'ai'});return}wizard.hidden=false;composerContent.hidden=true;publishMode('wizard')}
+  function showEditor({manual=false,focus=true}={}){controls.hidden=true;wizard.hidden=true;composerContent.hidden=false;publishMode('compose');if(manual)window.dispatchEvent(new CustomEvent('cosmo-ai-wizard-manual'));if(focus)queueMicrotask(()=>window.CosmoRichEditor?.editor?.commands?.focus?.())}
 
-  function showEntry(){
-    wizard.hidden=true;
-    composerContent.hidden=true;
-    controls.hidden=false;
-    publishMode('entry');
-  }
-
-  function showAi(){
-    controls.hidden=true;
-    const state=window.CosmoAiWizardState;
-    if(state?.restore&&state?.getSnapshot){
-      state.restore({...state.getSnapshot(),screen:'ai'});
-      return;
-    }
-    wizard.hidden=false;
-    composerContent.hidden=true;
-    publishMode('wizard');
-  }
-
-  function showEditor({manual=false,focus=true}={}){
-    controls.hidden=true;
-    wizard.hidden=true;
-    composerContent.hidden=false;
-    publishMode('compose');
-    if(manual)window.dispatchEvent(new CustomEvent('cosmo-ai-wizard-manual'));
-    if(focus)queueMicrotask(()=>document.querySelector('#text')?.focus());
-  }
-
-  controls.addEventListener('click',event=>{
-    const button=event.target.closest?.('[data-new-post-choice]');
-    if(!button)return;
-    const navigation=window.CosmoNavigation;
-    if(!navigation)return;
-    const choice=button.dataset.newPostChoice;
-    if(choice==='ai')void navigation.push(navigation.STATES.AI);
-    else if(choice==='manual')void navigation.push(navigation.STATES.PUBLISH,{manual:true});
-    else if(choice==='before-after')void navigation.push(navigation.STATES.BEFORE_AFTER);
-  });
-
+  controls.addEventListener('click',event=>{const button=event.target.closest?.('[data-new-post-choice]');if(!button)return;const navigation=window.CosmoNavigation;if(!navigation)return;const choice=button.dataset.newPostChoice;if(choice==='ai')void navigation.push(navigation.STATES.AI);else if(choice==='manual')void navigation.push(navigation.STATES.PUBLISH,{manual:true});else if(choice==='before-after')void navigation.push(navigation.STATES.BEFORE_AFTER)});
   window.CosmoComposerView=Object.freeze({showEntry,showAi,showEditor});
 })();

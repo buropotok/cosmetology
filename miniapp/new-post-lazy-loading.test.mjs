@@ -8,9 +8,7 @@ const editorRuntime=await readFile(new URL('./composer-editor-runtime.js',import
 const composerState=await readFile(new URL('./composer-state.js',import.meta.url),'utf8');
 const draftStore=await readFile(new URL('./draft-store.js',import.meta.url),'utf8');
 
-test('New Post entry is not part of the startup bootstrap path',()=>{
-  assert.doesNotMatch(bootstrap,/import\(['"]\/new-post-entry\.js['"]\)/);
-});
+test('New Post entry is not part of the startup bootstrap path',()=>{assert.doesNotMatch(bootstrap,/import\(['"]\/new-post-entry\.js['"]\)/)});
 
 test('navigation lazy-loads New Post entry through the New Post lifecycle',()=>{
   assert.match(navigation,/async function loadNewPostEntry\(\)/);
@@ -27,16 +25,13 @@ test('Tiptap is prepared from the first New Post or Continue interaction instead
   assert.match(editorRuntime,/export function loadComposerEditorRuntime\(\)/);
   assert.match(navigation,/function getPreparationOverlay\(\)/);
   assert.match(navigation,/Подготовка…/);
-
   const prepare=navigation.slice(navigation.indexOf('function prepareNewPostRuntime()'),navigation.indexOf('function settlePreparation()'));
   assert.ok(prepare.indexOf('window.CosmoMiniAppReady')>=0);
   assert.ok(prepare.indexOf('window.CosmoMiniAppReady')<prepare.indexOf("import('/composer-editor-runtime.js')"));
-
   const newPost=navigation.slice(navigation.indexOf('async function openNewPost()'),navigation.indexOf('let resumeInFlight=false'));
   assert.ok(newPost.indexOf('const preparation=settlePreparation()')<newPost.indexOf('const draft=window.CosmoSofaDraft'));
   assert.match(newPost,/await prepareNewPostOrReport\(preparation\)/);
   assert.ok(newPost.indexOf('await prepareNewPostOrReport(preparation)')<newPost.lastIndexOf('await commitNewPost(draft)'));
-
   const resumeStart=navigation.indexOf('async function resumeDraft()');
   const resumeEnd=navigation.indexOf("home.querySelector('#flow-new')",resumeStart);
   assert.ok(resumeStart>=0&&resumeEnd>resumeStart,'resumeDraft should exist before Home handlers');
@@ -45,14 +40,13 @@ test('Tiptap is prepared from the first New Post or Continue interaction instead
   assert.ok(resume.indexOf('const prepared=await preparation')<resume.indexOf('navigation.reset([STATES.HOME,STATES.MENU])'));
 });
 
-test('draft persistence hands pending rich content directly to Tiptap without a fetch bridge',()=>{
-  assert.match(composerState,/function currentContent\(\)\{try\{return getRichEditor\(\)\?\.draftValue\?\.\(\)\|\|text\.value/);
+test('draft persistence stays in ComposerState until Tiptap announces readiness',()=>{
   assert.match(draftStore,/body\.set\('text',snapshot\.content\)/);
-  assert.match(composerState,/consumePendingEditorContent\(\)\{const value=pendingEditorContent;pendingEditorContent=null;return value\}/);
-  assert.match(composerState,/reset\(\)\{\s*pendingEditorContent=null/);
-  assert.match(editorRuntime,/const pendingContent=window\.CosmoComposerState\?\.consumePendingEditorContent\?\.\(\)/);
-  assert.match(editorRuntime,/window\.CosmoRichEditor\?\.restoreDraft\?\.\(pendingContent\)/);
-  assert.doesNotMatch(editorRuntime,/composer-tiptap-draft-bridge/);
+  assert.match(composerState,/pendingEditorContent=typeof snapshot\.content==='string'\?snapshot\.content:null/);
+  assert.match(composerState,/window\.addEventListener\('cosmo-rich-ready',onRichReady\)/);
+  assert.match(composerState,/restoreEditorContent\(editor,pending\)/);
+  assert.doesNotMatch(composerState,/consumePendingEditorContent|#text|text\.value/);
+  assert.doesNotMatch(editorRuntime,/consumePendingEditorContent|restoreDraft\?\.\(pendingContent\)|composer-tiptap-draft-bridge/);
 });
 
 test('editor module failures are logged, skipped where dependent, and do not block New Post',()=>{
@@ -60,19 +54,16 @@ test('editor module failures are logged, skipped where dependent, and do not blo
   assert.match(navigation,/if\(editorPrepared\)return Promise\.resolve\(\{ok:true,cached:true\}\)/);
   assert.match(navigation,/if\(!editorPrepared\)editorPreparationPromise=undefined/);
   assert.match(navigation,/return\{ok:false,error\}/);
-
   assert.match(editorRuntime,/loadRuntimeModule/);
   assert.match(editorRuntime,/skipRuntimeModule/);
   assert.match(editorRuntime,/const fixes=tiptap\.ok/);
   assert.match(editorRuntime,/dependency:'composer-tiptap'/);
   assert.match(editorRuntime,/const ok=tiptap\.ok/);
   assert.match(editorRuntime,/if\(!ok\)runtimePromise=undefined/);
-
   const prepareUi=navigation.slice(navigation.indexOf('async function prepareNewPostOrReport'),navigation.indexOf('let newPostEntryPromise'));
   assert.match(prepareUi,/completed with module failures/);
   assert.doesNotMatch(prepareUi,/showNewPostLoadError/);
   assert.match(prepareUi,/return true/);
-
   const resumeStart=navigation.indexOf('async function resumeDraft()');
   const resumeEnd=navigation.indexOf("home.querySelector('#flow-new')",resumeStart);
   assert.ok(resumeStart>=0&&resumeEnd>resumeStart,'resumeDraft should exist before Home handlers');

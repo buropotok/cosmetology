@@ -3,12 +3,14 @@
   const form=document.querySelector('#publish-form');
   const imageInput=document.querySelector('#image');
   const previewWrap=document.querySelector('#preview-wrap');
-  const text=document.querySelector('#text');
+  const legacyText=document.querySelector('#text');
+  const editorHost=document.querySelector('#composer-editor-host')||document.createElement('div');
   const publish=document.querySelector('#publish');
   const publishVk=document.querySelector('#publish-vk');
   const status=document.querySelector('#status');
   const settings=document.querySelector('#open-settings');
-  if(!composer||!form||!imageInput||!text||!publish||!publishVk)return;
+  if(!composer||!form||!imageInput||!publish||!publishVk)return;
+  if(!editorHost.id){editorHost.id='composer-editor-host';if(legacyText)legacyText.replaceWith(editorHost);else form.prepend(editorHost)}
 
   composer.classList.add('approved-composer');
   const topbar=composer.querySelector('.topbar');
@@ -27,17 +29,16 @@
   const publicationLabel=document.createElement('div');publicationLabel.className='composer-label';publicationLabel.textContent='Публикация';previewWrap.after(publicationLabel);
   const editor=document.createElement('section');editor.className='composer-card composer-editor';
   const toolbar=document.createElement('div');toolbar.className='composer-toolbar';toolbar.setAttribute('aria-label','Форматирование');toolbar.innerHTML=`<button type="button" class="composer-tool" title="Отменить"><svg viewBox="0 0 24 24"><path d="M9 7 4 12l5 5"/><path d="M5 12h8a6 6 0 0 1 6 6"/></svg></button><button type="button" class="composer-tool" title="Повторить"><svg viewBox="0 0 24 24"><path d="m15 7 5 5-5 5"/><path d="M19 12h-8a6 6 0 0 0-6 6"/></svg></button><div class="composer-tool-menu"><button type="button" class="composer-tool composer-menu-trigger">Aa</button><div class="composer-tool-panel"><button type="button" class="composer-menu-item"><span>T</span>Текст</button><button type="button" class="composer-menu-item"><span>H</span>Заголовок</button><button type="button" class="composer-menu-item"><span>“</span>Цитата</button></div></div><div class="composer-tool-menu"><button type="button" class="composer-tool composer-bold-tool composer-menu-trigger">B</button><div class="composer-tool-panel"><button type="button" class="composer-menu-item"><b>B</b>Жирный</button><button type="button" class="composer-menu-item"><i>I</i>Курсив</button><button type="button" class="composer-menu-item"><u>U</u>Подчёркнутый</button><button type="button" class="composer-menu-item"><s>S</s>Зачёркнутый</button><button type="button" class="composer-menu-item"><span>A⠿</span>Спойлер</button></div></div><div class="composer-tool-menu"><button type="button" class="composer-tool composer-menu-trigger" title="Списки"><svg viewBox="0 0 24 24"><path d="M9 7h11M9 12h11M9 17h11"/><circle cx="4" cy="7" r="1" fill="currentColor" stroke="none"/><circle cx="4" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="4" cy="17" r="1" fill="currentColor" stroke="none"/></svg></button><div class="composer-tool-panel"><button type="button" class="composer-menu-item"><span>1.</span>Нумерованный список</button><button type="button" class="composer-menu-item"><span>•</span>Маркированный список</button><button type="button" class="composer-menu-item"><span>⌄</span>Выпадающий список</button></div></div><div class="composer-tool-menu"><button type="button" class="composer-tool composer-menu-trigger" title="Ссылка"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.1.1l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1"/><path d="M14 11a5 5 0 0 0-7.1-.1l-2 2A5 5 0 0 0 12 20l1.1-1.1"/></svg></button><div class="composer-tool-panel composer-tool-panel-right"><button type="button" class="composer-menu-item"><span>🔗</span>Текстовая ссылка</button><button type="button" class="composer-menu-item"><span>•••</span>Кнопка</button></div></div><button type="button" class="composer-tool" title="Изображение"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="1.5"/><path d="m4 18 5-5 4 4 2-2 5 4"/></svg></button><button type="button" class="composer-tool" title="Emoji"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5c1 1.5 2.1 2.2 3.5 2.2s2.5-.7 3.5-2.2"/><path d="M9 9h.01M15 9h.01"/></svg></button>`;
-  text.className='composer-bodytext';text.placeholder='Введите текст публикации…';
+  editorHost.className='composer-bodytext composer-rich-editor composer-tiptap-editor';
   const editorFooter=document.createElement('div');editorFooter.className='composer-editor-footer';editorFooter.innerHTML='<button type="button" class="composer-clear">Очистить</button><div class="composer-count">0 символов</div>';
-  publicationLabel.after(editor);editor.append(toolbar,text,editorFooter);
+  publicationLabel.after(editor);editor.append(toolbar,editorHost,editorFooter);
   const richEditor=()=>window.CosmoRichEditor;
-  const currentPlainText=()=>{try{return richEditor()?.getPlainText?.()??text.value}catch{return text.value}};
-  const currentSubmissionText=()=>{try{return richEditor()?.getSubmissionValue?.()??text.value}catch{return text.value}};
-  editorFooter.querySelector('.composer-clear').addEventListener('click',()=>{const current=richEditor();if(current?.clear)current.clear();else{text.value='';text.dispatchEvent(new Event('input',{bubbles:true}))}});
+  const currentPlainText=()=>{try{return richEditor()?.getPlainText?.()??''}catch{return''}};
+  const currentSubmissionText=()=>{try{return richEditor()?.getSubmissionValue?.()??''}catch{return''}};
+  editorFooter.querySelector('.composer-clear').addEventListener('click',()=>richEditor()?.clear?.());
   const count=editorFooter.querySelector('.composer-count');const updateCount=()=>count.textContent=`${currentPlainText().length} символов`;
   let unsubscribeRichEditor=()=>{};
   const bindRichEditor=()=>{unsubscribeRichEditor();unsubscribeRichEditor=richEditor()?.subscribe?.(()=>updateCount())||(()=>{});updateCount()};
-  text.addEventListener('input',()=>{if(typeof richEditor()?.subscribe!=='function')updateCount()});
   window.addEventListener('cosmo-rich-ready',bindRichEditor);bindRichEditor();
 
   const bottom=document.createElement('div');bottom.className='composer-bottom';editor.after(bottom);
