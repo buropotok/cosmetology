@@ -27,8 +27,11 @@ test('product review prompt uses the agreed evidence-focused structure and exist
   assert.match(source,/данные производителя/);
   assert.match(source,/результаты исследований/);
   assert.match(source,/Не придумывай состав, свойства, исследования, регистрацию, показания или противопоказания/);
-  assert.match(source,/В самом конце публикации перечисли использованные источники обычными кликабельными ссылками/);
+  assert.match(source,/последним блоком публикации перечисли использованные источники обычными кликабельными ссылками/);
   assert.match(source,/\$\{READY_POST_FORMAT_CONTRACT\}/);
+  const conclusion=source.indexOf('Дай краткий нейтральный вывод');
+  const sources=source.indexOf('последним блоком публикации перечисли использованные источники');
+  assert.ok(conclusion>=0&&sources>conclusion,'sources must be instructed after the neutral conclusion');
 });
 
 test('product-name modal is owned and styled by the AI Widget',()=>{
