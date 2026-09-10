@@ -1,19 +1,19 @@
 import {loadRuntimeModule,recordRuntimeDiagnostic,skipRuntimeModule} from './runtime-diagnostics.js';
 
-const RICH_LOADER_VERSION='2026-09-11.1';
+const RICH_LOADER_VERSION='2026-09-11.2';
 const STAGE='new-post.editor-runtime';
 let runtimePromise,runtimeReady=false;
 
 function prepareEditorHost(){
   const existing=document.querySelector('#composer-editor-host');
-  if(existing instanceof HTMLElement)return existing;
+  if(existing instanceof HTMLElement)return{host:existing,legacyText:null,created:false};
   const legacyText=document.querySelector('#text');
-  if(!(legacyText instanceof HTMLTextAreaElement))return null;
+  if(!(legacyText instanceof HTMLTextAreaElement)||!legacyText.parentNode)return null;
   const host=document.createElement('div');
   host.id='composer-editor-host';
   host.className='composer-bodytext composer-rich-editor composer-tiptap-editor';
-  legacyText.parentNode?.replaceChild(host,legacyText);
-  return host.isConnected?host:null;
+  legacyText.parentNode.insertBefore(host,legacyText);
+  return{host,legacyText,created:true};
 }
 
 export function loadComposerEditorRuntime(){
@@ -23,8 +23,8 @@ export function loadComposerEditorRuntime(){
       const started=typeof performance?.now==='function'?performance.now():Date.now();
       recordRuntimeDiagnostic({event:'stage_started',stage:STAGE,module:'composer-editor-runtime',status:'loading'});
 
-      const host=prepareEditorHost();
-      if(!host){
+      const mount=prepareEditorHost();
+      if(!mount){
         const error='Composer editor host is unavailable';
         recordRuntimeDiagnostic({event:'stage_completed',stage:STAGE,module:'composer-editor-runtime',status:'failed',error});
         runtimePromise=undefined;
@@ -38,6 +38,8 @@ export function loadComposerEditorRuntime(){
         validate:()=>Boolean(window.CosmoRichEditor),
         validationError:'Tiptap editor did not initialize'
       });
+      if(tiptap.ok)mount.legacyText?.remove();
+      else if(mount.created)mount.host.remove();
 
       const placeholder=tiptap.ok
         ?await loadRuntimeModule({stage:STAGE,module:'composer-tiptap-placeholder',load:()=>import(`/composer-tiptap-placeholder.js?v=${encodeURIComponent(RICH_LOADER_VERSION)}`)})
