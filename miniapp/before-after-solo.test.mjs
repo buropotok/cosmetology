@@ -79,7 +79,8 @@ test('solo reserves one-finger gestures for page scroll while Dual keeps one-fin
   const css = read('./before-after.css');
   assert.match(css, /body\[data-mode=solo\] #slots,body\[data-mode=solo\] \[data-slot=before\]\{touch-action:pan-y\}/);
   assert.match(source, /if \(mode === 'solo'\) \{\s*if \(previewPointers\.size < 2\) \{ previewGesture = null; previewMoved = false; return; \}/);
-  assert.match(source, /if \(mode === 'solo'\) \{\s*if \(points\.length < 2\) return;\s*event\.preventDefault\(\)/);
+  assert.match(source, /if \(mode === 'solo'\) \{\s*if \(points\.length < 2\) return;/);
+  assert.match(source, /if \(points\.length > 2 \|\| !previewGesture \|\| previewGesture\.type !== 'solo'\) return;\s*event\.preventDefault\(\)/);
   assert.match(source, /event\.preventDefault\(\); element\.setPointerCapture\?\.\(event\.pointerId\); previewStarted = performance\.now\(\); previewMoved = false; previewBegin\(role\)/);
   assert.match(source, /if \(mode === 'dual' && tap && role && state\.photos\[role\]\) editor\.openPhoto\(role\)/);
 });

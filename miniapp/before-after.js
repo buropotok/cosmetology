@@ -143,6 +143,7 @@ function previewBegin(role) {
   const points = [...previewPointers.values()];
   if (mode === 'solo') {
     if (points.length < 2) { previewGesture = null; return; }
+    if (points.length > 2) { previewGesture = null; return; }
     previewGesture = { type: 'solo', center: midpoint(points[0], points[1]), distance: Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y), x: photo.x, y: photo.y, scale: photo.scale };
     return;
   }
@@ -152,14 +153,24 @@ function previewBegin(role) {
 function releasePreviewCaptures(element) {
   for (const pointerId of previewPointers.keys()) if (element.hasPointerCapture?.(pointerId)) element.releasePointerCapture?.(pointerId);
 }
+function resetSoloPointers(element) {
+  releasePreviewCaptures(element);
+  previewPointers.clear();
+  previewGesture = null;
+  previewSlot = null;
+  previewMoved = false;
+}
 document.querySelectorAll('[data-slot]').forEach(element => {
   element.onclick = event => { if (mode === 'solo') return; const role = element.dataset.slot; if (event.target?.closest?.('.delete-photo') || state.photos[role]) return; pending = role; if (!event.target?.closest?.('label[for="file"]')) file.click(); };
   element.onpointerdown = event => {
     if (event.target?.closest?.('.delete-photo')) return; if (event.button != null && event.button !== 0) return;
     const role = element.dataset.slot; if (!state.photos[role]) { if (mode !== 'solo') pending = role; return; }
+    if (mode === 'solo' && event.isPrimary && previewPointers.size) resetSoloPointers(element);
+    if (mode === 'solo' && previewPointers.size >= 2 && !previewPointers.has(event.pointerId)) return;
     previewSlot = role; previewPointers.set(event.pointerId, point(event));
     if (mode === 'solo') {
       if (previewPointers.size < 2) { previewGesture = null; previewMoved = false; return; }
+      if (previewPointers.size > 2) { previewGesture = null; previewMoved = false; return; }
       hideSoloGestureHint(); event.preventDefault(); for (const pointerId of previewPointers.keys()) element.setPointerCapture?.(pointerId); previewMoved = false; previewBegin(role); return;
     }
     event.preventDefault(); element.setPointerCapture?.(event.pointerId); previewStarted = performance.now(); previewMoved = false; previewBegin(role);
@@ -169,7 +180,8 @@ document.querySelectorAll('[data-slot]').forEach(element => {
     previewPointers.set(event.pointerId, point(event)); const points = [...previewPointers.values()]; let changed = false;
     if (mode === 'solo') {
       if (points.length < 2) return;
-      event.preventDefault(); if (!previewGesture || previewGesture.type !== 'solo') previewBegin(role);
+      if (points.length > 2 || !previewGesture || previewGesture.type !== 'solo') return;
+      event.preventDefault();
       const center = midpoint(points[0], points[1]), distance = Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
       photo.x = previewGesture.x + center.x - previewGesture.center.x; photo.y = previewGesture.y + center.y - previewGesture.center.y;
       photo.scale = Math.max(.05, Math.min(10, previewGesture.scale * distance / Math.max(1, previewGesture.distance))); previewMoved = true; changed = true;
@@ -187,14 +199,14 @@ document.querySelectorAll('[data-slot]').forEach(element => {
   const end = event => {
     const role = previewSlot; previewPointers.delete(event.pointerId);
     if (mode === 'solo') {
-      if (previewPointers.size >= 2) { previewBegin(role); return; }
       releasePreviewCaptures(element); const moved = previewMoved; previewGesture = null; previewMoved = false; if (!previewPointers.size) previewSlot = null; if (moved) state.notify(); return;
     }
     if (previewPointers.size) { previewBegin(role); return; }
     const moved = previewMoved; previewGesture = null; previewSlot = null; previewMoved = false; if (moved) state.notify(); const tap = !moved && performance.now() - previewStarted < 350; if (mode === 'dual' && tap && role && state.photos[role]) editor.openPhoto(role);
   };
   element.onpointerup = end;
-  element.onpointercancel = event => { previewPointers.delete(event.pointerId); releasePreviewCaptures(element); previewGesture = null; previewSlot = null; previewMoved = false; };
+  element.onpointercancel = event => { previewPointers.delete(event.pointerId); releasePreviewCaptures(element); previewGesture = null; if (!previewPointers.size) previewSlot = null; previewMoved = false; };
+  element.onlostpointercapture = event => { if (mode !== 'solo' || !previewPointers.has(event.pointerId)) return; previewPointers.delete(event.pointerId); previewGesture = null; previewMoved = false; if (!previewPointers.size) previewSlot = null; };
 });
 
 window.cosmoBeforeAfterCompositeBlob = () => composite.publicBlob();
