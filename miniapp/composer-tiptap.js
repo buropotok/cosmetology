@@ -4,13 +4,17 @@ import {postDocumentToTiptap,tiptapToPostDocument} from './post-document-tiptap-
 
 (()=>{
   const diag=(kind,data={})=>window.CosmoDiagnostics?.log?.(kind,data);
-  const host=document.querySelector('#composer-editor-host'),toolbar=document.querySelector('.composer-toolbar');
-  if(!(host instanceof HTMLElement)||!toolbar){diag('tiptap-abort',{hostFound:!!host,toolbarFound:!!toolbar});return}
+  const text=document.querySelector('#text'),toolbar=document.querySelector('.composer-toolbar');
+  if(!(text instanceof HTMLTextAreaElement)||!toolbar){diag('tiptap-abort',{textFound:!!text,toolbarFound:!!toolbar});return}
 
   const RICH_PREFIX='\u2063COSMO_RICH_V1:';
   const DRAFT_PREFIX='\u2063COSMO_DRAFT_V3:';
   const editorFooter=toolbar.parentElement?.querySelector('.composer-editor-footer');
   if(editorFooter)editorFooter.parentElement.insertBefore(toolbar,editorFooter);
+
+  const host=document.createElement('div');
+  host.className='composer-bodytext composer-rich-editor composer-tiptap-editor';
+  text.hidden=true;text.insertAdjacentElement('beforebegin',host);
 
   const style=document.createElement('style');
   style.textContent=`
@@ -60,11 +64,13 @@ import {postDocumentToTiptap,tiptapToPostDocument} from './post-document-tiptap-
   function notifyChange(reason='content'){const change=Object.freeze({reason});changeListeners.forEach(listener=>listener(change))}
   function subscribe(listener){if(typeof listener!=='function')return()=>{};changeListeners.add(listener);return()=>changeListeners.delete(listener)}
 
-  const editor=new Editor({element:host,extensions:[StarterKit.configure({heading:{levels:[1]}}),Spoiler,DetailsSummary,DetailsBody,Details],content:plainDocument(''),editorProps:{attributes:{spellcheck:'true','aria-label':'Текст публикации'}},onUpdate(){notifyChange('content')}});
+  let syncing=false;
+  function syncTextarea(){const value=getPlainText();if(text.value===value)return;syncing=true;text.value=value;text.dispatchEvent(new Event('input',{bubbles:true}));syncing=false}
+  const editor=new Editor({element:host,extensions:[StarterKit.configure({heading:{levels:[1]}}),Spoiler,DetailsSummary,DetailsBody,Details],content:plainDocument(text.value),editorProps:{attributes:{spellcheck:'true','aria-label':'Текст публикации'}},onUpdate(){syncTextarea();notifyChange('content')},onCreate(){syncTextarea()}});
 
   const buttonDock=document.createElement('div');buttonDock.className='composer-button-dock';buttonDock.setAttribute('aria-label','Кнопки публикации');host.append(buttonDock);
   function renderButtons(){buttonDock.replaceChildren();buttonDock.classList.toggle('has-buttons',buttons.length>0);buttons.forEach((button,index)=>{const el=document.createElement('button');el.type='button';el.className='composer-link-button';el.textContent=button.text||'Ссылка';el.title=button.url||'';el.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();openButtonEditor(index)});buttonDock.append(el)})}
-  function persistButtons(){renderButtons();notifyChange('buttons');window.dispatchEvent(new CustomEvent('cosmo-rich-buttons-change',{detail:{buttons:[...buttons]}}))}
+  function persistButtons(){renderButtons();syncTextarea();notifyChange('buttons');window.dispatchEvent(new CustomEvent('cosmo-rich-buttons-change',{detail:{buttons:[...buttons]}}))}
   function closeButtonEditor(){document.querySelector('.composer-button-modal-backdrop')?.remove()}
   function openButtonEditor(index=null){
     closeButtonEditor();const existing=Number.isInteger(index)?buttons[index]:null;let draft={text:existing?.text||'Ссылка',url:existing?.url||'https://'},step='text';
@@ -86,6 +92,8 @@ import {postDocumentToTiptap,tiptapToPostDocument} from './post-document-tiptap-
   function restorePlain(value){buttons=[];renderButtons();editor.commands.setContent(plainDocument(value),{emitUpdate:true})}
   function draftValue(){return DRAFT_PREFIX+JSON.stringify({version:3,document:toPostDocument()})}
   function clear(){buttons=[];renderButtons();editor.commands.clearContent(true)}
+
+  text.addEventListener('input',()=>{if(syncing)return;const value=text.value;if(value.startsWith(DRAFT_PREFIX)){restoreDraft(value);return}if(getPlainText()!==value)restorePlain(value)});
 
   const menus=[...toolbar.querySelectorAll('.composer-tool-menu')];
   const blockMenu=menus.find(m=>m.querySelector('.composer-menu-trigger')?.textContent?.trim()==='Aa'),blockItems=blockMenu?[...blockMenu.querySelectorAll('.composer-menu-item')]:[];
@@ -110,6 +118,7 @@ import {postDocumentToTiptap,tiptapToPostDocument} from './post-document-tiptap-
   const emojiBtn=toolbar.querySelector('[title="Emoji"]');if(emojiBtn){emojiBtn.addEventListener('mousedown',preserve);emojiBtn.addEventListener('click',e=>{e.preventDefault();document.querySelector('.composer-emoji-panel')?.remove();const panel=document.createElement('div');panel.className='composer-emoji-panel';for(const emoji of ['😀','😊','😍','🥰','✨','💫','🌿','🌸','💧','🧴','💆‍♀️','❤️','🤍','👍','🔥','📌','✅','⚠️','💡','👉']){const b=document.createElement('button');b.type='button';b.textContent=emoji;b.addEventListener('mousedown',preserve);b.addEventListener('click',()=>{editor.chain().focus().insertContent(emoji).run();panel.remove()});panel.append(b)}const r=emojiBtn.getBoundingClientRect();panel.style.left=`${Math.max(8,Math.min(innerWidth-228,r.left-170))}px`;panel.style.top=`${Math.max(8,r.top-190)}px`;document.body.append(panel)})}
 
   renderButtons();
-  window.CosmoRichEditor={element:host,editor,toPostDocument,getPlainText,getSubmissionValue,setDocument,subscribe,draftValue,restoreDraft,restorePlain,clear,openButtonEditor};
+  window.CosmoRichEditor={element:host,editor,toPostDocument,getPlainText,getSubmissionValue,setDocument,subscribe,sync:syncTextarea,draftValue,restoreDraft,restorePlain,clear,openButtonEditor};
+  if(window.__CosmoRichDraftPending){const pending=window.__CosmoRichDraftPending;delete window.__CosmoRichDraftPending;restoreDraft(pending)}
   window.dispatchEvent(new CustomEvent('cosmo-rich-ready'));diag('tiptap-ready',{version:'3.0.2',blockItems:blockItems.length,formatItems:formatItems.length,listItems:listItems.length});
 })();

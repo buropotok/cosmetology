@@ -1,6 +1,6 @@
 import {loadRuntimeModule,recordRuntimeDiagnostic,skipRuntimeModule} from './runtime-diagnostics.js';
 
-const RICH_LOADER_VERSION='2026-09-10.2';
+const RICH_LOADER_VERSION='2026-09-10.1';
 const STAGE='new-post.editor-runtime';
 let runtimePromise,runtimeReady=false;
 
@@ -18,6 +18,11 @@ export function loadComposerEditorRuntime(){
         validate:()=>Boolean(window.CosmoRichEditor),
         validationError:'Tiptap editor did not initialize'
       });
+
+      if(tiptap.ok){
+        const pendingContent=window.CosmoComposerState?.consumePendingEditorContent?.();
+        if(typeof pendingContent==='string')window.CosmoRichEditor?.restoreDraft?.(pendingContent);
+      }
 
       const placeholder=tiptap.ok
         ?await loadRuntimeModule({stage:STAGE,module:'composer-tiptap-placeholder',load:()=>import(`/composer-tiptap-placeholder.js?v=${encodeURIComponent(RICH_LOADER_VERSION)}`)})
