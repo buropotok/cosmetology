@@ -14,27 +14,25 @@
 
 | Field | Canonical owner | Draft transport |
 | --- | --- | --- |
-| Rich content | `CosmoRichEditor` | `ComposerState.getSnapshot()` delegates to the editor; a not-yet-mounted draft is held only by `ComposerState` until `cosmo-rich-ready` |
+| Rich content | `CosmoRichEditor` (textarea is compatibility fallback) | `ComposerState.getSnapshot()` delegates to the editor |
 | Images | `CosmoComposerImages` (`FileList` remains its compatibility boundary) | `ComposerState.getSnapshot()` delegates to the manager |
 | Active photo | `ComposerState` | explicit `setActivePhotoIndex()`; Composer only renders `getSnapshot().activePhotoIndex` |
 | Platform | `ComposerState` | explicit `setPlatform()` |
 | Revisions | `DraftStore` | one `ComposerState.subscribe()` subscription |
 
-`ComposerState` is the lifecycle facade, not a second live editor store. While Tiptap is mounted, rich content has exactly one live owner: `CosmoRichEditor`. During Continue/restore before the lazy editor runtime is ready, `ComposerState` temporarily retains the serialized draft and applies it when the editor emits `cosmo-rich-ready`. The editor runtime no longer reaches back into Composer state to pull pending content.
+`ComposerState` is a facade, not another content or image store. Restore flows strictly from the server through `DraftStore` and `ComposerState.restore()` to the existing rich editor, image manager, active-photo state, and platform state.
 
 ## Rich editor public contract
 
-`CosmoRichEditor` is the canonical runtime boundary for publication text. Consumers use its explicit methods instead of reading or synchronizing a shadow textarea:
+`CosmoRichEditor` is the canonical runtime boundary for publication text once Tiptap is available. Consumers use its explicit methods instead of reading the compatibility textarea or intercepting network requests:
 
 - `getPlainText()` returns the visible plain-text representation used for empty-state validation, character count, and VK clipboard export.
 - `getSubmissionValue()` returns the rich `COSMO_RICH_V1` payload used by Telegram Preview and Publish.
 - `setDocument(postDocument)` accepts a structured PostDocument directly from the AI flow.
 - `subscribe(listener)` reports editor-owned content changes to `ComposerState`, including button-only changes.
-- `draftValue()` and `restoreDraft()` serialize/restore the current rich draft.
-- `restorePlain()` remains only as the migration boundary for previously persisted plain-text drafts; it is not synchronized to a DOM input.
-- `clear()` clears editor-owned content and buttons.
+- `draftValue()`, `restoreDraft()`, `restorePlain()`, and `clear()` retain the draft and fallback contracts while the compatibility textarea still exists.
 
-The Composer UI provides `#composer-editor-host` as the editor mount. During bootstrap it replaces the old static textarea placeholder before `ComposerState` is initialized; no runtime module reads or writes textarea content. Preview and Publish construct request payloads explicitly from the editor API. No editor feature replaces `window.fetch`.
+Preview and Publish construct their request payloads explicitly from this API. No editor feature replaces `window.fetch`. The textarea remains only as a temporary fallback/synchronization boundary until the final compatibility-removal stage.
 
 ## Autosave and retry policy
 
