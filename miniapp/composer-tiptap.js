@@ -61,7 +61,7 @@ import {postDocumentToTiptap,tiptapToPostDocument} from './post-document-tiptap-
   function getPlainText(){return editor.getText({blockSeparator:'\n'})}
   function toPostDocument(){return tiptapToPostDocument(editor.getJSON(),buttons)}
   function getSubmissionValue(){return RICH_PREFIX+JSON.stringify(toPostDocument())}
-  function notifyChange(reason='content'){const change=Object.freeze({reason,plainText:getPlainText(),document:toPostDocument()});changeListeners.forEach(listener=>listener(change))}
+  function notifyChange(reason='content'){const change=Object.freeze({reason});changeListeners.forEach(listener=>listener(change))}
   function subscribe(listener){if(typeof listener!=='function')return()=>{};changeListeners.add(listener);return()=>changeListeners.delete(listener)}
 
   let syncing=false;
