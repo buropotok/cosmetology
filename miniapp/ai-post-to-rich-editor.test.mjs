@@ -10,13 +10,15 @@ const bootstrap=await readFile(new URL('./bootstrap.js',import.meta.url),'utf8')
 const adapterUrl=`data:text/javascript;base64,${Buffer.from(adapterSource).toString('base64')}`;
 const {postDocumentToTiptap,tiptapToPostDocument}=await import(adapterUrl);
 
-test('ready PostDocument v2 exposes primary edit and publish action',()=>{
+test('ready PostDocument v2 exposes primary edit and publish action through direct editor API',()=>{
   assert.match(transfer,/Редактировать и опубликовать/);
   assert.match(transfer,/schemaVersion===2/);
-  assert.match(transfer,/COSMO_DRAFT_V3/);
-  assert.match(transfer,/version:3,document:doc/);
   assert.match(transfer,/await waitForEditor\(\)/);
-  assert.match(transfer,/editor\.restoreDraft\(value\)/);
+  assert.match(transfer,/editor\.setDocument\(doc\)/);
+  assert.match(transfer,/cosmo-rich-ready/);
+  assert.doesNotMatch(transfer,/COSMO_DRAFT_V3/);
+  assert.doesNotMatch(transfer,/editor\.restoreDraft/);
+  assert.doesNotMatch(transfer,/setInterval/);
   assert.match(transfer,/CosmoComposerView\?\.showEditor\?\.\(\{focus:false\}\)/);
 });
 
@@ -54,6 +56,7 @@ test('AI response keeps canonical PostDocument for direct Tiptap transfer throug
   assert.match(tiptap,/\.\/post-document-tiptap-adapter\.js/);
   assert.match(tiptap,/COSMO_DRAFT_V3/);
   assert.match(tiptap,/function restoreDraft\(value\)/);
+  assert.match(tiptap,/function setDocument\(doc\)/);
   assert.match(tiptap,/editor\.commands\.setContent\(postDocumentToTiptap\(doc\)/);
   assert.match(tiptap,/tiptapToPostDocument\(editor\.getJSON\(\),buttons\)/);
   assert.match(bootstrap,/ai-post-editor-transfer\.js/);

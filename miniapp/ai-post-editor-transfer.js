@@ -1,7 +1,6 @@
 (()=>{
   const controlPanel=document.querySelector('#publish-ai-wizard [data-ai-control-panel]');
   if(!controlPanel)return;
-  const DRAFT_PREFIX='\u2063COSMO_DRAFT_V3:';
   const EDITOR_READY_TIMEOUT_MS=10000;
   let currentDocument=window.CosmoAiPostDocument||null;
 
@@ -19,29 +18,31 @@
 
   function editorReady(){
     const editor=window.CosmoRichEditor;
-    return editor&&typeof editor.restoreDraft==='function'?editor:null;
+    return editor&&typeof editor.setDocument==='function'?editor:null;
   }
 
   async function waitForEditor(){
     const ready=editorReady();
     if(ready)return ready;
-    const started=Date.now();
     return await new Promise(resolve=>{
-      const timer=setInterval(()=>{
-        const editor=editorReady();
-        if(editor||Date.now()-started>=EDITOR_READY_TIMEOUT_MS){
-          clearInterval(timer);
-          resolve(editor);
-        }
-      },50);
+      let settled=false,timer=0;
+      const finish=editor=>{
+        if(settled)return;
+        settled=true;
+        clearTimeout(timer);
+        window.removeEventListener('cosmo-rich-ready',onReady);
+        resolve(editor);
+      };
+      const onReady=()=>{const editor=editorReady();if(editor)finish(editor)};
+      window.addEventListener('cosmo-rich-ready',onReady);
+      timer=setTimeout(()=>finish(null),EDITOR_READY_TIMEOUT_MS);
     });
   }
 
   async function loadPostDocument(doc){
     const editor=await waitForEditor();
     if(!editor)return false;
-    const value=DRAFT_PREFIX+JSON.stringify({version:3,document:doc});
-    return editor.restoreDraft(value)===true;
+    return editor.setDocument(doc)===true;
   }
 
   action.addEventListener('click',async()=>{
