@@ -5,33 +5,45 @@ import {readFile} from 'node:fs/promises';
 const tiptap=await readFile(new URL('./composer-tiptap.js',import.meta.url),'utf8');
 const state=await readFile(new URL('./composer-state.js',import.meta.url),'utf8');
 const mockup=await readFile(new URL('./composer-mockup.js',import.meta.url),'utf8');
+const runtime=await readFile(new URL('./composer-editor-runtime.js',import.meta.url),'utf8');
 const app=await readFile(new URL('./app.js',import.meta.url),'utf8');
 
-test('rich editor exposes one explicit content API without intercepting global fetch',()=>{
+test('rich editor exposes one explicit content API without textarea synchronization or global fetch interception',()=>{
   for(const method of ['toPostDocument','getPlainText','getSubmissionValue','setDocument','subscribe','draftValue','restoreDraft','restorePlain','clear'])assert.match(tiptap,new RegExp(`\\b${method}\\b`));
+  assert.match(tiptap,/document\.querySelector\('#composer-editor-host'\)/);
   assert.match(tiptap,/window\.CosmoRichEditor=\{[^}]*getPlainText[^}]*getSubmissionValue[^}]*setDocument[^}]*subscribe/);
-  assert.doesNotMatch(tiptap,/window\.fetch\s*=/);
-  assert.doesNotMatch(tiptap,/nativeFetch/);
+  assert.doesNotMatch(tiptap,/#text|HTMLTextAreaElement|syncTextarea|text\.value/);
+  assert.doesNotMatch(tiptap,/window\.fetch\s*=|nativeFetch/);
 });
 
-test('ComposerState delegates canonical text reads and change notifications to the rich editor',()=>{
-  assert.match(state,/getRichEditor\(\)\?\.getPlainText\?\.\(\)\?\?text\.value/);
+test('ComposerState owns pending restore until the rich editor lifecycle is ready',()=>{
+  assert.match(state,/pendingEditorContent/);
+  assert.match(state,/function onRichReady\(\)\{bindRichEditor\(\)\}/);
   assert.match(state,/editor\?\.subscribe\?\.\(\(\)=>onContent\(\)\)/);
-  assert.match(state,/cosmo-rich-ready/);
-  assert.match(state,/currentContent\(\).*draftValue/s);
+  assert.match(state,/restoreEditorContent\(editor,pending\)/);
+  assert.doesNotMatch(state,/#text|text\.value|HTMLTextAreaElement|consumePendingEditorContent/);
 });
 
-test('Clear, count, Preview and Publish use editor API with textarea only as fallback',()=>{
+test('legacy textarea remains available until New Post editor runtime succeeds',()=>{
+  assert.match(mockup,/const text=document\.querySelector\('#text'\)/);
+  assert.match(runtime,/function prepareEditorHost\(\)/);
+  assert.match(runtime,/document\.querySelector\('#text'\)/);
+  assert.match(runtime,/legacyText\.parentNode\.insertBefore\(host,legacyText\)/);
+  assert.match(runtime,/if\(tiptap\.ok\)mount\.legacyText\?\.remove\(\)/);
+  assert.match(runtime,/else if\(mount\.created\)mount\.host\.remove\(\)/);
+  assert.doesNotMatch(runtime,/replaceWith\(/);
+});
+
+test('Preview and Publish use the rich editor API once New Post runtime is active',()=>{
   assert.match(mockup,/currentPlainText=.*getPlainText/);
   assert.match(mockup,/currentSubmissionText=.*getSubmissionValue/);
   assert.match(mockup,/if\(current\?\.clear\)current\.clear\(\)/);
   assert.match(mockup,/count\.textContent=`\$\{currentPlainText\(\)\.length\} символов`/);
   assert.match(mockup,/body\.set\('text',currentSubmissionText\(\)\)/);
-  assert.doesNotMatch(mockup,/body\.set\('text',text\.value\)/);
 
   assert.match(app,/function currentPlainText\(\).*getPlainText/s);
   assert.match(app,/function currentSubmissionText\(\).*getSubmissionValue/s);
   assert.match(app,/navigator\.clipboard\.writeText\(plainText\)/);
   assert.match(app,/body\.set\('text',currentSubmissionText\(\)\)/);
-  assert.doesNotMatch(app,/body\.set\('text',text\.value\)/);
+  assert.doesNotMatch(app,/#text|text\.value/);
 });
