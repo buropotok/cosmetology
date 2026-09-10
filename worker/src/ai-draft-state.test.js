@@ -33,10 +33,11 @@ describe('AI draft state',()=>{
     expect(service).not.toContain('miniapp_ai_drafts');
   });
 
-  it('uses one stateful control panel for discovery and ready-post actions',()=>{
+  it('keeps ready-post actions in the stateful control panel while discovery renders inline choices',()=>{
     const wizard=source('publish-ai-wizard.js');
     expect(wizard).toContain('data-ai-control-panel');
-    expect(wizard).toContain("renderControlPanel('discovery',discovery)");
+    expect(wizard).not.toContain("renderControlPanel('discovery',discovery)");
+    expect(wizard).toContain("select.textContent=`Выбрать вариант ${index+1}`");
     expect(wizard).toContain("controlsState:'ready-post'");
     expect(wizard).toContain("['Короче','shorter']");
     expect(wizard).toContain("['Другое','another']");
