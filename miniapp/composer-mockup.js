@@ -3,12 +3,14 @@
   const form=document.querySelector('#publish-form');
   const imageInput=document.querySelector('#image');
   const previewWrap=document.querySelector('#preview-wrap');
-  const editorHost=document.querySelector('#composer-editor-host');
+  const legacyText=document.querySelector('#text');
+  const editorHost=document.querySelector('#composer-editor-host')||document.createElement('div');
   const publish=document.querySelector('#publish');
   const publishVk=document.querySelector('#publish-vk');
   const status=document.querySelector('#status');
   const settings=document.querySelector('#open-settings');
-  if(!composer||!form||!imageInput||!editorHost||!publish||!publishVk)return;
+  if(!composer||!form||!imageInput||!publish||!publishVk)return;
+  if(!editorHost.id){editorHost.id='composer-editor-host';if(legacyText)legacyText.replaceWith(editorHost);else form.prepend(editorHost)}
 
   composer.classList.add('approved-composer');
   const topbar=composer.querySelector('.topbar');
