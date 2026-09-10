@@ -5,6 +5,7 @@ import {readFile} from 'node:fs/promises';
 const tiptap=await readFile(new URL('./composer-tiptap.js',import.meta.url),'utf8');
 const state=await readFile(new URL('./composer-state.js',import.meta.url),'utf8');
 const mockup=await readFile(new URL('./composer-mockup.js',import.meta.url),'utf8');
+const runtime=await readFile(new URL('./composer-editor-runtime.js',import.meta.url),'utf8');
 const app=await readFile(new URL('./app.js',import.meta.url),'utf8');
 
 test('rich editor exposes one explicit content API without textarea synchronization or global fetch interception',()=>{
@@ -23,13 +24,21 @@ test('ComposerState owns pending restore until the rich editor lifecycle is read
   assert.doesNotMatch(state,/#text|text\.value|HTMLTextAreaElement|consumePendingEditorContent/);
 });
 
-test('Clear, count, Preview and Publish use the rich editor API without textarea fallback',()=>{
+test('legacy textarea is only a pre-runtime mount boundary and is replaced inside New Post runtime',()=>{
+  assert.match(mockup,/const text=document\.querySelector\('#text'\)/);
+  assert.match(runtime,/function prepareEditorHost\(\)/);
+  assert.match(runtime,/document\.querySelector\('#text'\)/);
+  assert.match(runtime,/legacyText\.parentNode\?\.replaceChild\(host,legacyText\)/);
+  assert.match(runtime,/const host=prepareEditorHost\(\)/);
+  assert.doesNotMatch(runtime,/replaceWith\(/);
+});
+
+test('Preview and Publish use the rich editor API once New Post runtime is active',()=>{
   assert.match(mockup,/currentPlainText=.*getPlainText/);
   assert.match(mockup,/currentSubmissionText=.*getSubmissionValue/);
-  assert.match(mockup,/richEditor\(\)\?\.clear\?\.\(\)/);
+  assert.match(mockup,/if\(current\?\.clear\)current\.clear\(\)/);
   assert.match(mockup,/count\.textContent=`\$\{currentPlainText\(\)\.length\} символов`/);
   assert.match(mockup,/body\.set\('text',currentSubmissionText\(\)\)/);
-  assert.doesNotMatch(mockup,/text\.value/);
 
   assert.match(app,/function currentPlainText\(\).*getPlainText/s);
   assert.match(app,/function currentSubmissionText\(\).*getSubmissionValue/s);
