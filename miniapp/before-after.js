@@ -142,7 +142,8 @@ function previewBegin(role) {
   const photo = state.photos[role]; if (!photo) return;
   const points = [...previewPointers.values()];
   if (mode === 'solo') {
-    if (points.length !== 2) { previewGesture = null; return; }
+    if (points.length < 2) { previewGesture = null; return; }
+    if (points.length > 2) { previewGesture = null; return; }
     previewGesture = { type: 'solo', center: midpoint(points[0], points[1]), distance: Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y), x: photo.x, y: photo.y, scale: photo.scale };
     return;
   }
@@ -168,7 +169,8 @@ document.querySelectorAll('[data-slot]').forEach(element => {
     if (mode === 'solo' && previewPointers.size >= 2 && !previewPointers.has(event.pointerId)) return;
     previewSlot = role; previewPointers.set(event.pointerId, point(event));
     if (mode === 'solo') {
-      if (previewPointers.size !== 2) { previewGesture = null; previewMoved = false; return; }
+      if (previewPointers.size < 2) { previewGesture = null; previewMoved = false; return; }
+      if (previewPointers.size > 2) { previewGesture = null; previewMoved = false; return; }
       hideSoloGestureHint(); event.preventDefault(); for (const pointerId of previewPointers.keys()) element.setPointerCapture?.(pointerId); previewMoved = false; previewBegin(role); return;
     }
     event.preventDefault(); element.setPointerCapture?.(event.pointerId); previewStarted = performance.now(); previewMoved = false; previewBegin(role);
@@ -177,7 +179,8 @@ document.querySelectorAll('[data-slot]').forEach(element => {
     const role = previewSlot, photo = state.photos[role]; if (!photo || !previewPointers.has(event.pointerId)) return;
     previewPointers.set(event.pointerId, point(event)); const points = [...previewPointers.values()]; let changed = false;
     if (mode === 'solo') {
-      if (points.length !== 2 || !previewGesture || previewGesture.type !== 'solo') return;
+      if (points.length < 2) return;
+      if (points.length > 2 || !previewGesture || previewGesture.type !== 'solo') return;
       event.preventDefault();
       const center = midpoint(points[0], points[1]), distance = Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
       photo.x = previewGesture.x + center.x - previewGesture.center.x; photo.y = previewGesture.y + center.y - previewGesture.center.y;
