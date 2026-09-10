@@ -7,8 +7,9 @@ const app=readFileSync(resolve(repositoryRoot,'miniapp/app.js'),'utf8');
 const entry=readFileSync(resolve(repositoryRoot,'worker/src/entry.ts'),'utf8');
 
 describe('protected VK publishing preparation',()=>{
-  it('keeps clipboard copy and draft-backed Telegram file download',()=>{
-    expect(app).toContain('navigator.clipboard.writeText(text.value)');
+  it('keeps clipboard copy from canonical Composer text and draft-backed Telegram file download',()=>{
+    expect(app).toContain('window.CosmoRichEditor?.getPlainText?.()??text.value');
+    expect(app).toContain('navigator.clipboard.writeText(plainText)');
     expect(app).toContain("fetch('/api/miniapp/draft'");
     expect(app).toContain('webApp.downloadFile({url,file_name:fileName}');
     expect(entry).toContain("url.pathname === '/api/miniapp/draft'");
