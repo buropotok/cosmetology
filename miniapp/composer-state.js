@@ -9,7 +9,7 @@ function create({
 }={}){
   if(!text||!imageInput)throw new Error('ComposerState requires composer inputs');
   const listeners=new Set();
-  let version=0,activePhotoIndex=0,platform='telegram';
+  let version=0,activePhotoIndex=0,platform='telegram',pendingEditorContent=null;
   let imageSignature=signature(currentImages());
 
   function currentImages(){return getImageManager()?.getFiles?.()||Array.from(imageInput.files||[]).slice(0,10)}
@@ -29,9 +29,13 @@ function create({
     setActivePhotoIndex(value){const next=Math.min(Math.max(Number(value)||0,0),Math.max(currentImages().length-1,0));if(next===activePhotoIndex)return;activePhotoIndex=next;emit(['activePhotoIndex'],'active-photo')},
     setPlatform(value){const next=value==='vk'?'vk':'telegram';if(next===platform)return;platform=next;emit(['platform'],'platform')},
     restore(snapshot={}){
+      pendingEditorContent=null;
       if(typeof snapshot.content==='string'){
         const editor=getRichEditor();
-        if(!editor?.restoreDraft?.(snapshot.content)){text.value=snapshot.content;editor?.restorePlain?.(snapshot.content);text.dispatchEvent(new Event('input',{bubbles:true}))}
+        if(!editor?.restoreDraft?.(snapshot.content)){
+          if(!editor)pendingEditorContent=snapshot.content;
+          text.value=snapshot.content;editor?.restorePlain?.(snapshot.content);text.dispatchEvent(new Event('input',{bubbles:true}))
+        }
       }
       getImageManager()?.replaceFiles?.(Array.isArray(snapshot.images)?snapshot.images:[]);
       platform=snapshot.platform==='vk'?'vk':'telegram';
@@ -39,7 +43,9 @@ function create({
       imageSignature=signature(currentImages());version++;
       window.dispatchEvent(new CustomEvent('cosmo-composer-restore',{detail:getSnapshot()}));
     },
+    consumePendingEditorContent(){const value=pendingEditorContent;pendingEditorContent=null;return value},
     reset(){
+      pendingEditorContent=null;
       const editor=getRichEditor();
       if(editor?.clear)editor.clear();else{text.value='';text.dispatchEvent(new Event('input',{bubbles:true}))}
       getImageManager()?.replaceFiles?.([]);platform='telegram';activePhotoIndex=0;imageSignature='';version++;

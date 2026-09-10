@@ -48,10 +48,11 @@ test('generic runtime loader records loading, loaded, failed and dependency skip
   assert.match(diagnostics,/errorText/);
 });
 
-test('editor runtime continues independent work after a bridge failure and skips only true dependents',()=>{
-  assert.match(editorRuntime,/const bridge=tiptap\.ok\s*\?await loadRuntimeModule/s);
+test('editor runtime keeps optional Tiptap modules failure-isolated without a draft bridge',()=>{
+  assert.doesNotMatch(editorRuntime,/composer-tiptap-draft-bridge/);
+  assert.match(editorRuntime,/const placeholder=tiptap\.ok\s*\?await loadRuntimeModule/s);
   assert.match(editorRuntime,/const fixes=tiptap\.ok\s*\?await loadRuntimeModule/s);
-  assert.match(editorRuntime,/skipRuntimeModule\(\{stage:STAGE,module:'composer-tiptap-draft-bridge',dependency:'composer-tiptap'\}\)/);
+  assert.match(editorRuntime,/skipRuntimeModule\(\{stage:STAGE,module:'composer-tiptap-placeholder',dependency:'composer-tiptap'\}\)/);
   assert.match(editorRuntime,/skipRuntimeModule\(\{stage:STAGE,module:'composer-tiptap-fixes',dependency:'composer-tiptap'\}\)/);
-  assert.match(editorRuntime,/const ok=tiptap\.ok&&bridge\.ok/);
+  assert.match(editorRuntime,/const ok=tiptap\.ok/);
 });

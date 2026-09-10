@@ -45,5 +45,5 @@ test('Composer keyboard layout anchors controls and keeps overflowing text scrol
   assert.match(source,/editor\.off\('blur',onBlur\)/);
   assert.match(runtime,/module:'composer-editor-keyboard-layout'/);
   assert.match(runtime,/initComposerEditorKeyboardLayout\(\)/);
-  assert.match(runtime,/modules:\{tiptap,bridge,placeholder,fixes\}/);
+  assert.match(runtime,/modules:\{tiptap,placeholder,fixes\}/);
 });

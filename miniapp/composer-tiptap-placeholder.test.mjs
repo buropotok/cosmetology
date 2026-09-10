@@ -16,5 +16,5 @@ test('empty Tiptap editor shows a non-content publication placeholder',()=>{
   assert.match(source,/editor\.on\('destroy',destroy\)/);
   assert.doesNotMatch(source,/textContent\s*=\s*editor\.|commands\.insertContent|commands\.setContent/);
   assert.match(runtime,/module:'composer-tiptap-placeholder'/);
-  assert.match(runtime,/modules:\{tiptap,bridge,placeholder,fixes\}/);
+  assert.match(runtime,/modules:\{tiptap,placeholder,fixes\}/);
 });
