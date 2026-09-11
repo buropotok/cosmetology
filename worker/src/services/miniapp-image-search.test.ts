@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { extractExpectedOfficialHost, extractPageImageCandidates, officialHostMatches } from './miniapp-image-search';
+import {
+  detectSupportedImageContentType,
+  extractExpectedOfficialHost,
+  extractPageImageCandidates,
+  officialHostMatches,
+  readLimitedResponseBody,
+} from './miniapp-image-search';
 
 describe('official image page extraction',()=>{
   it('prefers real page metadata and resolves relative image URLs',()=>{
@@ -32,5 +38,40 @@ describe('official grounded source selection',()=>{
   it('rejects malformed FOUND responses without an official hostname',()=>{
     expect(extractExpectedOfficialHost('FOUND — Test Product')).toBe('');
     expect(extractExpectedOfficialHost('FOUND — Test Product — http://brand.example/path')).toBe('');
+  });
+});
+
+describe('bounded external response reads',()=>{
+  it('cancels a stream as soon as the configured byte limit is exceeded',async()=>{
+    let cancelled=false;
+    let pullCount=0;
+    const stream=new ReadableStream<Uint8Array>({
+      pull(controller){
+        pullCount+=1;
+        controller.enqueue(pullCount===1?new Uint8Array([1,2,3]):new Uint8Array([4,5,6]));
+      },
+      cancel(){cancelled=true;},
+    });
+    const response=new Response(stream);
+    const result=await readLimitedResponseBody(response,4,new AbortController().signal);
+    expect(result).toBeNull();
+    expect(cancelled).toBe(true);
+    expect(pullCount).toBe(2);
+  });
+
+  it('returns a bounded response without relying on Content-Length',async()=>{
+    const response=new Response(new Uint8Array([1,2,3,4]));
+    const result=await readLimitedResponseBody(response,4,new AbortController().signal);
+    expect(Array.from(result||[])).toEqual([1,2,3,4]);
+  });
+});
+
+describe('downloaded image validation',()=>{
+  it('recognizes only supported image signatures',()=>{
+    expect(detectSupportedImageContentType(new Uint8Array([0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a]))).toBe('image/png');
+    expect(detectSupportedImageContentType(new Uint8Array([0xff,0xd8,0xff,0xe0]))).toBe('image/jpeg');
+    expect(detectSupportedImageContentType(new Uint8Array([0x47,0x49,0x46,0x38,0x39,0x61]))).toBe('image/gif');
+    expect(detectSupportedImageContentType(new Uint8Array([0x52,0x49,0x46,0x46,0,0,0,0,0x57,0x45,0x42,0x50]))).toBe('image/webp');
+    expect(detectSupportedImageContentType(new TextEncoder().encode('<html>not an image</html>'))).toBe('');
   });
 });

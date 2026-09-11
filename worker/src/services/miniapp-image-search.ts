@@ -9,7 +9,7 @@ const DEFAULT_SEARCH_MODEL = 'gemini-2.5-flash';
 const MAX_POST_LENGTH = 12000;
 const MAX_SOURCE_PAGES = 5;
 const MAX_IMAGES_PER_PAGE = 6;
-const MAX_HTML_CHARS = 750_000;
+const MAX_HTML_BYTES = 750_000;
 const BLOCKED_NON_OFFICIAL_HOSTS = [
   'amazon.',
   'aliexpress.',
@@ -111,6 +111,62 @@ export function extractExpectedOfficialHost(text: string) {
   return host;
 }
 
+async function cancelReader(reader: ReadableStreamDefaultReader<Uint8Array>) {
+  try { await reader.cancel(); } catch {}
+}
+
+export async function readLimitedResponseBody(response: Response, maxBytes: number, signal: AbortSignal) {
+  if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0) throw new RangeError('maxBytes must be a positive safe integer');
+  const declaredRaw = response.headers.get('content-length');
+  const declaredSize = declaredRaw ? Number(declaredRaw) : 0;
+  if (Number.isFinite(declaredSize) && declaredSize > maxBytes) {
+    try { await response.body?.cancel(); } catch {}
+    return null;
+  }
+  if (!response.body) return null;
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      if (signal.aborted) {
+        await cancelReader(reader);
+        throw new AppError('AI_IMAGE_SEARCH_CANCELLED', 'Поиск изображения отменён', 499);
+      }
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value?.byteLength) continue;
+      if (total + value.byteLength > maxBytes) {
+        await cancelReader(reader);
+        return null;
+      }
+      chunks.push(value);
+      total += value.byteLength;
+    }
+  } catch (error) {
+    if (signal.aborted) throw new AppError('AI_IMAGE_SEARCH_CANCELLED', 'Поиск изображения отменён', 499);
+    await cancelReader(reader);
+    return null;
+  }
+
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
+}
+
+export function detectSupportedImageContentType(bytes: Uint8Array) {
+  if (bytes.length >= 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47 && bytes[4] === 0x0d && bytes[5] === 0x0a && bytes[6] === 0x1a && bytes[7] === 0x0a) return 'image/png';
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'image/jpeg';
+  if (bytes.length >= 6 && bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x38 && (bytes[4] === 0x37 || bytes[4] === 0x39) && bytes[5] === 0x61) return 'image/gif';
+  if (bytes.length >= 12 && bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 && bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50) return 'image/webp';
+  return '';
+}
+
 async function fetchWithSafeRedirects(urlValue: string, init: RequestInit, signal: AbortSignal) {
   let url = urlValue;
   for (let redirectCount = 0; redirectCount <= 5; redirectCount += 1) {
@@ -145,7 +201,9 @@ async function fetchOfficialPage(sourceUrl: string, expectedHost: string, signal
   if (isBlockedOfficialHost(finalUrl.hostname) || !officialHostMatches(finalUrl.hostname, expectedHost)) return null;
   const contentType = (response.headers.get('content-type') || '').toLowerCase();
   if (!contentType.includes('text/html') && !contentType.includes('application/xhtml+xml')) return null;
-  const html = (await response.text()).slice(0, MAX_HTML_CHARS);
+  const bytes = await readLimitedResponseBody(response, MAX_HTML_BYTES, signal);
+  if (!bytes) return null;
+  const html = new TextDecoder().decode(bytes);
   return { url: finalUrl.toString(), html };
 }
 
@@ -157,19 +215,15 @@ async function fetchImageCandidate(imageUrl: string, signal: AbortSignal) {
     },
   }, signal);
   if (!response?.ok || !isSafeHttpsUrl(response.url)) return null;
-  const contentType = (response.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
-  if (!contentType.startsWith('image/')) return null;
-  const declaredSize = Number(response.headers.get('content-length') || 0);
-  if (declaredSize > MINIAPP_IMAGE_MAX_BYTES) return null;
-  let bytes: ArrayBuffer;
-  try {
-    bytes = await response.arrayBuffer();
-  } catch (error) {
-    if (signal.aborted) throw new AppError('AI_IMAGE_SEARCH_CANCELLED', 'Поиск изображения отменён', 499);
-    return null;
-  }
-  if (!bytes.byteLength || bytes.byteLength > MINIAPP_IMAGE_MAX_BYTES) return null;
-  return { bytes, contentType };
+  const declaredType = (response.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+  if (!declaredType.startsWith('image/')) return null;
+  const bytes = await readLimitedResponseBody(response, MINIAPP_IMAGE_MAX_BYTES, signal);
+  if (!bytes?.byteLength) return null;
+  const contentType = detectSupportedImageContentType(bytes);
+  if (!contentType) return null;
+  const body = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(body).set(bytes);
+  return { bytes: body, contentType };
 }
 
 function groundedSourceUrls(sources: readonly UrlSource[]) {

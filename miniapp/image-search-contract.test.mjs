@@ -42,6 +42,18 @@ test('image component switches between official search and existing generation w
   assert.doesNotMatch(imageGeneration,/Разбор препарата/);
 });
 
+test('image requests are aborted and stale completions cannot mutate a new draft',()=>{
+  assert.match(imageGeneration,/new AbortController\(\)/);
+  assert.match(imageGeneration,/signal,/);
+  assert.match(imageGeneration,/function assertCurrentRequest\(operation\)/);
+  assert.match(imageGeneration,/assertCurrentRequest\(operation\);\s*addImage\(blob,'official'\)/);
+  assert.match(imageGeneration,/assertCurrentRequest\(operation\);\s*addImage\(blob,'gemini'\)/);
+  assert.match(imageGeneration,/window\.addEventListener\('cosmo-new-post',cancelActiveRequest\)/);
+  assert.match(imageGeneration,/cosmo-publish-mode'[\s\S]*mode!=='compose'[\s\S]*cancelActiveRequest\(\)/);
+  assert.match(imageGeneration,/window\.addEventListener\('pagehide',cancelActiveRequest\)/);
+  assert.match(imageGeneration,/if\(activeRequest===operation\)/);
+});
+
 test('Composer state loads before image generation because it is now an explicit dependency',()=>{
   assert.ok(bootstrap.indexOf("import('/composer-state.js')")<bootstrap.indexOf("import('/composer-image-generation.js')"));
 });

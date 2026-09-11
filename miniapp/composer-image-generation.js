@@ -25,17 +25,43 @@
   generateButton.id='composer-generate-photo';
   addButton.after(generateButton);
 
+  let requestSequence=0;
+  let activeRequest=null;
+
   function syncButtonLabel(){if(!generateButton.disabled)generateButton.textContent=buttonLabel(currentImageOptions())}
+  function isCurrentRequest(operation){return activeRequest===operation&&operation.id===requestSequence&&!operation.controller.signal.aborted}
+  function cancelledError(){const error=new Error('Запрос изображения отменён.');error.name='AbortError';return error}
+  function assertCurrentRequest(operation){if(!isCurrentRequest(operation))throw cancelledError()}
+  function beginRequest(){
+    if(activeRequest)activeRequest.controller.abort();
+    const operation={id:++requestSequence,controller:new AbortController()};
+    activeRequest=operation;
+    return operation;
+  }
+  function cancelActiveRequest(){
+    requestSequence+=1;
+    const operation=activeRequest;
+    activeRequest=null;
+    operation?.controller.abort();
+    if(generateButton.disabled){generateButton.disabled=false;syncButtonLabel()}
+    if(status){status.textContent='';status.className=''}
+  }
+  function isExpectedCancellation(error,operation){return operation.controller.signal.aborted||!isCurrentRequest(operation)||error?.name==='AbortError'}
+
   syncButtonLabel();
   composerState.subscribe?.(change=>{if(change.fields?.includes?.('imageOptions'))syncButtonLabel()});
   window.addEventListener('cosmo-composer-restore',syncButtonLabel);
+  window.addEventListener('cosmo-new-post',cancelActiveRequest);
+  window.addEventListener('cosmo-publish-mode',event=>{if(event.detail?.mode!=='compose')cancelActiveRequest()});
+  window.addEventListener('pagehide',cancelActiveRequest);
 
-  async function requestImage(path,body){
+  async function requestImage(path,body,signal){
     const webApp=window.Telegram?.WebApp;
     const response=await fetch(path,{
       method:'POST',
       headers:{Authorization:`tma ${webApp?.initData||''}`,'content-type':'application/json'},
       body:JSON.stringify(body),
+      signal,
     });
     if(!response.ok){
       const result=await response.json().catch(()=>null);
@@ -64,28 +90,34 @@
     return Promise.resolve(window.confirm(`${title}\n\n${message}\n\nСгенерировать изображение?`));
   }
 
-  async function addImage(blob,prefix){
+  function addImage(blob,prefix){
     const extension=extensionFor(blob.type);
     const file=new File([blob],`${prefix}-${Date.now()}.${extension}`,{type:blob.type,lastModified:Date.now()});
     window.CosmoComposerImages?.addFiles?.([file]);
   }
 
-  async function generateImage(postText){
+  async function generateImage(postText,operation){
+    assertCurrentRequest(operation);
     if(status){status.textContent='Gemini создаёт изображение по тексту публикации…';status.className=''}
-    const {blob}=await requestImage('/api/miniapp/ai/image',{text:postText});
-    await addImage(blob,'gemini');
+    const {blob}=await requestImage('/api/miniapp/ai/image',{text:postText},operation.controller.signal);
+    assertCurrentRequest(operation);
+    addImage(blob,'gemini');
+    assertCurrentRequest(operation);
     if(status){status.textContent='Изображение сгенерировано и добавлено к публикации.';status.className='success'}
   }
 
-  async function searchImage(postText,options){
+  async function searchImage(postText,options,operation){
+    assertCurrentRequest(operation);
     if(!options.searchProfile||!options.sourcePolicy)throw new Error('Не настроен профиль поиска изображения.');
     if(status){status.textContent=options.sourcePolicy==='official'?'Ищу официальное изображение…':'Ищу изображение в интернете…';status.className=''}
     const {blob,source}=await requestImage('/api/miniapp/ai/image/search',{
       text:postText,
       searchProfile:options.searchProfile,
       sourcePolicy:options.sourcePolicy,
-    });
-    await addImage(blob,'official');
+    },operation.controller.signal);
+    assertCurrentRequest(operation);
+    addImage(blob,'official');
+    assertCurrentRequest(operation);
     if(status){
       let sourceHost='';
       try{sourceHost=source?new URL(source).hostname.replace(/^www\./,''):''}catch{}
@@ -112,30 +144,39 @@
     }
 
     const options=currentImageOptions();
+    const operation=beginRequest();
     generateButton.disabled=true;
     generateButton.textContent=options.internetSearch===true?'Ищем…':'Генерируем…';
     try{
       if(options.internetSearch===true){
         try{
-          await searchImage(postText,options);
+          await searchImage(postText,options,operation);
         }catch(error){
+          assertCurrentRequest(operation);
           if(error?.code!=='AI_IMAGE_SEARCH_NOT_FOUND')throw error;
           if(!await confirmGeneratedFallback(webApp)){
+            assertCurrentRequest(operation);
             if(status){status.textContent='Поиск изображения отменён.';status.className=''}
             return;
           }
-          await generateImage(postText);
+          assertCurrentRequest(operation);
+          await generateImage(postText,operation);
         }
       }else{
-        await generateImage(postText);
+        await generateImage(postText,operation);
       }
+      assertCurrentRequest(operation);
       webApp.HapticFeedback?.notificationOccurred('success');
     }catch(error){
+      if(isExpectedCancellation(error,operation))return;
       if(status){status.textContent=error instanceof Error?error.message:'Не удалось получить изображение.';status.className='error'}
       webApp.HapticFeedback?.notificationOccurred('error');
     }finally{
-      generateButton.disabled=false;
-      syncButtonLabel();
+      if(activeRequest===operation){
+        activeRequest=null;
+        generateButton.disabled=false;
+        syncButtonLabel();
+      }
     }
   });
 })();
