@@ -3,26 +3,22 @@ import { generateText } from 'ai';
 import { AppError, type Env } from '../types';
 import { MINIAPP_IMAGE_MAX_BYTES } from './miniapp';
 import { validateTelegramMiniAppInitData } from './telegram-miniapp-auth';
-import { buildImageSearchPrompt } from './image-search-profiles';
+import { buildImageSearchPrompt, type FailedImageAttempt } from './image-search-profiles';
 
 const DEFAULT_SEARCH_MODEL = 'gemini-2.5-flash';
 const MAX_POST_LENGTH = 12000;
-const MAX_SOURCE_PAGES = 5;
-const MAX_IMAGES_PER_PAGE = 6;
-const MAX_HTML_BYTES = 750_000;
-const SEARCH_TIMEOUT_MS = 12_000;
-const BLOCKED_NON_OFFICIAL_HOSTS = [
-  'amazon.','aliexpress.','ebay.','etsy.','facebook.','instagram.','market.yandex.','ozon.',
-  'pinterest.','reddit.','tiktok.','vk.','wildberries.','wikipedia.','youtube.',
-];
+const MAX_SEARCH_ATTEMPTS = 3;
+const GEMINI_TIMEOUT_MS = 20_000;
+const IMAGE_DOWNLOAD_TIMEOUT_MS = 10_000;
+const MAX_REDIRECTS = 5;
 
-type UrlSource = { sourceType?: unknown; url?: unknown; title?: unknown };
+type SearchResult = { imageUrl: string; sourceUrl: string; product: string };
 
 function getMiniAppInitData(req: Request) {
   return req.headers.get('authorization')?.match(/^tma\s+(.+)$/i)?.[1] ?? '';
 }
 
-function isSafeHttpsUrl(value: string) {
+export function isSafeHttpsUrl(value: string) {
   try {
     const url = new URL(value);
     if (url.protocol !== 'https:' || url.username || url.password) return false;
@@ -33,70 +29,16 @@ function isSafeHttpsUrl(value: string) {
   } catch { return false; }
 }
 
-function isBlockedOfficialHost(hostname: string) {
-  const host = hostname.toLowerCase().replace(/^www\./, '');
-  return BLOCKED_NON_OFFICIAL_HOSTS.some(part => host === part.slice(0, -1) || host.includes(part));
-}
-
-function decodeHtml(value: string) {
-  return value.replace(/&amp;/gi, '&').replace(/&quot;/gi, '"').replace(/&#39;|&apos;/gi, "'").replace(/&lt;/gi, '<').replace(/&gt;/gi, '>');
-}
-
-function tagAttributes(tag: string) {
-  const attrs: Record<string, string> = {};
-  const expression = /([:\w-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/g;
-  let match: RegExpExecArray | null;
-  while ((match = expression.exec(tag))) attrs[match[1].toLowerCase()] = decodeHtml(match[2] ?? match[3] ?? match[4] ?? '');
-  return attrs;
-}
-
-export function extractPageImageCandidates(html: string, pageUrl: string) {
-  const candidates: string[] = [];
-  const add = (value?: string) => {
-    if (!value) return;
-    try {
-      const url = new URL(value, pageUrl).toString();
-      if (isSafeHttpsUrl(url) && !candidates.includes(url)) candidates.push(url);
-    } catch {}
-  };
-  for (const match of html.matchAll(/<meta\b[^>]*>/gi)) {
-    const attrs = tagAttributes(match[0]);
-    const key = (attrs.property || attrs.name || '').toLowerCase();
-    if (['og:image','og:image:url','og:image:secure_url','twitter:image','twitter:image:src'].includes(key)) add(attrs.content);
-  }
-  for (const match of html.matchAll(/<link\b[^>]*>/gi)) {
-    const attrs = tagAttributes(match[0]);
-    if ((attrs.rel || '').toLowerCase().split(/\s+/).includes('image_src')) add(attrs.href);
-  }
-  return candidates;
-}
-
-function normalizedHost(value: string) {
-  return value.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0].replace(/\.$/, '');
-}
-
-export function officialHostMatches(actual: string, expected: string) {
-  const left = normalizedHost(actual);
-  const right = normalizedHost(expected);
-  return Boolean(left && right && (left === right || left.endsWith(`.${right}`)));
-}
-
-export function officialPageHostMatches(actual: string, expected: string) {
-  const left = normalizedHost(actual);
-  const right = normalizedHost(expected);
-  return Boolean(left && right && left === right);
-}
-
-export function extractExpectedOfficialHost(text: string) {
-  const match = text.trim().match(/^FOUND\s*[—-]\s*.+?\s*[—-]\s*([^\s]+)\s*$/i);
-  if (!match) return '';
-  const rawHost = match[1].trim();
-  if (/[\/:?#@]/.test(rawHost)) return '';
-  const host = normalizedHost(rawHost);
-  const labels = host.split('.');
-  if (!host || host.length > 253 || labels.length < 2 || labels.some(label => !label || label.length > 63 || !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/i.test(label))) return '';
-  if (host.includes(':') || host === 'localhost' || host.endsWith('.local') || host.endsWith('.internal')) return '';
-  return host;
+export function parseImageSearchResult(text: string): SearchResult | null {
+  const value = text.trim();
+  if (/^NOT_FOUND\s*$/i.test(value)) return null;
+  const lines = value.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  if (lines.length !== 3) return null;
+  const imageUrl = lines[0].match(/^IMAGE_URL:\s*(\S+)\s*$/i)?.[1] || '';
+  const sourceUrl = lines[1].match(/^SOURCE_URL:\s*(\S+)\s*$/i)?.[1] || '';
+  const product = lines[2].match(/^PRODUCT:\s*(.+?)\s*$/i)?.[1] || '';
+  if (!imageUrl || !sourceUrl || !product || !isSafeHttpsUrl(imageUrl) || !isSafeHttpsUrl(sourceUrl)) return null;
+  return { imageUrl, sourceUrl, product };
 }
 
 async function cancelReader(reader: ReadableStreamDefaultReader<Uint8Array>) {
@@ -142,169 +84,129 @@ export async function readLimitedResponseBody(response: Response, maxBytes: numb
   return bytes;
 }
 
-function uint32be(bytes: Uint8Array, offset: number) {
-  return ((bytes[offset] * 0x1000000) + (bytes[offset + 1] << 16) + (bytes[offset + 2] << 8) + bytes[offset + 3]) >>> 0;
+function hasBytes(bytes: Uint8Array, offset: number, expected: readonly number[]) {
+  return expected.every((value, index) => bytes[offset + index] === value);
 }
 
-function uint32le(bytes: Uint8Array, offset: number) {
-  return (bytes[offset] + (bytes[offset + 1] << 8) + (bytes[offset + 2] << 16) + (bytes[offset + 3] * 0x1000000)) >>> 0;
+function readUint32BE(bytes: Uint8Array, offset: number) {
+  return (((bytes[offset] << 24) >>> 0) + (bytes[offset + 1] << 16) + (bytes[offset + 2] << 8) + bytes[offset + 3]) >>> 0;
 }
 
-function crc32(bytes: Uint8Array, start: number, end: number) {
-  let crc = 0xffffffff;
-  for (let i = start; i < end; i += 1) {
-    crc ^= bytes[i];
-    for (let bit = 0; bit < 8; bit += 1) crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
-  }
-  return (crc ^ 0xffffffff) >>> 0;
+function readUint32LE(bytes: Uint8Array, offset: number) {
+  return (bytes[offset] + (bytes[offset + 1] << 8) + (bytes[offset + 2] << 16) + ((bytes[offset + 3] << 24) >>> 0)) >>> 0;
 }
 
-function validPng(bytes: Uint8Array) {
-  if (bytes.length < 57 || bytes[0] !== 0x89 || bytes[1] !== 0x50 || bytes[2] !== 0x4e || bytes[3] !== 0x47 || bytes[4] !== 0x0d || bytes[5] !== 0x0a || bytes[6] !== 0x1a || bytes[7] !== 0x0a) return false;
+function isCompletePng(bytes: Uint8Array) {
+  if (bytes.length < 45 || !hasBytes(bytes, 0, [0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a])) return false;
   let offset = 8;
   let sawIhdr = false;
   let sawIdat = false;
   while (offset + 12 <= bytes.length) {
-    const length = uint32be(bytes, offset);
-    const end = offset + 12 + length;
-    if (end > bytes.length) return false;
-    const typeStart = offset + 4;
-    const dataEnd = offset + 8 + length;
-    if (crc32(bytes, typeStart, dataEnd) !== uint32be(bytes, dataEnd)) return false;
-    const type = String.fromCharCode(bytes[typeStart], bytes[typeStart + 1], bytes[typeStart + 2], bytes[typeStart + 3]);
+    const length = readUint32BE(bytes, offset);
+    const chunkEnd = offset + 12 + length;
+    if (chunkEnd > bytes.length) return false;
+    const type = String.fromCharCode(bytes[offset + 4], bytes[offset + 5], bytes[offset + 6], bytes[offset + 7]);
     if (!sawIhdr) {
-      if (type !== 'IHDR' || length !== 13 || uint32be(bytes, offset + 8) === 0 || uint32be(bytes, offset + 12) === 0) return false;
+      if (type !== 'IHDR' || length !== 13) return false;
       sawIhdr = true;
     } else if (type === 'IHDR') return false;
-    if (type === 'IDAT' && length > 0) sawIdat = true;
-    if (type === 'IEND') return sawIhdr && sawIdat && length === 0 && end === bytes.length;
-    offset = end;
+    if (type === 'IDAT') sawIdat = true;
+    if (type === 'IEND') return length === 0 && sawIhdr && sawIdat && chunkEnd === bytes.length;
+    offset = chunkEnd;
   }
   return false;
 }
 
-function validJpeg(bytes: Uint8Array) {
-  if (bytes.length < 18 || bytes[0] !== 0xff || bytes[1] !== 0xd8 || bytes[bytes.length - 2] !== 0xff || bytes[bytes.length - 1] !== 0xd9) return false;
-  let sawFrame = false;
+function isCompleteJpeg(bytes: Uint8Array) {
+  if (bytes.length < 16 || !hasBytes(bytes, 0, [0xff,0xd8]) || !hasBytes(bytes, bytes.length - 2, [0xff,0xd9])) return false;
   let offset = 2;
+  let sawFrame = false;
+  let sawScan = false;
   while (offset < bytes.length - 2) {
-    if (bytes[offset] !== 0xff) return false;
-    while (offset < bytes.length - 2 && bytes[offset] === 0xff) offset += 1;
-    const marker = bytes[offset++];
-    if (marker === 0xd9 || marker === 0x00) return false;
-    if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) continue;
-    if (offset + 1 >= bytes.length - 2) return false;
-    const length = (bytes[offset] << 8) | bytes[offset + 1];
-    if (length < 2 || offset + length > bytes.length - 2) return false;
-    if ([0xc0,0xc1,0xc2,0xc3,0xc5,0xc6,0xc7,0xc9,0xca,0xcb,0xcd,0xce,0xcf].includes(marker)) {
-      if (length < 8 || ((bytes[offset + 3] << 8) | bytes[offset + 4]) === 0 || ((bytes[offset + 5] << 8) | bytes[offset + 6]) === 0) return false;
-      sawFrame = true;
-    }
-    if (marker === 0xda) {
-      if (!sawFrame) return false;
-      let scan = offset + length;
-      let dataBytes = 0;
-      while (scan <= bytes.length - 2) {
-        if (scan === bytes.length - 2) return bytes[scan] === 0xff && bytes[scan + 1] === 0xd9 && dataBytes > 0;
-        if (bytes[scan] !== 0xff) { dataBytes += 1; scan += 1; continue; }
-        if (scan + 1 >= bytes.length) return false;
-        const next = bytes[scan + 1];
-        if (next === 0x00) { dataBytes += 1; scan += 2; continue; }
-        if (next >= 0xd0 && next <= 0xd7) { scan += 2; continue; }
-        if (next === 0xd9) return dataBytes > 0 && scan === bytes.length - 2;
-        return false;
-      }
-      return false;
-    }
-    offset += length;
-  }
-  return false;
-}
-
-function skipGifSubBlocks(bytes: Uint8Array, offset: number) {
-  let sawData = false;
-  while (offset < bytes.length) {
-    const size = bytes[offset++];
-    if (size === 0) return sawData ? offset : -1;
-    if (offset + size > bytes.length) return -1;
-    sawData = true;
-    offset += size;
-  }
-  return -1;
-}
-
-function validGif(bytes: Uint8Array) {
-  if (bytes.length < 20 || bytes[0] !== 0x47 || bytes[1] !== 0x49 || bytes[2] !== 0x46 || bytes[3] !== 0x38 || (bytes[4] !== 0x37 && bytes[4] !== 0x39) || bytes[5] !== 0x61) return false;
-  const width = bytes[6] | (bytes[7] << 8);
-  const height = bytes[8] | (bytes[9] << 8);
-  if (!width || !height) return false;
-  let offset = 13;
-  if (bytes[10] & 0x80) offset += 3 * (1 << ((bytes[10] & 0x07) + 1));
-  let sawImage = false;
-  while (offset < bytes.length) {
-    const marker = bytes[offset++];
-    if (marker === 0x3b) return sawImage && offset === bytes.length;
-    if (marker === 0x21) {
-      if (offset >= bytes.length) return false;
+    if (bytes[offset] !== 0xff) {
+      if (!sawScan) return false;
       offset += 1;
-      const next = skipGifSubBlocks(bytes, offset);
-      if (next < 0) return false;
-      offset = next;
       continue;
     }
-    if (marker !== 0x2c || offset + 9 > bytes.length) return false;
-    const imageWidth = bytes[offset + 4] | (bytes[offset + 5] << 8);
-    const imageHeight = bytes[offset + 6] | (bytes[offset + 7] << 8);
-    const packed = bytes[offset + 8];
-    if (!imageWidth || !imageHeight) return false;
-    offset += 9;
-    if (packed & 0x80) offset += 3 * (1 << ((packed & 0x07) + 1));
-    if (offset >= bytes.length || bytes[offset++] < 2) return false;
-    const next = skipGifSubBlocks(bytes, offset);
-    if (next < 0) return false;
-    sawImage = true;
-    offset = next;
+    while (offset < bytes.length && bytes[offset] === 0xff) offset += 1;
+    if (offset >= bytes.length) return false;
+    const marker = bytes[offset++];
+    if (marker === 0x00) {
+      if (!sawScan) return false;
+      continue;
+    }
+    if (marker === 0xd9) return sawFrame && sawScan && offset === bytes.length;
+    if (marker >= 0xd0 && marker <= 0xd7) {
+      if (!sawScan) return false;
+      continue;
+    }
+    if (marker === 0x01) continue;
+    if (offset + 2 > bytes.length) return false;
+    const length = (bytes[offset] << 8) | bytes[offset + 1];
+    if (length < 2 || offset + length > bytes.length) return false;
+    if ((marker >= 0xc0 && marker <= 0xc3) || (marker >= 0xc5 && marker <= 0xc7) || (marker >= 0xc9 && marker <= 0xcb) || (marker >= 0xcd && marker <= 0xcf)) sawFrame = true;
+    if (marker === 0xda) sawScan = true;
+    offset += length;
+  }
+  return sawFrame && sawScan;
+}
+
+function isCompleteGif(bytes: Uint8Array) {
+  if (bytes.length < 20 || !(hasBytes(bytes, 0, [0x47,0x49,0x46,0x38,0x37,0x61]) || hasBytes(bytes, 0, [0x47,0x49,0x46,0x38,0x39,0x61])) || bytes[bytes.length - 1] !== 0x3b) return false;
+  let offset = 13;
+  const packed = bytes[10];
+  if (packed & 0x80) offset += 3 * (1 << ((packed & 0x07) + 1));
+  let sawImage = false;
+  while (offset < bytes.length) {
+    const introducer = bytes[offset++];
+    if (introducer === 0x3b) return sawImage && offset === bytes.length;
+    if (introducer === 0x2c) {
+      if (offset + 9 > bytes.length) return false;
+      const imagePacked = bytes[offset + 8];
+      offset += 9;
+      if (imagePacked & 0x80) offset += 3 * (1 << ((imagePacked & 0x07) + 1));
+      if (offset >= bytes.length) return false;
+      offset += 1;
+      sawImage = true;
+    } else if (introducer === 0x21) {
+      if (offset >= bytes.length) return false;
+      offset += 1;
+    } else return false;
+    while (offset < bytes.length) {
+      const blockSize = bytes[offset++];
+      if (blockSize === 0) break;
+      if (offset + blockSize > bytes.length) return false;
+      offset += blockSize;
+    }
   }
   return false;
 }
 
-function validWebp(bytes: Uint8Array) {
-  if (bytes.length < 26 || bytes[0] !== 0x52 || bytes[1] !== 0x49 || bytes[2] !== 0x46 || bytes[3] !== 0x46 || bytes[8] !== 0x57 || bytes[9] !== 0x45 || bytes[10] !== 0x42 || bytes[11] !== 0x50) return false;
-  if (uint32le(bytes, 4) + 8 !== bytes.length) return false;
+function isCompleteWebp(bytes: Uint8Array) {
+  if (bytes.length < 20 || !hasBytes(bytes, 0, [0x52,0x49,0x46,0x46]) || !hasBytes(bytes, 8, [0x57,0x45,0x42,0x50])) return false;
+  if (readUint32LE(bytes, 4) + 8 !== bytes.length) return false;
   let offset = 12;
-  let sawImageData = false;
+  let sawImageChunk = false;
   while (offset + 8 <= bytes.length) {
-    const chunk = String.fromCharCode(bytes[offset], bytes[offset + 1], bytes[offset + 2], bytes[offset + 3]);
-    const length = uint32le(bytes, offset + 4);
-    const data = offset + 8;
-    const end = data + length;
-    const paddedEnd = end + (length & 1);
-    if (end > bytes.length || paddedEnd > bytes.length) return false;
-    if (chunk === 'VP8 ') {
-      if (length < 10 || bytes[data + 3] !== 0x9d || bytes[data + 4] !== 0x01 || bytes[data + 5] !== 0x2a) return false;
-      if (((bytes[data + 6] | (bytes[data + 7] << 8)) & 0x3fff) === 0 || ((bytes[data + 8] | (bytes[data + 9] << 8)) & 0x3fff) === 0) return false;
-      sawImageData = true;
-    } else if (chunk === 'VP8L') {
-      if (length < 5 || bytes[data] !== 0x2f) return false;
-      sawImageData = true;
-    } else if (chunk === 'VP8X') {
-      if (length !== 10) return false;
-    }
-    offset = paddedEnd;
+    const type = String.fromCharCode(bytes[offset], bytes[offset + 1], bytes[offset + 2], bytes[offset + 3]);
+    const length = readUint32LE(bytes, offset + 4);
+    const paddedLength = length + (length & 1);
+    if (offset + 8 + paddedLength > bytes.length) return false;
+    if (type === 'VP8 ' || type === 'VP8L' || type === 'VP8X') sawImageChunk = true;
+    offset += 8 + paddedLength;
   }
-  return sawImageData && offset === bytes.length;
+  return sawImageChunk && offset === bytes.length;
 }
 
 export function detectSupportedImageContentType(bytes: Uint8Array) {
-  if (validPng(bytes)) return 'image/png';
-  if (validJpeg(bytes)) return 'image/jpeg';
-  if (validGif(bytes)) return 'image/gif';
-  if (validWebp(bytes)) return 'image/webp';
+  if (isCompletePng(bytes)) return 'image/png';
+  if (isCompleteJpeg(bytes)) return 'image/jpeg';
+  if (isCompleteGif(bytes)) return 'image/gif';
+  if (isCompleteWebp(bytes)) return 'image/webp';
   return '';
 }
 
-export function createSearchDeadline(parentSignal: AbortSignal, timeoutMs: number) {
-  if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0) throw new RangeError('timeoutMs must be a positive safe integer');
+function createOperationDeadline(parentSignal: AbortSignal, timeoutMs: number) {
   const controller = new AbortController();
   let timedOut = false;
   const onParentAbort = () => controller.abort();
@@ -318,14 +220,18 @@ export function createSearchDeadline(parentSignal: AbortSignal, timeoutMs: numbe
   };
 }
 
-async function fetchWithSafeRedirects(urlValue: string, init: RequestInit, signal: AbortSignal) {
+async function fetchWithSafeRedirects(urlValue: string, signal: AbortSignal) {
   let url = urlValue;
-  for (let redirectCount = 0; redirectCount <= 5; redirectCount += 1) {
+  for (let redirects = 0; redirects <= MAX_REDIRECTS; redirects += 1) {
     if (!isSafeHttpsUrl(url)) return null;
     let response: Response;
-    try { response = await fetch(url, { ...init, redirect: 'manual', signal }); }
-    catch {
-      if (signal.aborted) throw new AppError('AI_IMAGE_SEARCH_CANCELLED', 'Поиск изображения отменён', 499);
+    try {
+      response = await fetch(url, {
+        redirect: 'manual', signal,
+        headers: { accept: 'image/*', 'user-agent': 'Mozilla/5.0 (compatible; CosmoSofa/1.0; +https://cosmetology-social-publisher.buropotok.workers.dev)' },
+      });
+    } catch {
+      if (signal.aborted) throw new Error('download_aborted');
       return null;
     }
     if (response.status >= 300 && response.status < 400) {
@@ -339,40 +245,49 @@ async function fetchWithSafeRedirects(urlValue: string, init: RequestInit, signa
   return null;
 }
 
-async function fetchOfficialPage(sourceUrl: string, expectedHost: string, signal: AbortSignal) {
-  const response = await fetchWithSafeRedirects(sourceUrl, { headers: { accept: 'text/html,application/xhtml+xml', 'user-agent': 'Mozilla/5.0 (compatible; CosmoSofa/1.0; +https://cosmetology-social-publisher.buropotok.workers.dev)' } }, signal);
-  if (!response?.ok || !isSafeHttpsUrl(response.url)) return null;
-  const finalUrl = new URL(response.url);
-  if (isBlockedOfficialHost(finalUrl.hostname) || !officialPageHostMatches(finalUrl.hostname, expectedHost)) return null;
-  const contentType = (response.headers.get('content-type') || '').toLowerCase();
-  if (!contentType.includes('text/html') && !contentType.includes('application/xhtml+xml')) return null;
-  const bytes = await readLimitedResponseBody(response, MAX_HTML_BYTES, signal);
-  if (!bytes) return null;
-  return { url: finalUrl.toString(), html: new TextDecoder().decode(bytes) };
-}
-
-async function fetchImageCandidate(imageUrl: string, signal: AbortSignal) {
-  const response = await fetchWithSafeRedirects(imageUrl, { headers: { accept: 'image/*', 'user-agent': 'Mozilla/5.0 (compatible; CosmoSofa/1.0; +https://cosmetology-social-publisher.buropotok.workers.dev)' } }, signal);
-  if (!response?.ok || !isSafeHttpsUrl(response.url)) return null;
-  const declaredType = (response.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
-  if (!declaredType.startsWith('image/')) return null;
-  const bytes = await readLimitedResponseBody(response, MINIAPP_IMAGE_MAX_BYTES, signal);
-  if (!bytes?.byteLength) return null;
-  const contentType = detectSupportedImageContentType(bytes);
-  if (!contentType) return null;
-  const body = new ArrayBuffer(bytes.byteLength);
-  new Uint8Array(body).set(bytes);
-  return { bytes: body, contentType };
-}
-
-function groundedSourceUrls(sources: readonly UrlSource[]) {
-  const result: string[] = [];
-  for (const source of sources) {
-    if (source?.sourceType !== 'url' || typeof source.url !== 'string' || !source.url) continue;
-    if (!isSafeHttpsUrl(source.url) || result.includes(source.url)) continue;
-    result.push(source.url);
+export async function downloadImage(imageUrl: string, parentSignal: AbortSignal) {
+  const deadline = createOperationDeadline(parentSignal, IMAGE_DOWNLOAD_TIMEOUT_MS);
+  try {
+    const response = await fetchWithSafeRedirects(imageUrl, deadline.signal);
+    if (parentSignal.aborted) throw new AppError('AI_IMAGE_SEARCH_CANCELLED', 'Поиск изображения отменён', 499);
+    if (deadline.timedOut()) return { image: null, reason: 'timeout' as const };
+    if (!response?.ok || !isSafeHttpsUrl(response.url || imageUrl)) return { image: null, reason: 'broken_link' as const };
+    const bytes = await readLimitedResponseBody(response, MINIAPP_IMAGE_MAX_BYTES, deadline.signal);
+    if (deadline.timedOut()) return { image: null, reason: 'timeout' as const };
+    if (!bytes?.byteLength) return { image: null, reason: 'invalid_image' as const };
+    const contentType = detectSupportedImageContentType(bytes);
+    if (!contentType) return { image: null, reason: 'invalid_image' as const };
+    const body = new ArrayBuffer(bytes.byteLength);
+    new Uint8Array(body).set(bytes);
+    return { image: { bytes: body, contentType }, reason: null };
+  } catch (error) {
+    if (parentSignal.aborted) throw new AppError('AI_IMAGE_SEARCH_CANCELLED', 'Поиск изображения отменён', 499);
+    if (deadline.timedOut()) return { image: null, reason: 'timeout' as const };
+    throw error;
+  } finally {
+    deadline.dispose();
   }
-  return result;
+}
+
+async function askGemini(google: ReturnType<typeof createGoogleGenerativeAI>, model: string, prompt: string, parentSignal: AbortSignal) {
+  const deadline = createOperationDeadline(parentSignal, GEMINI_TIMEOUT_MS);
+  try {
+    const result = await generateText({
+      model: google(model),
+      tools: { google_search: google.tools.googleSearch({}) },
+      abortSignal: deadline.signal,
+      prompt,
+    });
+    if (parentSignal.aborted) throw new AppError('AI_IMAGE_SEARCH_CANCELLED', 'Поиск изображения отменён', 499);
+    if (deadline.timedOut()) throw new AppError('AI_IMAGE_SEARCH_TIMEOUT', 'Поиск официального изображения занял слишком много времени. Попробуйте ещё раз.', 504);
+    return result.text;
+  } catch (error) {
+    if (parentSignal.aborted) throw new AppError('AI_IMAGE_SEARCH_CANCELLED', 'Поиск изображения отменён', 499);
+    if (deadline.timedOut()) throw new AppError('AI_IMAGE_SEARCH_TIMEOUT', 'Поиск официального изображения занял слишком много времени. Попробуйте ещё раз.', 504);
+    throw error;
+  } finally {
+    deadline.dispose();
+  }
 }
 
 export async function searchMiniAppImage(req: Request, env: Env) {
@@ -387,58 +302,45 @@ export async function searchMiniAppImage(req: Request, env: Env) {
   if (!sourcePolicy) throw new AppError('AI_IMAGE_SOURCE_POLICY_REQUIRED', 'Не указана политика источников изображения', 400);
   if (!env.GEMINI_API_KEY) throw new AppError('AI_NOT_CONFIGURED', 'AI пока не настроен', 503);
 
-  const prompt = buildImageSearchPrompt(searchProfile, sourcePolicy, text);
   const model = env.AI_TEXT_MODEL?.trim() || DEFAULT_SEARCH_MODEL;
   const google = createGoogleGenerativeAI({ apiKey: env.GEMINI_API_KEY });
-  const deadline = createSearchDeadline(req.signal, SEARCH_TIMEOUT_MS);
-  try {
-    let grounded;
+  const failedAttempts: FailedImageAttempt[] = [];
+
+  for (let attempt = 0; attempt < MAX_SEARCH_ATTEMPTS; attempt += 1) {
+    const prompt = buildImageSearchPrompt(searchProfile, sourcePolicy, text, failedAttempts);
+    let answer: string;
     try {
-      grounded = await generateText({
-        model: google(model),
-        tools: { google_search: google.tools.googleSearch({}) },
-        abortSignal: deadline.signal,
-        prompt,
-      });
+      answer = await askGemini(google, model, prompt, req.signal);
     } catch (error) {
-      if (req.signal.aborted) throw new AppError('AI_IMAGE_SEARCH_CANCELLED', 'Поиск изображения отменён', 499);
-      if (deadline.timedOut()) throw new AppError('AI_IMAGE_SEARCH_TIMEOUT', 'Поиск официального изображения занял слишком много времени. Попробуйте ещё раз.', 504);
-      console.error('Mini App image search failed', { model, searchProfile, sourcePolicy, error: error instanceof Error ? error.message : String(error) });
+      if (error instanceof AppError) throw error;
+      console.error('Mini App image search failed', { model, searchProfile, sourcePolicy, attempt: attempt + 1, error: error instanceof Error ? error.message : String(error) });
       throw new AppError('AI_IMAGE_SEARCH_FAILED', 'Не удалось выполнить поиск изображения. Попробуйте ещё раз.', 502);
     }
-    if (req.signal.aborted) throw new AppError('AI_IMAGE_SEARCH_CANCELLED', 'Поиск изображения отменён', 499);
-    if (deadline.timedOut()) throw new AppError('AI_IMAGE_SEARCH_TIMEOUT', 'Поиск официального изображения занял слишком много времени. Попробуйте ещё раз.', 504);
-    if (/^\s*NOT_FOUND\b/i.test(grounded.text)) throw new AppError('AI_IMAGE_SEARCH_NOT_FOUND', 'Официальное изображение не найдено', 404);
-    const officialHost = extractExpectedOfficialHost(grounded.text);
-    if (!officialHost || isBlockedOfficialHost(officialHost)) throw new AppError('AI_IMAGE_SEARCH_NOT_FOUND', 'Официальное изображение не найдено', 404);
-
-    const sourceUrls = groundedSourceUrls((grounded as unknown as { sources?: readonly UrlSource[] }).sources || []).slice(0, MAX_SOURCE_PAGES);
-    for (const sourceUrl of sourceUrls) {
-      const page = await fetchOfficialPage(sourceUrl, officialHost, deadline.signal);
-      if (!page) continue;
-      const imageUrls = extractPageImageCandidates(page.html, page.url).slice(0, MAX_IMAGES_PER_PAGE);
-      for (const imageUrl of imageUrls) {
-        const image = await fetchImageCandidate(imageUrl, deadline.signal);
-        if (!image) continue;
-        return new Response(image.bytes, {
-          status: 200,
-          headers: {
-            'content-type': image.contentType,
-            'cache-control': 'no-store',
-            'content-disposition': 'inline; filename="official-post-image"',
-            'x-cosmo-image-source': page.url,
-            'x-content-type-options': 'nosniff',
-          },
-        });
-      }
+    if (/^\s*NOT_FOUND\s*$/i.test(answer)) throw new AppError('AI_IMAGE_SEARCH_NOT_FOUND', 'Официальное изображение не найдено', 404);
+    const result = parseImageSearchResult(answer);
+    if (!result) {
+      console.warn('Mini App image search returned malformed result', { model, searchProfile, sourcePolicy, attempt: attempt + 1 });
+      continue;
     }
-    if (deadline.timedOut()) throw new AppError('AI_IMAGE_SEARCH_TIMEOUT', 'Поиск официального изображения занял слишком много времени. Попробуйте ещё раз.', 504);
-    throw new AppError('AI_IMAGE_SEARCH_NOT_FOUND', 'Официальное изображение не найдено', 404);
-  } catch (error) {
-    if (req.signal.aborted) throw new AppError('AI_IMAGE_SEARCH_CANCELLED', 'Поиск изображения отменён', 499);
-    if (deadline.timedOut()) throw new AppError('AI_IMAGE_SEARCH_TIMEOUT', 'Поиск официального изображения занял слишком много времени. Попробуйте ещё раз.', 504);
-    throw error;
-  } finally {
-    deadline.dispose();
+    if (failedAttempts.some(item => item.imageUrl === result.imageUrl)) continue;
+
+    const downloaded = await downloadImage(result.imageUrl, req.signal);
+    if (!downloaded.image) {
+      failedAttempts.push({ imageUrl: result.imageUrl, reason: downloaded.reason });
+      continue;
+    }
+    return new Response(downloaded.image.bytes, {
+      status: 200,
+      headers: {
+        'content-type': downloaded.image.contentType,
+        'cache-control': 'no-store',
+        'content-disposition': 'inline; filename="official-post-image"',
+        'x-cosmo-image-source': result.sourceUrl,
+        'x-cosmo-image-product': encodeURIComponent(result.product).slice(0, 512),
+        'x-content-type-options': 'nosniff',
+      },
+    });
   }
+
+  throw new AppError('AI_IMAGE_SEARCH_NOT_FOUND', 'Официальное изображение не найдено', 404);
 }
