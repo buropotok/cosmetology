@@ -40,7 +40,7 @@
 
   function syncManualLabel(){
     if(!manualLabel)return;
-    manualLabel.textContent=window.CosmoSofaDraft?.getState?.().hasDraft?'Продолжить редактирование':'Создать пост вручную с нуля';
+    manualLabel.textContent=window.CosmoSofaDraft?.getState?.().hasDraft?'Ручное редактирование':'Создать пост вручную с нуля';
   }
 
   function showEntry(){
