@@ -4,6 +4,11 @@
   const status=document.querySelector('#status');
   if(!addButton||!text)return;
 
+  const currentPostText=()=>{
+    try{return (window.CosmoRichEditor?.getPlainText?.()??text.value).trim()}
+    catch{return text.value.trim()}
+  };
+
   const generateButton=document.createElement('button');
   generateButton.type='button';
   generateButton.id='composer-generate-photo';
@@ -11,10 +16,10 @@
   addButton.after(generateButton);
 
   generateButton.addEventListener('click',async()=>{
-    const postText=text.value.trim();
+    const postText=currentPostText();
     if(!postText){
       if(status){status.textContent='Сначала введите текст публикации.';status.className='error'}
-      text.focus();
+      (window.CosmoRichEditor?.element||text).focus?.();
       return;
     }
     const webApp=window.Telegram?.WebApp;
