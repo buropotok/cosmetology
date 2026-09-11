@@ -10,6 +10,9 @@ test('image generation reads the current rich editor text with textarea fallback
   assert.doesNotMatch(source,/const postText=text\.value\.trim\(\)/);
 });
 
-test('empty image-generation input focuses the active rich editor when available',()=>{
-  assert.match(source,/\(window\.CosmoRichEditor\?\.element\|\|text\)\.focus\?\.\(\)/);
+test('empty image-generation input focuses the editable Tiptap surface when available',()=>{
+  assert.match(source,/richEditor\?\.editor\?\.commands\?\.focus/);
+  assert.match(source,/richEditor\.editor\.commands\.focus\(\)/);
+  assert.match(source,/else text\.focus\(\)/);
+  assert.doesNotMatch(source,/CosmoRichEditor\?\.element/);
 });
