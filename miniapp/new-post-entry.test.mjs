@@ -22,8 +22,8 @@ test('Home new-post flow resets the logical navigation stack to Menu',()=>{
   assert.match(entry,/function showEntry\(\)[\s\S]*syncManualLabel\(\);[\s\S]*wizard\.hidden=true;\s*composerContent\.hidden=true;\s*controls\.hidden=false;\s*publishMode\('entry'\)/);
 });
 
-test('resumed draft labels manual entry as continuation and preserves Composer image options',()=>{
-  assert.match(entry,/window\.CosmoSofaDraft\?\.getState\?\.\(\)\.hasDraft\?'Продолжить редактирование':'Создать пост вручную с нуля'/);
+test('resumed draft labels manual entry as manual editing and preserves Composer image options',()=>{
+  assert.match(entry,/window\.CosmoSofaDraft\?\.getState\?\.\(\)\.hasDraft\?'Ручное редактирование':'Создать пост вручную с нуля'/);
   assert.doesNotMatch(transfer,/cosmo-ai-wizard-manual/);
   assert.doesNotMatch(transfer,/setImageOptions\?\.\(\{\.\.\.DEFAULT_IMAGE_OPTIONS\}\)/);
 });
