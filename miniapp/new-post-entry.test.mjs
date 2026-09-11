@@ -8,6 +8,7 @@ const controller=await readFile(new URL('./before-after-controller.js',import.me
 const beforeAfterHtml=await readFile(new URL('./before-after.html',import.meta.url),'utf8');
 const bootstrap=await readFile(new URL('./bootstrap.js',import.meta.url),'utf8');
 const pencil=await readFile(new URL('./assets/icons/manual-edit.svg',import.meta.url),'utf8');
+const transfer=await readFile(new URL('./ai-post-editor-transfer.js',import.meta.url),'utf8');
 
 test('Home new-post flow resets the logical navigation stack to Menu',()=>{
   assert.match(entry,/data-new-post-choice="ai"/);
@@ -18,7 +19,13 @@ test('Home new-post flow resets the logical navigation stack to Menu',()=>{
   assert.match(entry,/ДО \/ ПОСЛЕ/);
   assert.match(navigation,/await navigation\.reset\(\[STATES\.HOME,STATES\.MENU\]\)/);
   assert.match(navigation,/cosmo-ai-wizard-reset/);
-  assert.match(entry,/function showEntry\(\)[\s\S]*wizard\.hidden=true;\s*composerContent\.hidden=true;\s*controls\.hidden=false;\s*publishMode\('entry'\)/);
+  assert.match(entry,/function showEntry\(\)[\s\S]*syncManualLabel\(\);[\s\S]*wizard\.hidden=true;\s*composerContent\.hidden=true;\s*controls\.hidden=false;\s*publishMode\('entry'\)/);
+});
+
+test('resumed draft labels manual entry as continuation and preserves Composer image options',()=>{
+  assert.match(entry,/window\.CosmoSofaDraft\?\.getState\?\.\(\)\.hasDraft\?'Продолжить редактирование':'Создать пост вручную с нуля'/);
+  assert.doesNotMatch(transfer,/cosmo-ai-wizard-manual/);
+  assert.doesNotMatch(transfer,/setImageOptions\?\.\(\{\.\.\.DEFAULT_IMAGE_OPTIONS\}\)/);
 });
 
 test('New Post choices request logical navigation instead of deciding Back destinations',()=>{
