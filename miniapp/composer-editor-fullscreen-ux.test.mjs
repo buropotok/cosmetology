@@ -19,7 +19,24 @@ test('fullscreen lifecycle is gesture-owned instead of blur-owned and toolbar me
   assert.match(source,/host\.addEventListener\('touchmove',onTouchMove,\{passive:false\}\)/);
   assert.match(source,/shouldExitFullscreenOnPull\(/);
   assert.match(source,/\.composer-tool-menu \.composer-tool-panel\{top:auto!important;bottom:calc\(100% \+ 6px\)!important\}/);
-  assert.match(source,/deactivate\(\);\s*if\(typeof editor\.commands\?\.blur==='function'\)editor\.commands\.blur\(\)/);
+  assert.match(source,/const exitFullscreen=\(\)=>\{\s*deactivate\(\);\s*if\(typeof editor\.commands\?\.blur==='function'\)editor\.commands\.blur\(\)/);
+});
+
+test('fullscreen state clears when Composer leaves its route, publish mode, or opens Before/After',()=>{
+  const source=read('./composer-editor-keyboard-layout.js');
+  const beforeAfter=read('./before-after-controller.js');
+  assert.match(source,/const onRoute=route=>\{if\(route!=='composer'\)exitFullscreen\(\)\}/);
+  assert.match(source,/const onPublishMode=event=>\{if\(event\?\.detail\?\.mode!=='compose'\)exitFullscreen\(\)\}/);
+  assert.match(source,/const onBeforeAfterOpen=\(\)=>exitFullscreen\(\)/);
+  assert.match(source,/router\.subscribe\(onRoute\)/);
+  assert.match(source,/win\.addEventListener\('cosmo-publish-mode',onPublishMode\)/);
+  assert.match(source,/win\.addEventListener\('cosmo-before-after-open',onBeforeAfterOpen\)/);
+  assert.match(source,/win\.removeEventListener\('cosmo-publish-mode',onPublishMode\)/);
+  assert.match(source,/win\.removeEventListener\('cosmo-before-after-open',onBeforeAfterOpen\)/);
+  assert.match(source,/unsubscribeRoute\(\)/);
+  assert.match(beforeAfter,/new CustomEvent\('cosmo-before-after-open',\{detail:\{mode\}\}\)/);
+  assert.match(beforeAfter,/ensureOverlay\('solo'\);emitOpen\('solo'\)/);
+  assert.match(beforeAfter,/ensureOverlay\('dual'\);emitOpen\('dual'\)/);
 });
 
 test('emoji popup is anchored above the toolbar, draggable and toggles closed on a second button press',()=>{

@@ -55,7 +55,8 @@ export function initComposerEditorKeyboardLayout({
   root=globalThis.document?.querySelector?.('.composer-editor'),
   win=globalThis.window,
   doc=globalThis.document,
-  viewport=globalThis.window?.visualViewport
+  viewport=globalThis.window?.visualViewport,
+  router=globalThis.window?.CosmoRouter
 }={}){
   if(!win||!doc||!(root instanceof win.HTMLElement))return null;
   const existing=instances.get(root);if(existing)return existing;
@@ -99,11 +100,14 @@ export function initComposerEditorKeyboardLayout({
     root.style.removeProperty('--composer-editor-vv-top');
     root.style.removeProperty('--composer-editor-vv-bottom');
   };
-  const exitByPull=()=>{
+  const exitFullscreen=()=>{
     deactivate();
     if(typeof editor.commands?.blur==='function')editor.commands.blur();
   };
   const onFocus=()=>activate();
+  const onRoute=route=>{if(route!=='composer')exitFullscreen()};
+  const onPublishMode=event=>{if(event?.detail?.mode!=='compose')exitFullscreen()};
+  const onBeforeAfterOpen=()=>exitFullscreen();
   const keepClearFocus=event=>{if(active)event.preventDefault()};
   const onTouchStart=event=>{
     if(!active||event.touches?.length!==1||host.scrollTop>1){pullStart=null;return}
@@ -117,7 +121,7 @@ export function initComposerEditorKeyboardLayout({
     const dx=touch.clientX-pullStart.x;
     const dy=touch.clientY-pullStart.y;
     if(dy>8&&dy>Math.abs(dx))event.preventDefault();
-    if(shouldExitFullscreenOnPull({scrollTop:host.scrollTop,startX:pullStart.x,startY:pullStart.y,currentX:touch.clientX,currentY:touch.clientY}))exitByPull();
+    if(shouldExitFullscreenOnPull({scrollTop:host.scrollTop,startX:pullStart.x,startY:pullStart.y,currentX:touch.clientX,currentY:touch.clientY}))exitFullscreen();
   };
   const clearPull=()=>{pullStart=null};
 
@@ -128,12 +132,15 @@ export function initComposerEditorKeyboardLayout({
   host.addEventListener('touchend',clearPull);
   host.addEventListener('touchcancel',clearPull);
   win.addEventListener('resize',updateViewport);
+  win.addEventListener('cosmo-publish-mode',onPublishMode);
+  win.addEventListener('cosmo-before-after-open',onBeforeAfterOpen);
   viewport?.addEventListener?.('resize',updateViewport);
   viewport?.addEventListener?.('scroll',updateViewport);
+  const unsubscribeRoute=typeof router?.subscribe==='function'?router.subscribe(onRoute):()=>{};
 
   const controller={
     update:updateViewport,
-    exit:exitByPull,
+    exit:exitFullscreen,
     destroy(){
       deactivate();
       editor.off('focus',onFocus);
@@ -143,8 +150,11 @@ export function initComposerEditorKeyboardLayout({
       host.removeEventListener('touchend',clearPull);
       host.removeEventListener('touchcancel',clearPull);
       win.removeEventListener('resize',updateViewport);
+      win.removeEventListener('cosmo-publish-mode',onPublishMode);
+      win.removeEventListener('cosmo-before-after-open',onBeforeAfterOpen);
       viewport?.removeEventListener?.('resize',updateViewport);
       viewport?.removeEventListener?.('scroll',updateViewport);
+      unsubscribeRoute();
       if(toolbarParent)toolbarParent.insertBefore(toolbar,toolbarNext&&toolbarNext.parentNode===toolbarParent?toolbarNext:null);
       if(clearParent)clearParent.insertBefore(clear,clearNext&&clearNext.parentNode===clearParent?clearNext:null);
       controls.remove();

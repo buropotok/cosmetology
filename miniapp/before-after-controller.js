@@ -34,15 +34,16 @@
   function frameBridge(){try{return overlay?.querySelector('iframe')?.contentWindow?.CosmoBeforeAfterBridge||null}catch{return null}}
   function debugLog(type,data){try{frameBridge()?.debugLog?.(type,data)}catch{}}
   function setSaveStage(message){frameBridge()?.setStage?.(message)}
+  function emitOpen(mode){window.dispatchEvent(new CustomEvent('cosmo-before-after-open',{detail:{mode}}))}
   function restoreIntoFrame(){if(currentMode!=='dual')return;const payload=window.CosmoSofaDraft?.getBeforeAfterDraft?.();if(!payload?.state)return;const restore=frameBridge()?.restoreDraft?.(payload);restore?.catch?.(error=>debugLog('RESTORE rejected',{message:error?.message||String(error),imageCount:payload.images?.length||0}))}
   function open(){
     const request=arguments[0];
     if(request?.mode==='solo'){
       const {file,index}=request;
       if(!(file instanceof File)||!Number.isInteger(index)||index<0)return false;
-      soloFile=file;soloIndex=index;const current=ensureOverlay('solo');current.hidden=true;frameBridge()?.resetTransient?.();void revealSolo(current);document.documentElement.style.overflow='hidden';return true
+      soloFile=file;soloIndex=index;const current=ensureOverlay('solo');emitOpen('solo');current.hidden=true;frameBridge()?.resetTransient?.();void revealSolo(current);document.documentElement.style.overflow='hidden';return true
     }
-    soloIndex=null;soloFile=null;const current=ensureOverlay('dual');window.CosmoSofaDraft?.setScreen?.('beforeafter');frameBridge()?.resetTransient?.();restoreIntoFrame();current.hidden=false;document.documentElement.style.overflow='hidden';return true
+    soloIndex=null;soloFile=null;const current=ensureOverlay('dual');emitOpen('dual');window.CosmoSofaDraft?.setScreen?.('beforeafter');frameBridge()?.resetTransient?.();restoreIntoFrame();current.hidden=false;document.documentElement.style.overflow='hidden';return true
   }
   function destroySolo(){if(!overlay)return;overlay.remove();overlay=null;soloIndex=null;soloFile=null;currentMode='dual'}
   function close(){if(!overlay)return;frameBridge()?.resetTransient?.();if(currentMode==='solo')destroySolo();else overlay.hidden=true;document.documentElement.style.overflow='';window.scrollTo({top:0,behavior:'instant'})}
