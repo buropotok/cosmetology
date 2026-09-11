@@ -1,0 +1,5 @@
+.diagnostic-trace-panel{margin:24px 0 8px;padding:12px;border:1px solid color-mix(in srgb,currentColor 18%,transparent);border-radius:12px;background:color-mix(in srgb,currentColor 4%,transparent)}
+.diagnostic-trace-header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px}
+.diagnostic-trace-header strong{font-size:13px}
+#diagnostic-trace-copy{width:auto;min-width:72px;margin:0;padding:7px 12px;font-size:12px}
+#diagnostic-trace-output{box-sizing:border-box;width:100%;min-height:180px;max-height:320px;margin:0;padding:10px;border:1px solid color-mix(in srgb,currentColor 15%,transparent);border-radius:8px;font:11px/1.45 ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;white-space:pre;resize:vertical}
