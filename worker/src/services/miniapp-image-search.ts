@@ -150,61 +150,148 @@ function uint32le(bytes: Uint8Array, offset: number) {
   return (bytes[offset] + (bytes[offset + 1] << 8) + (bytes[offset + 2] << 16) + (bytes[offset + 3] * 0x1000000)) >>> 0;
 }
 
+function crc32(bytes: Uint8Array, start: number, end: number) {
+  let crc = 0xffffffff;
+  for (let i = start; i < end; i += 1) {
+    crc ^= bytes[i];
+    for (let bit = 0; bit < 8; bit += 1) crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
 function validPng(bytes: Uint8Array) {
-  if (bytes.length < 45 || bytes[0] !== 0x89 || bytes[1] !== 0x50 || bytes[2] !== 0x4e || bytes[3] !== 0x47 || bytes[4] !== 0x0d || bytes[5] !== 0x0a || bytes[6] !== 0x1a || bytes[7] !== 0x0a) return false;
+  if (bytes.length < 57 || bytes[0] !== 0x89 || bytes[1] !== 0x50 || bytes[2] !== 0x4e || bytes[3] !== 0x47 || bytes[4] !== 0x0d || bytes[5] !== 0x0a || bytes[6] !== 0x1a || bytes[7] !== 0x0a) return false;
   let offset = 8;
   let sawIhdr = false;
+  let sawIdat = false;
   while (offset + 12 <= bytes.length) {
     const length = uint32be(bytes, offset);
     const end = offset + 12 + length;
     if (end > bytes.length) return false;
-    const type = String.fromCharCode(bytes[offset + 4], bytes[offset + 5], bytes[offset + 6], bytes[offset + 7]);
+    const typeStart = offset + 4;
+    const dataEnd = offset + 8 + length;
+    if (crc32(bytes, typeStart, dataEnd) !== uint32be(bytes, dataEnd)) return false;
+    const type = String.fromCharCode(bytes[typeStart], bytes[typeStart + 1], bytes[typeStart + 2], bytes[typeStart + 3]);
     if (!sawIhdr) {
       if (type !== 'IHDR' || length !== 13 || uint32be(bytes, offset + 8) === 0 || uint32be(bytes, offset + 12) === 0) return false;
       sawIhdr = true;
-    }
-    if (type === 'IEND') return length === 0 && end === bytes.length;
+    } else if (type === 'IHDR') return false;
+    if (type === 'IDAT' && length > 0) sawIdat = true;
+    if (type === 'IEND') return sawIhdr && sawIdat && length === 0 && end === bytes.length;
     offset = end;
   }
   return false;
 }
 
 function validJpeg(bytes: Uint8Array) {
-  if (bytes.length < 12 || bytes[0] !== 0xff || bytes[1] !== 0xd8 || bytes[bytes.length - 2] !== 0xff || bytes[bytes.length - 1] !== 0xd9) return false;
+  if (bytes.length < 18 || bytes[0] !== 0xff || bytes[1] !== 0xd8 || bytes[bytes.length - 2] !== 0xff || bytes[bytes.length - 1] !== 0xd9) return false;
   let sawFrame = false;
-  for (let offset = 2; offset + 3 < bytes.length - 2;) {
-    if (bytes[offset] !== 0xff) { offset += 1; continue; }
-    while (offset < bytes.length && bytes[offset] === 0xff) offset += 1;
+  let offset = 2;
+  while (offset < bytes.length - 2) {
+    if (bytes[offset] !== 0xff) return false;
+    while (offset < bytes.length - 2 && bytes[offset] === 0xff) offset += 1;
     const marker = bytes[offset++];
-    if (marker === 0xd9) break;
-    if (marker === 0xda) return sawFrame;
-    if (marker === 0x00 || marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) continue;
-    if (offset + 1 >= bytes.length) return false;
+    if (marker === 0xd9 || marker === 0x00) return false;
+    if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) continue;
+    if (offset + 1 >= bytes.length - 2) return false;
     const length = (bytes[offset] << 8) | bytes[offset + 1];
     if (length < 2 || offset + length > bytes.length - 2) return false;
     if ([0xc0,0xc1,0xc2,0xc3,0xc5,0xc6,0xc7,0xc9,0xca,0xcb,0xcd,0xce,0xcf].includes(marker)) {
       if (length < 8 || ((bytes[offset + 3] << 8) | bytes[offset + 4]) === 0 || ((bytes[offset + 5] << 8) | bytes[offset + 6]) === 0) return false;
       sawFrame = true;
     }
+    if (marker === 0xda) {
+      if (!sawFrame) return false;
+      let scan = offset + length;
+      let dataBytes = 0;
+      while (scan < bytes.length - 2) {
+        if (bytes[scan] !== 0xff) { dataBytes += 1; scan += 1; continue; }
+        if (scan + 1 >= bytes.length) return false;
+        const next = bytes[scan + 1];
+        if (next === 0x00) { dataBytes += 1; scan += 2; continue; }
+        if (next >= 0xd0 && next <= 0xd7) { scan += 2; continue; }
+        if (next === 0xd9) return dataBytes > 0 && scan === bytes.length - 2;
+        return false;
+      }
+      return false;
+    }
     offset += length;
   }
-  return sawFrame;
+  return false;
+}
+
+function skipGifSubBlocks(bytes: Uint8Array, offset: number) {
+  let sawData = false;
+  while (offset < bytes.length) {
+    const size = bytes[offset++];
+    if (size === 0) return sawData ? offset : -1;
+    if (offset + size > bytes.length) return -1;
+    sawData = true;
+    offset += size;
+  }
+  return -1;
 }
 
 function validGif(bytes: Uint8Array) {
-  if (bytes.length < 14 || bytes[0] !== 0x47 || bytes[1] !== 0x49 || bytes[2] !== 0x46 || bytes[3] !== 0x38 || (bytes[4] !== 0x37 && bytes[4] !== 0x39) || bytes[5] !== 0x61) return false;
+  if (bytes.length < 20 || bytes[0] !== 0x47 || bytes[1] !== 0x49 || bytes[2] !== 0x46 || bytes[3] !== 0x38 || (bytes[4] !== 0x37 && bytes[4] !== 0x39) || bytes[5] !== 0x61) return false;
   const width = bytes[6] | (bytes[7] << 8);
   const height = bytes[8] | (bytes[9] << 8);
-  return width > 0 && height > 0 && bytes[bytes.length - 1] === 0x3b;
+  if (!width || !height) return false;
+  let offset = 13;
+  if (bytes[10] & 0x80) offset += 3 * (1 << ((bytes[10] & 0x07) + 1));
+  let sawImage = false;
+  while (offset < bytes.length) {
+    const marker = bytes[offset++];
+    if (marker === 0x3b) return sawImage && offset === bytes.length;
+    if (marker === 0x21) {
+      if (offset >= bytes.length) return false;
+      offset += 1;
+      const next = skipGifSubBlocks(bytes, offset);
+      if (next < 0) return false;
+      offset = next;
+      continue;
+    }
+    if (marker !== 0x2c || offset + 9 > bytes.length) return false;
+    const imageWidth = bytes[offset + 4] | (bytes[offset + 5] << 8);
+    const imageHeight = bytes[offset + 6] | (bytes[offset + 7] << 8);
+    const packed = bytes[offset + 8];
+    if (!imageWidth || !imageHeight) return false;
+    offset += 9;
+    if (packed & 0x80) offset += 3 * (1 << ((packed & 0x07) + 1));
+    if (offset >= bytes.length || bytes[offset++] < 2) return false;
+    const next = skipGifSubBlocks(bytes, offset);
+    if (next < 0) return false;
+    sawImage = true;
+    offset = next;
+  }
+  return false;
 }
 
 function validWebp(bytes: Uint8Array) {
-  if (bytes.length < 20 || bytes[0] !== 0x52 || bytes[1] !== 0x49 || bytes[2] !== 0x46 || bytes[3] !== 0x46 || bytes[8] !== 0x57 || bytes[9] !== 0x45 || bytes[10] !== 0x42 || bytes[11] !== 0x50) return false;
+  if (bytes.length < 26 || bytes[0] !== 0x52 || bytes[1] !== 0x49 || bytes[2] !== 0x46 || bytes[3] !== 0x46 || bytes[8] !== 0x57 || bytes[9] !== 0x45 || bytes[10] !== 0x42 || bytes[11] !== 0x50) return false;
   if (uint32le(bytes, 4) + 8 !== bytes.length) return false;
-  const chunk = String.fromCharCode(bytes[12], bytes[13], bytes[14], bytes[15]);
-  if (!['VP8 ','VP8L','VP8X'].includes(chunk)) return false;
-  const chunkLength = uint32le(bytes, 16);
-  return 20 + chunkLength + (chunkLength % 2) <= bytes.length;
+  let offset = 12;
+  let sawImageData = false;
+  while (offset + 8 <= bytes.length) {
+    const chunk = String.fromCharCode(bytes[offset], bytes[offset + 1], bytes[offset + 2], bytes[offset + 3]);
+    const length = uint32le(bytes, offset + 4);
+    const data = offset + 8;
+    const end = data + length;
+    const paddedEnd = end + (length & 1);
+    if (end > bytes.length || paddedEnd > bytes.length) return false;
+    if (chunk === 'VP8 ') {
+      if (length < 10 || bytes[data + 3] !== 0x9d || bytes[data + 4] !== 0x01 || bytes[data + 5] !== 0x2a) return false;
+      if (((bytes[data + 6] | (bytes[data + 7] << 8)) & 0x3fff) === 0 || ((bytes[data + 8] | (bytes[data + 9] << 8)) & 0x3fff) === 0) return false;
+      sawImageData = true;
+    } else if (chunk === 'VP8L') {
+      if (length < 5 || bytes[data] !== 0x2f) return false;
+      sawImageData = true;
+    } else if (chunk === 'VP8X') {
+      if (length !== 10) return false;
+    }
+    offset = paddedEnd;
+  }
+  return sawImageData && offset === bytes.length;
 }
 
 export function detectSupportedImageContentType(bytes: Uint8Array) {
