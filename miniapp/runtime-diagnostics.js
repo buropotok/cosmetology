@@ -26,6 +26,17 @@ const clock=()=>typeof performance?.now==='function'?performance.now():Date.now(
 function redactSecrets(value){return String(value||'').replace(/\btma\s+[^\s]+/gi,'tma [redacted]').replace(/\b(access[_-]?token|api[_-]?key|token)\s*[:=]\s*[^\s&,;]+/gi,'$1=[redacted]')}
 const errorText=error=>redactSecrets(error?.message||error||'Unknown error').replace(/[\r\n]+/g,' ').slice(0,MAX_ERROR_LENGTH);
 const hasTelegramAuth=()=>Boolean(window.Telegram?.WebApp?.initData);
+function safeDetails(details){
+  if(!details||typeof details!=='object'||Array.isArray(details))return undefined;
+  const result={};
+  for(const [key,value] of Object.entries(details)){
+    if(value===undefined)continue;
+    if(/authorization|initdata|token|secret|api.?key/i.test(key)){result[key]='[redacted]';continue}
+    if(typeof value==='string')result[key]=redactSecrets(value).slice(0,300);
+    else if(typeof value==='number'||typeof value==='boolean'||value===null)result[key]=value;
+  }
+  return Object.keys(result).length?result:undefined;
+}
 
 function snapshot(){
   return{
@@ -39,7 +50,7 @@ function snapshot(){
     userAgent:String(navigator.userAgent||''),
     language:String(navigator.language||''),
     viewport:{width:window.innerWidth||0,height:window.innerHeight||0,devicePixelRatio:window.devicePixelRatio||1},
-    events:events.map(item=>({...item}))
+    events:events.map(item=>({...item,details:item.details?{...item.details}:undefined}))
   };
 }
 
@@ -55,12 +66,15 @@ function queueDelivery(){
   deliveryQueue=deliveryQueue.catch(()=>undefined).then(()=>deliver(data)).catch(()=>undefined);
 }
 
-function appendEvent({event,stage,module,status,durationMs,error}){
+function appendEvent({event,stage,module,status,durationMs,error,details}){
   const entry={seq:++sequence,time:new Date().toISOString(),event:String(event),stage:String(stage),module:String(module),status:String(status)};
   if(Number.isFinite(durationMs))entry.durationMs=Math.max(0,Math.round(durationMs));
   if(error)entry.error=errorText(error);
+  const sanitized=safeDetails(details);
+  if(sanitized)entry.details=sanitized;
   events.push(entry);
   if(events.length>MAX_EVENTS)events.splice(0,events.length-MAX_EVENTS);
+  window.dispatchEvent(new CustomEvent('cosmo-runtime-diagnostic',{detail:Object.freeze({...entry,details:entry.details?Object.freeze({...entry.details}):undefined})}));
   return entry;
 }
 
@@ -77,12 +91,12 @@ export function startRuntimeDiagnostics(){
   return Object.freeze({started:true,sessionNumber,sessionStartedAt,deviceType});
 }
 
-export function recordRuntimeDiagnostic({event='module_load',stage,module,status,durationMs,error}={}){
+export function recordRuntimeDiagnostic({event='module_load',stage,module,status,durationMs,error,details}={}){
   if(!stage||!module||!status)return null;
   ensureSessionEvent();
-  const entry=appendEvent({event,stage,module,status,durationMs,error});
+  const entry=appendEvent({event,stage,module,status,durationMs,error,details});
   if(hasTelegramAuth())queueDelivery();
-  return Object.freeze({...entry});
+  return Object.freeze({...entry,details:entry.details?Object.freeze({...entry.details}):undefined});
 }
 
 export async function loadRuntimeModule({stage,module,load,validate,validationError}={}){
@@ -106,3 +120,4 @@ export function skipRuntimeModule({stage,module,dependency}={}){
 }
 
 export function getRuntimeSessionInfo(){return Object.freeze({sessionNumber,sessionStartedAt,deviceType})}
+export function getRuntimeDiagnosticSnapshot(){return snapshot()}
