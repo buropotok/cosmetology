@@ -51,3 +51,16 @@ test('emoji popup is anchored above the toolbar, draggable and toggles closed on
   assert.match(source,/placeEmojiPanel\(panel,drag\.left\+event\.clientX-drag\.x,drag\.top\+event\.clientY-drag\.y\)/);
   assert.match(source,/const existing=document\.querySelector\('\.composer-emoji-panel'\);if\(existing\)\{existing\.remove\(\);return\}/);
 });
+
+test('emoji popup is wider, contains a large palette, and scrolls horizontally without stealing the drag handle',()=>{
+  const source=read('./composer-tiptap.js');
+  assert.match(source,/width:min\(440px,calc\(100vw - 16px\)\)/);
+  assert.match(source,/\.composer-emoji-scroll\{display:grid;grid-template-rows:repeat\(4,38px\);grid-auto-flow:column/);
+  assert.match(source,/overflow-x:auto;overflow-y:hidden/);
+  assert.match(source,/touch-action:pan-x/);
+  const emojiArray=source.match(/const EMOJIS=\[(.*?)\];/s)?.[1]||'';
+  assert.ok((emojiArray.match(/'[^']+'/g)||[]).length>150);
+  assert.match(source,/scroll\.className='composer-emoji-scroll'/);
+  assert.match(source,/scroll\.append\(b\)/);
+  assert.match(source,/panel\.append\(scroll\)/);
+});
