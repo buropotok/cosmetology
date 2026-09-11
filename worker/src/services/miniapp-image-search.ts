@@ -204,7 +204,8 @@ function validJpeg(bytes: Uint8Array) {
       if (!sawFrame) return false;
       let scan = offset + length;
       let dataBytes = 0;
-      while (scan < bytes.length - 2) {
+      while (scan <= bytes.length - 2) {
+        if (scan === bytes.length - 2) return bytes[scan] === 0xff && bytes[scan + 1] === 0xd9 && dataBytes > 0;
         if (bytes[scan] !== 0xff) { dataBytes += 1; scan += 1; continue; }
         if (scan + 1 >= bytes.length) return false;
         const next = bytes[scan + 1];
