@@ -10,7 +10,7 @@
   };
   const focusComposer=()=>{
     const richEditor=window.CosmoRichEditor;
-    if(richEditor?.editor?.commands?.focus)richEditor.editor.commands.focus();
+    if(typeof richEditor?.focus==='function')richEditor.focus();
     else text.focus();
   };
 
