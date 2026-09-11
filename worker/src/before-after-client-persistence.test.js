@@ -6,10 +6,13 @@ const root=process.cwd().endsWith('/worker')?resolve(process.cwd(),'..'):process
 const source=name=>readFileSync(resolve(root,'miniapp',name),'utf8');
 
 describe('Before/After client persistence contract',()=>{
-  it('keeps BA source images out of the shared Publisher draft image set',()=>{
+  it('delegates BA state persistence without adding BA source images to the shared Publisher draft image set',()=>{
     const controller=source('before-after-controller.js');
     const saveDraft=controller.match(/async function saveDraft\(snapshot\)\{(.+?)\n  async function saveAsset/s)?.[1]||'';
-    expect(saveDraft).toContain("body.set('beforeAfterState'");
+    expect(saveDraft).toContain('window.CosmoSofaDraft');
+    expect(saveDraft).toContain('setBeforeAfterState(snapshot.state,{persist:true})');
+    expect(saveDraft).toContain("draft.flush('before-after-state')");
+    expect(saveDraft).not.toContain("fetch('/api/miniapp/draft'");
     expect(saveDraft).not.toContain("body.set('imagesChanged','1')");
     expect(saveDraft).not.toContain("body.append('images'");
     expect(controller).toContain("fetch('/api/miniapp/before-after/asset'");

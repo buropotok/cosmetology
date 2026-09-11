@@ -44,7 +44,10 @@ test('loader is transient and reset on reopen',()=>{
 });
 
 test('Before/After identifies its draft mode explicitly without making it a resume route',()=>{
-  assert.match(controller,/body\.set\('screen','beforeafter'\)/);
+  const openBody=functionBody(controller,'open','destroySolo');
+  assert.match(openBody,/CosmoSofaDraft\?\.setScreen\?\.\('beforeafter'\)/);
+  const saveDraftBody=functionBody(controller,'saveDraft','saveAsset');
+  assert.doesNotMatch(saveDraftBody,/setScreen/);
   const start=navigation.indexOf('async function resumeDraft()');
   const end=navigation.indexOf("home.querySelector('#flow-new')",start);
   assert.ok(start>=0&&end>start,'resumeDraft should exist before Home handlers');
