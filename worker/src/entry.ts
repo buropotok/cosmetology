@@ -6,6 +6,7 @@ import { saveBeforeAfterAsset, removeBeforeAfterAsset, swapBeforeAfterAssets } f
 import { generateMiniAppAiReply } from './services/miniapp-ai';
 import { getMiniAppNewsGenerationStatus } from './services/ai-generation-status';
 import { generateMiniAppImage } from './services/miniapp-image-generation';
+import { searchMiniAppImage } from './services/miniapp-image-search';
 import { saveRuntimeDiagnostics } from './services/runtime-diagnostics';
 import { validateTelegramMiniAppInitData } from './services/telegram-miniapp-auth';
 import { resolveOrCreateTelegramIdentity } from './services/telegram-identity';
@@ -50,6 +51,7 @@ export default { async fetch(req: Request, env: Env, ctx: ExecutionContext) {
     if (req.method === 'POST' && url.pathname === '/api/miniapp/ai/chat') return json(await generateMiniAppAiReply(req, env));
     if (req.method === 'GET' && url.pathname === '/api/miniapp/news/status') return json(await getMiniAppNewsGenerationStatus(req, env));
     if (req.method === 'POST' && url.pathname === '/api/miniapp/ai/image') return generateMiniAppImage(req, env);
+    if (req.method === 'POST' && url.pathname === '/api/miniapp/ai/image/search') return searchMiniAppImage(req, env);
     if (req.method === 'POST' && url.pathname === '/api/miniapp/vk-link') return json(await prepareVkLink(req,env));
     if (req.method === 'GET' && url.pathname === '/api/miniapp/draft') return json(await getMiniAppDraft(req,env));
     if (req.method === 'POST' && url.pathname === '/api/miniapp/draft') return json(await saveMiniAppDraft(req,env));

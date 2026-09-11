@@ -24,7 +24,11 @@ test('cancel aborts the active fetch and preserves the previous AI result',()=>{
 });
 
 test('the modal cancel button owns cancellation for every requestAi call',()=>{
+  const requestAiStart=source.indexOf('async function requestAi(');
+  const requestAiEnd=source.indexOf('  function confirmIdea(',requestAiStart);
+  const requestAiBody=requestAiStart>=0&&requestAiEnd>requestAiStart?source.slice(requestAiStart,requestAiEnd):'';
   assert.match(source,/searchCancel\?\.addEventListener\('click',event=>\{event\.preventDefault\(\);cancelAiMessage\(\)\}\)/);
-  assert.match(source,/async function requestAi\(message,mode='text'\)/);
-  assert.match(source,/setPending\(true\)/);
+  assert.match(requestAiBody,/new AbortController\(\)/);
+  assert.match(requestAiBody,/setPending\(true\)/);
+  assert.match(requestAiBody,/signal:controller\.signal/);
 });

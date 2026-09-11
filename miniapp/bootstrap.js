@@ -57,9 +57,9 @@ async function loadComposerRuntime(){
     import('/composer-image-manager.js'),
     import('/before-after-bridge.js')
   ]);
-  await import('/composer-image-generation.js');
   await import('/diagnostics-fetch.js');
   await import('/composer-state.js');
+  await import('/composer-image-generation.js');
   await import('/draft-store.js');
   await import('/drafts.js');
   await import('/composer-actions.js');

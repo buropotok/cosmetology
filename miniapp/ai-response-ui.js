@@ -6,10 +6,26 @@ if (aiResultTitle) {
 }
 
 const responseBody = document.querySelector('[data-ai-response]');
+const DEFAULT_IMAGE_OPTIONS = Object.freeze({ internetSearch: false });
+
+function currentImageOptions() {
+  const value = window.CosmoAiWizardState?.getSnapshot?.().imageOptions;
+  if (value?.internetSearch !== true) return { ...DEFAULT_IMAGE_OPTIONS };
+  return {
+    internetSearch: true,
+    searchProfile: typeof value.searchProfile === 'string' ? value.searchProfile : '',
+    sourcePolicy: typeof value.sourcePolicy === 'string' ? value.sourcePolicy : '',
+  };
+}
 
 function publishPostDocument(doc) {
   window.CosmoAiPostDocument = doc || null;
-  window.dispatchEvent(new CustomEvent('cosmo-ai-post-document', { detail: { document: doc || null } }));
+  window.dispatchEvent(new CustomEvent('cosmo-ai-post-document', {
+    detail: {
+      document: doc || null,
+      imageOptions: doc ? currentImageOptions() : { ...DEFAULT_IMAGE_OPTIONS },
+    },
+  }));
 }
 
 function appendRuns(parent, runs) {
