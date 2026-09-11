@@ -290,6 +290,16 @@ async function askGemini(google: ReturnType<typeof createGoogleGenerativeAI>, mo
   }
 }
 
+function diagnosticContext(req: Request, attempt: number, model: string, searchProfile: string, sourcePolicy: string) {
+  return {
+    traceId: req.headers.get('x-cosmo-trace-id') || null,
+    attempt,
+    model,
+    searchProfile,
+    sourcePolicy,
+  };
+}
+
 export async function searchMiniAppImage(req: Request, env: Env) {
   await validateTelegramMiniAppInitData(getMiniAppInitData(req), env.TELEGRAM_BOT_TOKEN);
   const body = await req.json().catch(() => null) as { text?: unknown; searchProfile?: unknown; sourcePolicy?: unknown } | null;
@@ -307,28 +317,44 @@ export async function searchMiniAppImage(req: Request, env: Env) {
   const failedAttempts: FailedImageAttempt[] = [];
 
   for (let attempt = 0; attempt < MAX_SEARCH_ATTEMPTS; attempt += 1) {
+    const attemptNumber = attempt + 1;
+    const context = diagnosticContext(req, attemptNumber, model, searchProfile, sourcePolicy);
     const prompt = buildImageSearchPrompt(searchProfile, sourcePolicy, text, failedAttempts);
+    console.info('Mini App image search gemini.request', { ...context, prompt });
     let answer: string;
+    const startedAt = Date.now();
     try {
       answer = await askGemini(google, model, prompt, req.signal);
     } catch (error) {
+      console.error('Mini App image search gemini.error', { ...context, durationMs: Date.now() - startedAt, error: error instanceof Error ? error.message : String(error) });
       if (error instanceof AppError) throw error;
-      console.error('Mini App image search failed', { model, searchProfile, sourcePolicy, attempt: attempt + 1, error: error instanceof Error ? error.message : String(error) });
       throw new AppError('AI_IMAGE_SEARCH_FAILED', 'Не удалось выполнить поиск изображения. Попробуйте ещё раз.', 502);
     }
-    if (/^\s*NOT_FOUND\s*$/i.test(answer)) throw new AppError('AI_IMAGE_SEARCH_NOT_FOUND', 'Официальное изображение не найдено', 404);
+    console.info('Mini App image search gemini.response', { ...context, durationMs: Date.now() - startedAt, response: answer });
+    if (/^\s*NOT_FOUND\s*$/i.test(answer)) {
+      console.info('Mini App image search parse.result', { ...context, result: 'not_found' });
+      throw new AppError('AI_IMAGE_SEARCH_NOT_FOUND', 'Официальное изображение не найдено', 404);
+    }
     const result = parseImageSearchResult(answer);
     if (!result) {
-      console.warn('Mini App image search returned malformed result', { model, searchProfile, sourcePolicy, attempt: attempt + 1 });
+      console.warn('Mini App image search parse.result', { ...context, result: 'malformed' });
       continue;
     }
-    if (failedAttempts.some(item => item.imageUrl === result.imageUrl)) continue;
+    console.info('Mini App image search parse.result', { ...context, result: 'parsed', imageUrl: result.imageUrl, sourceUrl: result.sourceUrl, product: result.product });
+    if (failedAttempts.some(item => item.imageUrl === result.imageUrl)) {
+      console.warn('Mini App image search image.download', { ...context, status: 'skipped_repeated_url', imageUrl: result.imageUrl });
+      continue;
+    }
 
+    const downloadStartedAt = Date.now();
+    console.info('Mini App image search image.download', { ...context, status: 'started', imageUrl: result.imageUrl });
     const downloaded = await downloadImage(result.imageUrl, req.signal);
     if (!downloaded.image) {
+      console.warn('Mini App image search image.download', { ...context, status: 'failed', durationMs: Date.now() - downloadStartedAt, imageUrl: result.imageUrl, reason: downloaded.reason });
       failedAttempts.push({ imageUrl: result.imageUrl, reason: downloaded.reason });
       continue;
     }
+    console.info('Mini App image search image.download', { ...context, status: 'completed', durationMs: Date.now() - downloadStartedAt, imageUrl: result.imageUrl, contentType: downloaded.image.contentType, byteLength: downloaded.image.bytes.byteLength });
     return new Response(downloaded.image.bytes, {
       status: 200,
       headers: {
