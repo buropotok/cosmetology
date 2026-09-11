@@ -75,8 +75,8 @@ describe('bounded external response reads',()=>{
   });
 });
 
-describe('external resolution deadline',()=>{
-  it('aborts the resolution signal when the application deadline expires',()=>{
+describe('overall search deadline',()=>{
+  it('aborts the search signal when the application deadline expires',()=>{
     vi.useFakeTimers();
     try{
       const parent=new AbortController();
@@ -107,12 +107,44 @@ describe('external resolution deadline',()=>{
   });
 });
 
+function pngFixture(){
+  return new Uint8Array([
+    0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a,
+    0,0,0,13,0x49,0x48,0x44,0x52,
+    0,0,0,1,0,0,0,1,8,2,0,0,0,0,0,0,0,
+    0,0,0,0,0x49,0x45,0x4e,0x44,0,0,0,0,
+  ]);
+}
+
+function jpegFixture(){
+  return new Uint8Array([
+    0xff,0xd8,
+    0xff,0xc0,0,11,8,0,1,0,1,1,1,0x11,0,
+    0xff,0xd9,
+  ]);
+}
+
+function gifFixture(){
+  return new Uint8Array([0x47,0x49,0x46,0x38,0x39,0x61,1,0,1,0,0,0,0,0x3b]);
+}
+
+function webpFixture(){
+  return new Uint8Array([0x52,0x49,0x46,0x46,12,0,0,0,0x57,0x45,0x42,0x50,0x56,0x50,0x38,0x20,0,0,0,0]);
+}
+
 describe('downloaded image validation',()=>{
-  it('recognizes only supported image signatures',()=>{
-    expect(detectSupportedImageContentType(new Uint8Array([0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a]))).toBe('image/png');
-    expect(detectSupportedImageContentType(new Uint8Array([0xff,0xd8,0xff,0xe0]))).toBe('image/jpeg');
-    expect(detectSupportedImageContentType(new Uint8Array([0x47,0x49,0x46,0x38,0x39,0x61]))).toBe('image/gif');
-    expect(detectSupportedImageContentType(new Uint8Array([0x52,0x49,0x46,0x46,0,0,0,0,0x57,0x45,0x42,0x50]))).toBe('image/webp');
+  it('accepts structurally complete supported image containers',()=>{
+    expect(detectSupportedImageContentType(pngFixture())).toBe('image/png');
+    expect(detectSupportedImageContentType(jpegFixture())).toBe('image/jpeg');
+    expect(detectSupportedImageContentType(gifFixture())).toBe('image/gif');
+    expect(detectSupportedImageContentType(webpFixture())).toBe('image/webp');
+  });
+
+  it('rejects truncated payloads even when their magic prefix is valid',()=>{
+    expect(detectSupportedImageContentType(new Uint8Array([0xff,0xd8,0xff]))).toBe('');
+    expect(detectSupportedImageContentType(pngFixture().slice(0,-12))).toBe('');
+    expect(detectSupportedImageContentType(gifFixture().slice(0,-1))).toBe('');
+    expect(detectSupportedImageContentType(webpFixture().slice(0,-1))).toBe('');
     expect(detectSupportedImageContentType(new TextEncoder().encode('<html>not an image</html>'))).toBe('');
   });
 });
