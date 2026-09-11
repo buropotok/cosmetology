@@ -76,6 +76,5 @@
   });
 
   window.addEventListener('cosmo-ai-post-document',event=>setDocument(event.detail?.document,event.detail?.imageOptions));
-  window.addEventListener('cosmo-ai-wizard-manual',()=>window.CosmoComposerState?.setImageOptions?.({...DEFAULT_IMAGE_OPTIONS}));
   window.CosmoAiPostEditorTransfer=Object.freeze({loadPostDocument});
 })();

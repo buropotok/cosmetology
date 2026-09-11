@@ -29,15 +29,22 @@
   controls.className='new-post-entry';
   controls.hidden=true;
   controls.setAttribute('aria-label','Создание нового поста');
-  controls.innerHTML=`<h2 class="new-post-entry__title">Новый пост</h2><p class="new-post-entry__subtitle">Выберите способ создания публикации</p><div class="new-post-entry__actions"><button type="button" class="new-post-entry__button" data-new-post-choice="ai"><span class="new-post-entry__icon new-post-entry__icon--ai" aria-hidden="true">✨</span><span>Создать пост с помощью AI</span></button><button type="button" class="new-post-entry__button new-post-entry__button--manual" data-new-post-choice="manual"><span class="new-post-entry__icon" aria-hidden="true"><img src="/assets/icons/manual-edit.svg" alt=""></span><span>Создать пост вручную с нуля</span></button><button type="button" class="new-post-entry__button new-post-entry__button--before-after" data-new-post-choice="before-after"><span class="new-post-entry__icon new-post-entry__pair" aria-hidden="true"><img src="/assets/icons/account-box.svg" alt=""><img src="/assets/icons/account-box.svg" alt=""></span><span>ДО / ПОСЛЕ</span></button></div>`;
+  controls.innerHTML=`<h2 class="new-post-entry__title">Новый пост</h2><p class="new-post-entry__subtitle">Выберите способ создания публикации</p><div class="new-post-entry__actions"><button type="button" class="new-post-entry__button" data-new-post-choice="ai"><span class="new-post-entry__icon new-post-entry__icon--ai" aria-hidden="true">✨</span><span>Создать пост с помощью AI</span></button><button type="button" class="new-post-entry__button new-post-entry__button--manual" data-new-post-choice="manual"><span class="new-post-entry__icon" aria-hidden="true"><img src="/assets/icons/manual-edit.svg" alt=""></span><span data-manual-label>Создать пост вручную с нуля</span></button><button type="button" class="new-post-entry__button new-post-entry__button--before-after" data-new-post-choice="before-after"><span class="new-post-entry__icon new-post-entry__pair" aria-hidden="true"><img src="/assets/icons/account-box.svg" alt=""><img src="/assets/icons/account-box.svg" alt=""></span><span>ДО / ПОСЛЕ</span></button></div>`;
   wizard.insertAdjacentElement('beforebegin',controls);
+  const manualLabel=controls.querySelector('[data-manual-label]');
 
   function publishMode(mode){
     screen.dataset.publishMode=mode;
     window.dispatchEvent(new CustomEvent('cosmo-publish-mode',{detail:{mode}}));
   }
 
+  function syncManualLabel(){
+    if(!manualLabel)return;
+    manualLabel.textContent=window.CosmoSofaDraft?.getState?.().hasDraft?'Продолжить редактирование':'Создать пост вручную с нуля';
+  }
+
   function showEntry(){
+    syncManualLabel();
     wizard.hidden=true;
     composerContent.hidden=true;
     controls.hidden=false;
