@@ -100,14 +100,14 @@ export function initComposerEditorKeyboardLayout({
     root.style.removeProperty('--composer-editor-vv-top');
     root.style.removeProperty('--composer-editor-vv-bottom');
   };
-  const exitByPull=()=>{
+  const exitFullscreen=()=>{
     deactivate();
     if(typeof editor.commands?.blur==='function')editor.commands.blur();
   };
   const onFocus=()=>activate();
-  const onRoute=route=>{if(route!=='composer')deactivate()};
-  const onPublishMode=event=>{if(event?.detail?.mode!=='compose')deactivate()};
-  const onBeforeAfterOpen=()=>exitByPull();
+  const onRoute=route=>{if(route!=='composer')exitFullscreen()};
+  const onPublishMode=event=>{if(event?.detail?.mode!=='compose')exitFullscreen()};
+  const onBeforeAfterOpen=()=>exitFullscreen();
   const keepClearFocus=event=>{if(active)event.preventDefault()};
   const onTouchStart=event=>{
     if(!active||event.touches?.length!==1||host.scrollTop>1){pullStart=null;return}
@@ -121,7 +121,7 @@ export function initComposerEditorKeyboardLayout({
     const dx=touch.clientX-pullStart.x;
     const dy=touch.clientY-pullStart.y;
     if(dy>8&&dy>Math.abs(dx))event.preventDefault();
-    if(shouldExitFullscreenOnPull({scrollTop:host.scrollTop,startX:pullStart.x,startY:pullStart.y,currentX:touch.clientX,currentY:touch.clientY}))exitByPull();
+    if(shouldExitFullscreenOnPull({scrollTop:host.scrollTop,startX:pullStart.x,startY:pullStart.y,currentX:touch.clientX,currentY:touch.clientY}))exitFullscreen();
   };
   const clearPull=()=>{pullStart=null};
 
@@ -140,7 +140,7 @@ export function initComposerEditorKeyboardLayout({
 
   const controller={
     update:updateViewport,
-    exit:exitByPull,
+    exit:exitFullscreen,
     destroy(){
       deactivate();
       editor.off('focus',onFocus);
