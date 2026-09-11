@@ -1,6 +1,6 @@
 import {loadRuntimeModule,recordRuntimeDiagnostic,skipRuntimeModule} from './runtime-diagnostics.js';
 
-const RICH_LOADER_VERSION='2026-09-11.2';
+const RICH_LOADER_VERSION='2026-09-11.3';
 const STAGE='new-post.editor-runtime';
 let runtimePromise,runtimeReady=false;
 

@@ -59,6 +59,7 @@ import {postDocumentToTiptap,tiptapToPostDocument} from './post-document-tiptap-
   const changeListeners=new Set();
   let buttons=[];
   function getPlainText(){return editor.getText({blockSeparator:'\n'})}
+  function focus(){editor.commands.focus()}
   function toPostDocument(){return tiptapToPostDocument(editor.getJSON(),buttons)}
   function getSubmissionValue(){return RICH_PREFIX+JSON.stringify(toPostDocument())}
   function notifyChange(reason='content'){const change=Object.freeze({reason});changeListeners.forEach(listener=>listener(change))}
@@ -121,6 +122,6 @@ import {postDocumentToTiptap,tiptapToPostDocument} from './post-document-tiptap-
   const emojiBtn=toolbar.querySelector('[title="Emoji"]');if(emojiBtn){emojiBtn.addEventListener('mousedown',preserve);emojiBtn.addEventListener('click',e=>{e.preventDefault();const existing=document.querySelector('.composer-emoji-panel');if(existing){existing.remove();return}const panel=document.createElement('div');panel.className='composer-emoji-panel';panel.style.visibility='hidden';const handle=document.createElement('div');handle.className='composer-emoji-drag-handle';handle.setAttribute('aria-label','Переместить панель эмодзи');panel.append(handle);const scroll=document.createElement('div');scroll.className='composer-emoji-scroll';scroll.setAttribute('aria-label','Эмодзи');for(const emoji of EMOJIS){const b=document.createElement('button');b.type='button';b.textContent=emoji;b.setAttribute('aria-label',emoji);b.addEventListener('mousedown',preserve);b.addEventListener('click',()=>{editor.chain().focus().insertContent(emoji).run();panel.remove()});scroll.append(b)}panel.append(scroll);document.body.append(panel);positionEmojiPanel(panel,emojiBtn);makeEmojiPanelDraggable(panel,handle);panel.style.visibility=''})}
 
   renderButtons();
-  window.CosmoRichEditor={element:host,editor,toPostDocument,getPlainText,getSubmissionValue,setDocument,subscribe,draftValue,restoreDraft,restorePlain,clear,openButtonEditor};
+  window.CosmoRichEditor={element:host,editor,toPostDocument,getPlainText,focus,getSubmissionValue,setDocument,subscribe,draftValue,restoreDraft,restorePlain,clear,openButtonEditor};
   window.dispatchEvent(new CustomEvent('cosmo-rich-ready'));diag('tiptap-ready',{version:'3.0.2',blockItems:blockItems.length,formatItems:formatItems.length,listItems:listItems.length});
 })();
