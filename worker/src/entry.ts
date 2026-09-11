@@ -6,6 +6,7 @@ import { saveBeforeAfterAsset, removeBeforeAfterAsset, swapBeforeAfterAssets } f
 import { generateMiniAppAiReply } from './services/miniapp-ai';
 import { getMiniAppNewsGenerationStatus } from './services/ai-generation-status';
 import { generateMiniAppImage } from './services/miniapp-image-generation';
+import { searchMiniAppImage } from './services/miniapp-image-search';
 import { saveRuntimeDiagnostics } from './services/runtime-diagnostics';
 import { validateTelegramMiniAppInitData } from './services/telegram-miniapp-auth';
 import { resolveOrCreateTelegramIdentity } from './services/telegram-identity';
@@ -50,6 +51,7 @@ export default { async fetch(req: Request, env: Env, ctx: ExecutionContext) {
     if (req.method === 'POST' && url.pathname === '/api/miniapp/ai/chat') return json(await generateMiniAppAiReply(req, env));
     if (req.method === 'GET' && url.pathname === '/api/miniapp/news/status') return json(await getMiniAppNewsGenerationStatus(req, env));
     if (req.method === 'POST' && url.pathname === '/api/miniapp/ai/image') return generateMiniAppImage(req, env);
+    if (req.method === 'POST' && url.pathname === '/api/miniapp/ai/image/search') return searchMiniAppImage(req, env);
     if (req.method === 'POST' && url.pathname === '/api/miniapp/vk-link') return json(await prepareVkLink(req,env));
     if (req.method === 'GET' && url.pathname === '/api/miniapp/draft') return json(await getMiniAppDraft(req,env));
     if (req.method === 'POST' && url.pathname === '/api/miniapp/draft') return json(await saveMiniAppDraft(req,env));
@@ -63,7 +65,7 @@ export default { async fetch(req: Request, env: Env, ctx: ExecutionContext) {
     const adminTg=url.pathname.match(/^\/api\/admin\/users\/([^/]+)\/telegram-bots\/([^/]+)\/telegram-group$/);if(req.method==='DELETE'&&adminTg)return json(await deleteAdminTelegramGroup(req,env,decodeURIComponent(adminTg[1]),decodeURIComponent(adminTg[2])));
     const adminVk=url.pathname.match(/^\/api\/admin\/users\/([^/]+)\/vk-group$/);if(req.method==='DELETE'&&adminVk)return json(await deleteAdminVkGroup(req,env,decodeURIComponent(adminVk[1])));
     const adminUser=url.pathname.match(/^\/api\/admin\/users\/([^/]+)$/);if(req.method==='DELETE'&&adminUser)return json(await deleteAdminUser(req,env,decodeURIComponent(adminUser[1])));
-    if(req.method==='POST'&&url.pathname==='/api/miniapp/vk-onboarding')return json(await createVkOnboardingHandoff(req,env),201);
+    if(req.method==='POST'&&url.pathname==='/api/miniapp/vk-onboarding')return json(await createVkOnboardingHandoff(req,env,ctx),201);
     const vkOnboarding=url.pathname.match(/^\/api\/vk-onboarding\/([A-Za-z0-9_-]+)$/);if(vkOnboarding&&req.method==='OPTIONS')return new Response(null,{status:204,headers:onboardingCors});
     if(vkOnboarding&&req.method==='GET'&&url.searchParams.get('select')==='1'){const body=JSON.stringify({vkUserId:url.searchParams.get('vkUserId')??'',groupId:url.searchParams.get('groupId')??'',groupName:url.searchParams.get('groupName')??'',screenName:url.searchParams.get('screenName')??''});const syntheticRequest=new Request(req.url,{method:'POST',headers:{'content-type':'application/json'},body});return json(await selectVkOnboardingGroup(env,vkOnboarding[1],syntheticRequest,ctx),200,onboardingCors)}
     if(vkOnboarding&&req.method==='GET')return json(await getVkOnboardingHandoff(env,vkOnboarding[1]),200,onboardingCors);if(vkOnboarding&&req.method==='POST')return json(await selectVkOnboardingGroup(env,vkOnboarding[1],req,ctx),200,onboardingCors);

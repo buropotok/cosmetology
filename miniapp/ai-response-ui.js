@@ -6,10 +6,29 @@ if (aiResultTitle) {
 }
 
 const responseBody = document.querySelector('[data-ai-response]');
+const DEFAULT_IMAGE_OPTIONS = Object.freeze({ internetSearch: false });
+const IMAGE_OPTIONS_BY_PRESET = Object.freeze({
+  'Разбор препарата': Object.freeze({
+    internetSearch: true,
+    searchProfile: 'cosmetic_product',
+    sourcePolicy: 'official',
+  }),
+});
+
+function currentImageOptions() {
+  const preset = window.CosmoAiWizardState?.getSnapshot?.().preset;
+  const configured = typeof preset === 'string' ? IMAGE_OPTIONS_BY_PRESET[preset] : null;
+  return configured ? { ...configured } : { ...DEFAULT_IMAGE_OPTIONS };
+}
 
 function publishPostDocument(doc) {
   window.CosmoAiPostDocument = doc || null;
-  window.dispatchEvent(new CustomEvent('cosmo-ai-post-document', { detail: { document: doc || null } }));
+  window.dispatchEvent(new CustomEvent('cosmo-ai-post-document', {
+    detail: {
+      document: doc || null,
+      imageOptions: doc ? currentImageOptions() : { ...DEFAULT_IMAGE_OPTIONS },
+    },
+  }));
 }
 
 function appendRuns(parent, runs) {

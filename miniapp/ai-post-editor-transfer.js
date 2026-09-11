@@ -2,7 +2,9 @@
   const controlPanel=document.querySelector('#publish-ai-wizard [data-ai-control-panel]');
   if(!controlPanel)return;
   const EDITOR_READY_TIMEOUT_MS=10000;
+  const DEFAULT_IMAGE_OPTIONS=Object.freeze({internetSearch:false});
   let currentDocument=window.CosmoAiPostDocument||null;
+  let currentImageOptions={...DEFAULT_IMAGE_OPTIONS};
 
   const action=document.createElement('button');
   action.type='button';
@@ -11,8 +13,18 @@
   action.hidden=!currentDocument;
   controlPanel.append(action);
 
-  function setDocument(doc){
+  function normalizeImageOptions(value){
+    if(value?.internetSearch!==true)return{...DEFAULT_IMAGE_OPTIONS};
+    return{
+      internetSearch:true,
+      searchProfile:typeof value.searchProfile==='string'?value.searchProfile.trim():'',
+      sourcePolicy:typeof value.sourcePolicy==='string'?value.sourcePolicy.trim():'',
+    };
+  }
+
+  function setDocument(doc,imageOptions){
     currentDocument=doc?.schemaVersion===2&&Array.isArray(doc.blocks)?doc:null;
+    currentImageOptions=currentDocument?normalizeImageOptions(imageOptions):{...DEFAULT_IMAGE_OPTIONS};
     action.hidden=!currentDocument;
   }
 
@@ -39,17 +51,19 @@
     });
   }
 
-  async function loadPostDocument(doc){
+  async function loadPostDocument(doc,imageOptions=currentImageOptions){
     const editor=await waitForEditor();
     if(!editor)return false;
-    return editor.setDocument(doc)===true;
+    if(editor.setDocument(doc)!==true)return false;
+    window.CosmoComposerState?.setImageOptions?.(normalizeImageOptions(imageOptions));
+    return true;
   }
 
   action.addEventListener('click',async()=>{
     if(!currentDocument||action.disabled)return;
     action.disabled=true;
     try{
-      if(!await loadPostDocument(currentDocument)){
+      if(!await loadPostDocument(currentDocument,currentImageOptions)){
         window.Telegram?.WebApp?.showAlert?.('Не удалось загрузить публикацию в редактор. Попробуйте ещё раз.');
         return;
       }
@@ -61,6 +75,7 @@
     }
   });
 
-  window.addEventListener('cosmo-ai-post-document',event=>setDocument(event.detail?.document));
+  window.addEventListener('cosmo-ai-post-document',event=>setDocument(event.detail?.document,event.detail?.imageOptions));
+  window.addEventListener('cosmo-ai-wizard-manual',()=>window.CosmoComposerState?.setImageOptions?.({...DEFAULT_IMAGE_OPTIONS}));
   window.CosmoAiPostEditorTransfer=Object.freeze({loadPostDocument});
 })();

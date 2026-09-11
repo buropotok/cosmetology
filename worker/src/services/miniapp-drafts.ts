@@ -6,6 +6,7 @@ import { MINIAPP_IMAGE_MAX_BYTES, MINIAPP_IMAGE_MAX_COUNT, MINIAPP_TEXT_MAX_LENG
 const DOWNLOAD_TTL_SECONDS = 5 * 60;
 const AI_STATE_MAX_LENGTH = 100_000;
 const BEFORE_AFTER_STATE_MAX_LENGTH = 50_000;
+const IMAGE_OPTIONS_MAX_LENGTH = 1_000;
 function initDataFrom(request: Request) { return request.headers.get('authorization')?.match(/^tma\s+(.+)$/i)?.[1] ?? ''; }
 async function accountFor(request: Request, env: Env) {
   const validated = await validateTelegramMiniAppInitData(initDataFrom(request), env.TELEGRAM_BOT_TOKEN);
@@ -20,22 +21,36 @@ async function signedDownloadUrl(env: Env, key: string) {
   const expires=Math.floor(Date.now()/1000)+DOWNLOAD_TTL_SECONDS,signature=await downloadSignature(env,key,expires);
   return `/api/miniapp/draft/image/${encodeURIComponent(key)}?download=1&expires=${expires}&signature=${encodeURIComponent(signature)}`;
 }
+function parseImageOptions(value: string) {
+  if (!value) return { internetSearch: false };
+  let parsed: unknown;
+  try { parsed=JSON.parse(value); } catch { throw new AppError('INVALID_IMAGE_OPTIONS','Некорректные параметры изображения',400); }
+  if (!parsed || typeof parsed !== 'object') throw new AppError('INVALID_IMAGE_OPTIONS','Некорректные параметры изображения',400);
+  const input=parsed as Record<string,unknown>;
+  if (input.internetSearch !== true) return { internetSearch: false };
+  const searchProfile=typeof input.searchProfile==='string'?input.searchProfile.trim():'';
+  const sourcePolicy=typeof input.sourcePolicy==='string'?input.sourcePolicy.trim():'';
+  if (!searchProfile || !sourcePolicy) throw new AppError('INVALID_IMAGE_OPTIONS','Для интернет-поиска нужны searchProfile и sourcePolicy',400);
+  if (searchProfile.length>64 || sourcePolicy.length>64) throw new AppError('INVALID_IMAGE_OPTIONS','Параметры поиска изображения слишком длинные',400);
+  return { internetSearch:true,searchProfile,sourcePolicy };
+}
 
 export async function getMiniAppDraft(request: Request, env: Env) {
   const account = await accountFor(request, env);
-  const draft = await env.DB.prepare('SELECT text_content AS text, platform, active_photo_index AS activePhotoIndex, screen, ai_state AS aiStateJson, before_after_state AS beforeAfterStateJson, updated_at AS updatedAt FROM miniapp_drafts WHERE user_id=?').bind(account.userId).first<{text:string;platform:string;activePhotoIndex:number;screen:string;aiStateJson:string;beforeAfterStateJson:string;updatedAt:string}>();
+  const draft = await env.DB.prepare('SELECT text_content AS text, platform, active_photo_index AS activePhotoIndex, screen, ai_state AS aiStateJson, before_after_state AS beforeAfterStateJson, image_options AS imageOptionsJson, updated_at AS updatedAt FROM miniapp_drafts WHERE user_id=?').bind(account.userId).first<{text:string;platform:string;activePhotoIndex:number;screen:string;aiStateJson:string;beforeAfterStateJson:string;imageOptionsJson:string;updatedAt:string}>();
   if (!draft) return { draft: null };
-  const { aiStateJson, beforeAfterStateJson, ...rest } = draft;
-  let aiState: unknown = null, beforeAfterState: unknown = null;
+  const { aiStateJson, beforeAfterStateJson, imageOptionsJson, ...rest } = draft;
+  let aiState: unknown = null, beforeAfterState: unknown = null, imageOptions: unknown = { internetSearch:false };
   try { aiState = aiStateJson ? JSON.parse(aiStateJson) : null; } catch { aiState = null; }
   try { beforeAfterState = beforeAfterStateJson ? JSON.parse(beforeAfterStateJson) : null; } catch { beforeAfterState = null; }
+  try { imageOptions = parseImageOptions(imageOptionsJson || ''); } catch { imageOptions = { internetSearch:false }; }
   const images = await env.DB.prepare('SELECT position, r2_key AS key, file_name AS fileName, content_type AS contentType, size_bytes AS size FROM miniapp_draft_images WHERE user_id=? ORDER BY position').bind(account.userId).all<{position:number;key:string;fileName:string|null;contentType:string|null;size:number}>();
   const mapped=[]; for(const image of images.results || []) mapped.push({ ...image, url: await signedDownloadUrl(env,image.key) });
   const ba = await env.DB.prepare(`SELECT refs.before_asset_id AS beforeId,refs.after_asset_id AS afterId,b.r2_key AS beforeKey,b.file_name AS beforeFileName,b.content_type AS beforeContentType,b.size_bytes AS beforeSize,a.r2_key AS afterKey,a.file_name AS afterFileName,a.content_type AS afterContentType,a.size_bytes AS afterSize FROM miniapp_before_after_assets refs LEFT JOIN media_assets b ON b.id=refs.before_asset_id AND b.user_id=refs.user_id LEFT JOIN media_assets a ON a.id=refs.after_asset_id AND a.user_id=refs.user_id WHERE refs.user_id=?`).bind(account.userId).first<{beforeId:string|null;afterId:string|null;beforeKey:string|null;beforeFileName:string|null;beforeContentType:string|null;beforeSize:number|null;afterKey:string|null;afterFileName:string|null;afterContentType:string|null;afterSize:number|null}>();
   const beforeAfterImages:{role:'before'|'after';assetId:string;key:string;fileName:string|null;contentType:string|null;size:number;url:string}[]=[];
   if(ba?.beforeId&&ba.beforeKey)beforeAfterImages.push({role:'before',assetId:ba.beforeId,key:ba.beforeKey,fileName:ba.beforeFileName,contentType:ba.beforeContentType,size:Number(ba.beforeSize||0),url:await signedDownloadUrl(env,ba.beforeKey)});
   if(ba?.afterId&&ba.afterKey)beforeAfterImages.push({role:'after',assetId:ba.afterId,key:ba.afterKey,fileName:ba.afterFileName,contentType:ba.afterContentType,size:Number(ba.afterSize||0),url:await signedDownloadUrl(env,ba.afterKey)});
-  return { draft: { ...rest, aiState, beforeAfterState, images: mapped, beforeAfterImages } };
+  return { draft: { ...rest, aiState, beforeAfterState, imageOptions, images: mapped, beforeAfterImages } };
 }
 
 export async function saveMiniAppDraft(request: Request, env: Env) {
@@ -55,8 +70,11 @@ export async function saveMiniAppDraft(request: Request, env: Env) {
   const beforeAfterStateJson = typeof form.get('beforeAfterState') === 'string' ? String(form.get('beforeAfterState')) : '';
   if (beforeAfterStateJson.length > BEFORE_AFTER_STATE_MAX_LENGTH) throw new AppError('INVALID_BEFORE_AFTER_STATE','Состояние До/После слишком большое',400);
   if (beforeAfterStateJson) { try { JSON.parse(beforeAfterStateJson); } catch { throw new AppError('INVALID_BEFORE_AFTER_STATE','Некорректное состояние До/После',400); } }
+  const rawImageOptions = typeof form.get('imageOptions') === 'string' ? String(form.get('imageOptions')) : '';
+  if (rawImageOptions.length > IMAGE_OPTIONS_MAX_LENGTH) throw new AppError('INVALID_IMAGE_OPTIONS','Параметры изображения слишком большие',400);
+  const imageOptionsJson = JSON.stringify(parseImageOptions(rawImageOptions));
   const imagesChanged = form.get('imagesChanged') === '1';
-  await env.DB.prepare(`INSERT INTO miniapp_drafts(user_id,text_content,platform,active_photo_index,screen,ai_state,before_after_state,created_at,updated_at) VALUES(?,?,?,?,?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP) ON CONFLICT(user_id) DO UPDATE SET text_content=excluded.text_content,platform=excluded.platform,active_photo_index=excluded.active_photo_index,screen=excluded.screen,ai_state=excluded.ai_state,before_after_state=excluded.before_after_state,updated_at=CURRENT_TIMESTAMP`).bind(account.userId,text,platform,activePhotoIndex,screen,aiStateJson,beforeAfterStateJson).run();
+  await env.DB.prepare(`INSERT INTO miniapp_drafts(user_id,text_content,platform,active_photo_index,screen,ai_state,before_after_state,image_options,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP) ON CONFLICT(user_id) DO UPDATE SET text_content=excluded.text_content,platform=excluded.platform,active_photo_index=excluded.active_photo_index,screen=excluded.screen,ai_state=excluded.ai_state,before_after_state=excluded.before_after_state,image_options=excluded.image_options,updated_at=CURRENT_TIMESTAMP`).bind(account.userId,text,platform,activePhotoIndex,screen,aiStateJson,beforeAfterStateJson,imageOptionsJson).run();
   if (imagesChanged) {
     const rawImages = form.getAll('images');
     if (rawImages.some(item => !(item instanceof File))) throw new AppError('INVALID_IMAGE','Некорректное изображение',400);
