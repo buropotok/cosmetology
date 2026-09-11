@@ -109,7 +109,8 @@ import{recordRuntimeDiagnostic}from'/runtime-diagnostics.js';
     return Promise.resolve(accepted);
   }
 
-  function addImage(blob,prefix,operation){
+  function addImage(blob,prefix){
+    const operation=activeRequest;
     const images=window.CosmoComposerImages;
     const beforeCount=images?.getFiles?.().length||0;
     trace(operation,'image.add','started',{beforeCount,mimeType:blob.type,sizeBytes:blob.size});
@@ -136,7 +137,7 @@ import{recordRuntimeDiagnostic}from'/runtime-diagnostics.js';
     if(status){status.textContent='Gemini создаёт изображение по тексту публикации…';status.className=''}
     const {blob}=await requestImage('/api/miniapp/ai/image',{text:postText},operation);
     assertCurrentRequest(operation);
-    addImage(blob,'gemini',operation);
+    addImage(blob,'gemini');
     assertCurrentRequest(operation);
     if(status){status.textContent='Изображение сгенерировано и добавлено к публикации.';status.className='success'}
     trace(operation,'generation.completed','success');
@@ -153,7 +154,7 @@ import{recordRuntimeDiagnostic}from'/runtime-diagnostics.js';
       sourcePolicy:options.sourcePolicy,
     },operation);
     assertCurrentRequest(operation);
-    addImage(blob,'official',operation);
+    addImage(blob,'official');
     assertCurrentRequest(operation);
     if(status){
       let sourceHost='';
