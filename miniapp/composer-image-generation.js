@@ -8,6 +8,11 @@
     try{return (window.CosmoRichEditor?.getPlainText?.()??text.value).trim()}
     catch{return text.value.trim()}
   };
+  const focusComposer=()=>{
+    const richEditor=window.CosmoRichEditor;
+    if(richEditor?.editor?.commands?.focus)richEditor.editor.commands.focus();
+    else text.focus();
+  };
 
   const generateButton=document.createElement('button');
   generateButton.type='button';
@@ -19,7 +24,7 @@
     const postText=currentPostText();
     if(!postText){
       if(status){status.textContent='Сначала введите текст публикации.';status.className='error'}
-      (window.CosmoRichEditor?.element||text).focus?.();
+      focusComposer();
       return;
     }
     const webApp=window.Telegram?.WebApp;
