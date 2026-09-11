@@ -27,16 +27,16 @@ test('fullscreen state clears when Composer leaves its route, publish mode, or o
   const beforeAfter=read('./before-after-controller.js');
   assert.match(source,/const onRoute=route=>\{if\(route!=='composer'\)deactivate\(\)\}/);
   assert.match(source,/const onPublishMode=event=>\{if\(event\?\.detail\?\.mode!=='compose'\)deactivate\(\)\}/);
-  assert.match(source,/const onBeforeAfterLifecycle=event=>\{if\(event\?\.detail\?\.state==='open'\)exitByPull\(\)\}/);
+  assert.match(source,/const onBeforeAfterOpen=\(\)=>exitByPull\(\)/);
   assert.match(source,/router\.subscribe\(onRoute\)/);
   assert.match(source,/win\.addEventListener\('cosmo-publish-mode',onPublishMode\)/);
-  assert.match(source,/win\.addEventListener\('cosmo-before-after-lifecycle',onBeforeAfterLifecycle\)/);
+  assert.match(source,/win\.addEventListener\('cosmo-before-after-open',onBeforeAfterOpen\)/);
   assert.match(source,/win\.removeEventListener\('cosmo-publish-mode',onPublishMode\)/);
-  assert.match(source,/win\.removeEventListener\('cosmo-before-after-lifecycle',onBeforeAfterLifecycle\)/);
+  assert.match(source,/win\.removeEventListener\('cosmo-before-after-open',onBeforeAfterOpen\)/);
   assert.match(source,/unsubscribeRoute\(\)/);
-  assert.match(beforeAfter,/new CustomEvent\('cosmo-before-after-lifecycle',\{detail:\{state,mode\}\}\)/);
-  assert.match(beforeAfter,/ensureOverlay\('solo'\);emitLifecycle\('open','solo'\)/);
-  assert.match(beforeAfter,/ensureOverlay\('dual'\);emitLifecycle\('open','dual'\)/);
+  assert.match(beforeAfter,/new CustomEvent\('cosmo-before-after-open',\{detail:\{mode\}\}\)/);
+  assert.match(beforeAfter,/ensureOverlay\('solo'\);emitOpen\('solo'\)/);
+  assert.match(beforeAfter,/ensureOverlay\('dual'\);emitOpen\('dual'\)/);
 });
 
 test('emoji popup is anchored above the toolbar, draggable and toggles closed on a second button press',()=>{
