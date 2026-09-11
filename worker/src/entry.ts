@@ -22,7 +22,7 @@ async function handleImageSearch(req:Request,env:Env){
   const started=Date.now();
   imageSearchTrace(req,'request.started');
   try{
-    const response=await searchMiniAppImage(req,env);
+    const response=await searchMiniAppImage(req, env);
     let sourceHost='';
     const source=response.headers.get('x-cosmo-image-source');
     try{sourceHost=source?new URL(source).hostname.replace(/^www\./,''):''}catch{}
