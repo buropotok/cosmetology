@@ -12,7 +12,9 @@ const bootstrap=fs.readFileSync(new URL('./bootstrap.js',import.meta.url),'utf8'
 
 test('product review binds official-image options to the generated response before transfer',()=>{
   assert.match(wizard,/PRODUCT_REVIEW_IMAGE_OPTIONS=Object\.freeze\(\{internetSearch:true,searchProfile:'cosmetic_product',sourcePolicy:'official'\}\)/);
-  assert.match(wizard,/requestAi\(productReviewPrompt\(name\),'text',PRODUCT_REVIEW_IMAGE_OPTIONS\)/);
+  assert.match(wizard,/imageOptionsForPreset\(preset\)\{return preset==='Разбор препарата'\?PRODUCT_REVIEW_IMAGE_OPTIONS:DEFAULT_IMAGE_OPTIONS\}/);
+  assert.match(wizard,/requestAi\(message,mode='text',imageOptions=imageOptionsForPreset\(activePreset\(\)\)\)/);
+  assert.match(wizard,/void requestAi\(productReviewPrompt\(name\),'text'\)/);
   assert.match(wizard,/currentImageOptions=normalizeImageOptions\(snapshot\.imageOptions\)/);
   assert.match(wizard,/imageOptions:\{\.\.\.currentImageOptions\}/);
   assert.match(responseUi,/getSnapshot\?\.\(\)\.imageOptions/);
