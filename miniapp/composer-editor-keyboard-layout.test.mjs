@@ -36,13 +36,13 @@ test('Composer keyboard layout anchors controls and keeps overflowing text scrol
   assert.match(source,/\.composer-tiptap-editor\{order:1;flex:1 1 auto;min-height:0!important/);
   assert.match(source,/overflow-y:auto!important/);
   assert.match(source,/\.composer-editor-footer\{display:none!important\}/);
-  assert.match(source,/\.composer-tool-panel\{top:auto!important;bottom:43px!important\}/);
+  assert.match(source,/\.composer-tool-menu \.composer-tool-panel\{top:auto!important;bottom:calc\(100% \+ 6px\)!important\}/);
   assert.match(source,/win\.addEventListener\('resize',updateViewport\)/);
   assert.match(source,/win\.removeEventListener\('resize',updateViewport\)/);
   assert.match(source,/viewport\?\.addEventListener\?\.\('resize',updateViewport\)/);
   assert.match(source,/viewport\?\.addEventListener\?\.\('scroll',updateViewport\)/);
   assert.match(source,/editor\.off\('focus',onFocus\)/);
-  assert.match(source,/editor\.off\('blur',onBlur\)/);
+  assert.doesNotMatch(source,/editor\.off\('blur'/);
   assert.match(runtime,/module:'composer-editor-keyboard-layout'/);
   assert.match(runtime,/initComposerEditorKeyboardLayout\(\)/);
   assert.match(runtime,/modules:\{tiptap,placeholder,fixes\}/);
