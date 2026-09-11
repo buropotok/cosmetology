@@ -104,7 +104,9 @@ export function officialHostMatches(actual: string, expected: string) {
 export function extractExpectedOfficialHost(text: string) {
   const match = text.trim().match(/^FOUND\s*[—-]\s*.+?\s*[—-]\s*([^\s]+)\s*$/i);
   if (!match) return '';
-  const host = normalizedHost(match[1]);
+  const rawHost = match[1].trim();
+  if (/[\/:?#@]/.test(rawHost)) return '';
+  const host = normalizedHost(rawHost);
   if (!host || host.includes(':') || host === 'localhost' || host.endsWith('.local') || host.endsWith('.internal')) return '';
   return host;
 }
