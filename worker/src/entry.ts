@@ -13,10 +13,25 @@ import { resolveOrCreateTelegramIdentity } from './services/telegram-identity';
 import { decryptManagedBotToken } from './services/managed-bot-crypto';
 import { deleteTelegramMessageWithToken, getTelegramBotMeWithToken, sendTelegramVkBackupWithToken } from './services/telegram';
 import { adminHtml, listAdminUsers, deleteAdminTelegramBot, deleteAdminTelegramGroup, deleteAdminVkGroup, deleteAdminUser } from './admin';
-import { AppError, type Env } from './types';
+import { AppError, isAppError, type Env } from './types';
 
 const json = (body: unknown, status = 200, extra: HeadersInit = {}) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', ...extra } });
 const onboardingCors = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'content-type', 'access-control-allow-methods': 'GET, POST, OPTIONS' };
+const imageSearchTrace=(req:Request,event:string,details:Record<string,unknown>={})=>console.log(JSON.stringify({component:'miniapp-image-search',event,traceId:req.headers.get('x-cosmo-trace-id')||'missing',...details}));
+async function handleImageSearch(req:Request,env:Env){
+  const started=Date.now();
+  imageSearchTrace(req,'request.started');
+  try{
+    const response=await searchMiniAppImage(req,env);
+    imageSearchTrace(req,'request.completed',{status:response.status,durationMs:Date.now()-started,sourceHost:safeHost(response.headers.get('x-cosmo-image-source'))});
+    return response;
+  }catch(error){
+    const appError=isAppError(error)?error:null;
+    imageSearchTrace(req,'request.failed',{status:appError?.status||500,errorCode:appError?.code||'INTERNAL_ERROR',durationMs:Date.now()-started});
+    throw error;
+  }
+}
+function safeHost(value:string|null){if(!value)return '';try{return new URL(value).hostname.replace(/^www\./,'')}catch{return ''}}
 
 type VkBackupTarget={telegram_bot_id:string;telegram_chat_id:string;token_ciphertext:string;token_iv:string;token_key_version:number};
 async function prepareVkLink(req: Request, env: Env) {
@@ -51,7 +66,7 @@ export default { async fetch(req: Request, env: Env, ctx: ExecutionContext) {
     if (req.method === 'POST' && url.pathname === '/api/miniapp/ai/chat') return json(await generateMiniAppAiReply(req, env));
     if (req.method === 'GET' && url.pathname === '/api/miniapp/news/status') return json(await getMiniAppNewsGenerationStatus(req, env));
     if (req.method === 'POST' && url.pathname === '/api/miniapp/ai/image') return generateMiniAppImage(req, env);
-    if (req.method === 'POST' && url.pathname === '/api/miniapp/ai/image/search') return searchMiniAppImage(req, env);
+    if (req.method === 'POST' && url.pathname === '/api/miniapp/ai/image/search') return handleImageSearch(req, env);
     if (req.method === 'POST' && url.pathname === '/api/miniapp/vk-link') return json(await prepareVkLink(req,env));
     if (req.method === 'GET' && url.pathname === '/api/miniapp/draft') return json(await getMiniAppDraft(req,env));
     if (req.method === 'POST' && url.pathname === '/api/miniapp/draft') return json(await saveMiniAppDraft(req,env));
@@ -72,7 +87,7 @@ export default { async fetch(req: Request, env: Env, ctx: ExecutionContext) {
     if(req.method==='POST'&&url.pathname==='/api/miniapp/vk-handoff')return json(await createVkHandoff(req,env,ctx),201);
     const handoffMatch=url.pathname.match(/^\/api\/vk-handoff\/([A-Za-z0-9_-]+)$/);if(req.method==='GET'&&handoffMatch)return json(await getVkHandoff(env,handoffMatch[1],url.origin));
     const handoffUploadMatch=url.pathname.match(/^\/api\/vk-handoff-upload\/([A-Za-z0-9_-]+)$/);if(req.method==='POST'&&handoffUploadMatch)return json(await uploadVkHandoffImage(env,handoffUploadMatch[1],req));
-    const handoffImageMatch=url.pathname.match(/^\/api\/vk-handoff-image\/([A-Za-z0-9_-]+)$/);if(req.method==='GET'&&handoffImageMatch){const object=await getVkHandoffImage(env,handoffImageMatch[1]);if(!object)return new Response('Not found',{status:404});const headers=new Headers();object.writeHttpMetadata(headers);headers.set('etag',object.httpEtag);headers.set('cache-control','public, max-age=300');headers.set('x-content-type-options','nosniff');return new Response(object.body,{headers})}
+    const handoffImageMatch=url.pathname.match(/^\/api\/vk-handoff-image\/([A-Za-z0-9_-]+)$/);if(req.method==='GET'&&handoffImageMatch){const object=await getMiniAppDraftImage(req,env,decodeURIComponent(handoffImageMatch[1]));if(!object)return new Response('Not found',{status:404});return object}
     return worker.fetch(req,env);
-  } catch(error){const err=error instanceof AppError?error:new AppError('INTERNAL_ERROR','Внутренняя ошибка сервера');if(!(error instanceof AppError))console.error(error);const cors=url.pathname.startsWith('/api/vk-onboarding/')?onboardingCors:{};return json({error:{code:err.code,message:err.message}},err.status,cors)}
+  } catch(error){const err=isAppError(error)?error:new AppError('INTERNAL_ERROR','Внутренняя ошибка сервера');if(!isAppError(error))console.error(error);const cors=url.pathname.startsWith('/api/vk-onboarding/')?onboardingCors:{};return json({error:{code:err.code,message:err.message}},err.status,cors)}
 }};
