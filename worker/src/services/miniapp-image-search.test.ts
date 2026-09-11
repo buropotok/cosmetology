@@ -108,6 +108,36 @@ describe('overall search deadline',()=>{
 });
 
 function pngFixture(){
+  return new Uint8Array([137,80,78,71,13,10,26,10,0,0,0,13,73,72,68,82,0,0,0,1,0,0,0,1,8,4,0,0,0,181,28,12,2,0,0,0,11,73,68,65,84,120,218,99,100,248,15,0,1,5,1,1,39,24,227,102,0,0,0,0,73,69,78,68,174,66,96,130]);
+}
+
+function jpegFixture(){
+  return new Uint8Array([
+    0xff,0xd8,
+    0xff,0xc0,0,11,8,0,1,0,1,1,1,0x11,0,
+    0xff,0xda,0,8,1,1,0,0,63,0,
+    1,
+    0xff,0xd9,
+  ]);
+}
+
+function gifFixture(){
+  return new Uint8Array([
+    0x47,0x49,0x46,0x38,0x39,0x61,1,0,1,0,0,0,0,
+    0x2c,0,0,0,0,1,0,1,0,0,
+    2,1,0,0,
+    0x3b,
+  ]);
+}
+
+function webpFixture(){
+  return new Uint8Array([
+    0x52,0x49,0x46,0x46,18,0,0,0,0x57,0x45,0x42,0x50,
+    0x56,0x50,0x38,0x4c,5,0,0,0,0x2f,0,0,0,0,0,
+  ]);
+}
+
+function headerOnlyPngFixture(){
   return new Uint8Array([
     0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a,
     0,0,0,13,0x49,0x48,0x44,0x52,
@@ -116,28 +146,25 @@ function pngFixture(){
   ]);
 }
 
-function jpegFixture(){
-  return new Uint8Array([
-    0xff,0xd8,
-    0xff,0xc0,0,11,8,0,1,0,1,1,1,0x11,0,
-    0xff,0xd9,
-  ]);
-}
-
-function gifFixture(){
-  return new Uint8Array([0x47,0x49,0x46,0x38,0x39,0x61,1,0,1,0,0,0,0,0x3b]);
-}
-
-function webpFixture(){
-  return new Uint8Array([0x52,0x49,0x46,0x46,12,0,0,0,0x57,0x45,0x42,0x50,0x56,0x50,0x38,0x20,0,0,0,0]);
-}
-
 describe('downloaded image validation',()=>{
-  it('accepts structurally complete supported image containers',()=>{
+  it('accepts supported image containers with actual image data',()=>{
     expect(detectSupportedImageContentType(pngFixture())).toBe('image/png');
     expect(detectSupportedImageContentType(jpegFixture())).toBe('image/jpeg');
     expect(detectSupportedImageContentType(gifFixture())).toBe('image/gif');
     expect(detectSupportedImageContentType(webpFixture())).toBe('image/webp');
+  });
+
+  it('rejects header-only image containers',()=>{
+    expect(detectSupportedImageContentType(headerOnlyPngFixture())).toBe('');
+    expect(detectSupportedImageContentType(new Uint8Array([
+      0xff,0xd8,0xff,0xc0,0,11,8,0,1,0,1,1,1,0x11,0,0xff,0xd9,
+    ]))).toBe('');
+    expect(detectSupportedImageContentType(new Uint8Array([
+      0x47,0x49,0x46,0x38,0x39,0x61,1,0,1,0,0,0,0,0x3b,
+    ]))).toBe('');
+    expect(detectSupportedImageContentType(new Uint8Array([
+      0x52,0x49,0x46,0x46,12,0,0,0,0x57,0x45,0x42,0x50,0x56,0x50,0x38,0x20,0,0,0,0,
+    ]))).toBe('');
   });
 
   it('rejects truncated payloads even when their magic prefix is valid',()=>{
