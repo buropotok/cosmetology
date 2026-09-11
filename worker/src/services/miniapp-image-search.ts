@@ -1,18 +1,22 @@
-import { createGoogleGenerativeAI } from '@ai-sdk/google';
-import { generateText } from 'ai';
 import { AppError, type Env } from '../types';
 import { MINIAPP_IMAGE_MAX_BYTES } from './miniapp';
 import { validateTelegramMiniAppInitData } from './telegram-miniapp-auth';
 import { buildImageSearchPrompt, type FailedImageAttempt } from './image-search-profiles';
 
-const DEFAULT_SEARCH_MODEL = 'gemini-2.5-flash';
+const DEFAULT_SEARCH_MODEL = 'gpt-5.6-luna';
 const MAX_POST_LENGTH = 12000;
 const MAX_SEARCH_ATTEMPTS = 3;
-const GEMINI_TIMEOUT_MS = 20_000;
+const OPENAI_TIMEOUT_MS = 20_000;
 const IMAGE_DOWNLOAD_TIMEOUT_MS = 10_000;
 const MAX_REDIRECTS = 5;
+const OPENAI_RESPONSES_URL = 'https://api.openai.com/v1/responses';
 
 type SearchResult = { imageUrl: string; sourceUrl: string; product: string };
+type OpenAIResponse = {
+  output_text?: unknown;
+  output?: Array<{ type?: unknown; content?: Array<{ type?: unknown; text?: unknown }> }>;
+  error?: { message?: unknown };
+};
 
 function getMiniAppInitData(req: Request) {
   return req.headers.get('authorization')?.match(/^tma\s+(.+)$/i)?.[1] ?? '';
@@ -269,18 +273,44 @@ export async function downloadImage(imageUrl: string, parentSignal: AbortSignal)
   }
 }
 
-async function askGemini(google: ReturnType<typeof createGoogleGenerativeAI>, model: string, prompt: string, parentSignal: AbortSignal) {
-  const deadline = createOperationDeadline(parentSignal, GEMINI_TIMEOUT_MS);
+function extractOpenAIText(payload: OpenAIResponse) {
+  if (typeof payload.output_text === 'string' && payload.output_text.trim()) return payload.output_text;
+  for (const item of payload.output || []) {
+    if (item?.type !== 'message') continue;
+    for (const content of item.content || []) {
+      if (content?.type === 'output_text' && typeof content.text === 'string') return content.text;
+    }
+  }
+  return '';
+}
+
+async function askOpenAI(apiKey: string, model: string, prompt: string, parentSignal: AbortSignal) {
+  const deadline = createOperationDeadline(parentSignal, OPENAI_TIMEOUT_MS);
   try {
-    const result = await generateText({
-      model: google(model),
-      tools: { google_search: google.tools.googleSearch({}) },
-      abortSignal: deadline.signal,
-      prompt,
+    const response = await fetch(OPENAI_RESPONSES_URL, {
+      method: 'POST',
+      signal: deadline.signal,
+      headers: {
+        authorization: `Bearer ${apiKey}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        model,
+        tools: [{ type: 'web_search' }],
+        input: prompt,
+      }),
     });
     if (parentSignal.aborted) throw new AppError('AI_IMAGE_SEARCH_CANCELLED', 'Поиск изображения отменён', 499);
     if (deadline.timedOut()) throw new AppError('AI_IMAGE_SEARCH_TIMEOUT', 'Поиск официального изображения занял слишком много времени. Попробуйте ещё раз.', 504);
-    return result.text;
+    const payload = await response.json().catch(() => null) as OpenAIResponse | null;
+    if (!response.ok) {
+      const message = typeof payload?.error?.message === 'string' ? payload.error.message : `OpenAI HTTP ${response.status}`;
+      throw new Error(message);
+    }
+    if (!payload) throw new Error('OpenAI returned invalid JSON');
+    const text = extractOpenAIText(payload).trim();
+    if (!text) throw new Error('OpenAI returned empty text');
+    return text;
   } catch (error) {
     if (parentSignal.aborted) throw new AppError('AI_IMAGE_SEARCH_CANCELLED', 'Поиск изображения отменён', 499);
     if (deadline.timedOut()) throw new AppError('AI_IMAGE_SEARCH_TIMEOUT', 'Поиск официального изображения занял слишком много времени. Попробуйте ещё раз.', 504);
@@ -310,27 +340,26 @@ export async function searchMiniAppImage(req: Request, env: Env) {
   if (text.length > MAX_POST_LENGTH) throw new AppError('AI_IMAGE_TEXT_TOO_LONG', `Текст не должен превышать ${MAX_POST_LENGTH} символов`, 400);
   if (!searchProfile) throw new AppError('AI_IMAGE_SEARCH_PROFILE_REQUIRED', 'Не указан профиль поиска изображения', 400);
   if (!sourcePolicy) throw new AppError('AI_IMAGE_SOURCE_POLICY_REQUIRED', 'Не указана политика источников изображения', 400);
-  if (!env.GEMINI_API_KEY) throw new AppError('AI_NOT_CONFIGURED', 'AI пока не настроен', 503);
+  if (!env.OPENAI_API_KEY) throw new AppError('AI_NOT_CONFIGURED', 'AI пока не настроен', 503);
 
-  const model = env.AI_TEXT_MODEL?.trim() || DEFAULT_SEARCH_MODEL;
-  const google = createGoogleGenerativeAI({ apiKey: env.GEMINI_API_KEY });
+  const model = 'gpt-5.6-luna';
   const failedAttempts: FailedImageAttempt[] = [];
 
   for (let attempt = 0; attempt < MAX_SEARCH_ATTEMPTS; attempt += 1) {
     const attemptNumber = attempt + 1;
     const context = diagnosticContext(req, attemptNumber, model, searchProfile, sourcePolicy);
     const prompt = buildImageSearchPrompt(searchProfile, sourcePolicy, text, failedAttempts);
-    console.info('Mini App image search gemini.request', { ...context, prompt });
+    console.info('Mini App image search openai.request', { ...context, prompt });
     let answer: string;
     const startedAt = Date.now();
     try {
-      answer = await askGemini(google, model, prompt, req.signal);
+      answer = await askOpenAI(env.OPENAI_API_KEY, model, prompt, req.signal);
     } catch (error) {
-      console.error('Mini App image search gemini.error', { ...context, durationMs: Date.now() - startedAt, error: error instanceof Error ? error.message : String(error) });
+      console.error('Mini App image search openai.error', { ...context, durationMs: Date.now() - startedAt, error: error instanceof Error ? error.message : String(error) });
       if (error instanceof AppError) throw error;
       throw new AppError('AI_IMAGE_SEARCH_FAILED', 'Не удалось выполнить поиск изображения. Попробуйте ещё раз.', 502);
     }
-    console.info('Mini App image search gemini.response', { ...context, durationMs: Date.now() - startedAt, response: answer });
+    console.info('Mini App image search openai.response', { ...context, durationMs: Date.now() - startedAt, response: answer });
     if (/^\s*NOT_FOUND\s*$/i.test(answer)) {
       console.info('Mini App image search parse.result', { ...context, result: 'not_found' });
       throw new AppError('AI_IMAGE_SEARCH_NOT_FOUND', 'Официальное изображение не найдено', 404);
