@@ -12,7 +12,7 @@ const STYLE_TEXT=`
 .composer-editor.is-keyboard-layout .composer-tiptap-editor .tiptap{min-height:100%!important}
 .composer-editor.is-keyboard-layout .composer-editor-controls{order:2;flex:0 0 auto;margin:6px 0 0;padding:2px 0 0;background:#fff}
 .composer-editor.is-keyboard-layout .composer-editor-footer{display:none!important}
-.composer-editor.is-keyboard-layout .composer-tool-panel{top:auto!important;bottom:43px!important}
+.composer-editor.is-keyboard-layout .composer-tool-menu .composer-tool-panel{top:auto!important;bottom:calc(100% + 6px)!important}
 @media(max-width:360px){.composer-editor-controls{gap:6px}.composer-editor-controls .composer-clear{padding:6px 8px;font-size:11px}.composer-editor-controls .composer-toolbar{max-width:calc(100% - 76px)}}
 `;
 
@@ -43,6 +43,13 @@ export function isMobileEditorEnvironment({platform='',coarsePointer=false}={}){
   return value==='android'||value==='ios'||Boolean(coarsePointer);
 }
 
+export function shouldExitFullscreenOnPull({scrollTop=0,startX=0,startY=0,currentX=0,currentY=0,threshold=48}={}){
+  if((Number(scrollTop)||0)>1)return false;
+  const dx=(Number(currentX)||0)-(Number(startX)||0);
+  const dy=(Number(currentY)||0)-(Number(startY)||0);
+  return dy>=threshold&&dy>Math.abs(dx)*1.2;
+}
+
 export function initComposerEditorKeyboardLayout({
   editorApi=globalThis.window?.CosmoRichEditor,
   root=globalThis.document?.querySelector?.('.composer-editor'),
@@ -71,7 +78,7 @@ export function initComposerEditorKeyboardLayout({
   const platform=String(win.Telegram?.WebApp?.platform||'');
   const coarsePointer=typeof win.matchMedia==='function'&&win.matchMedia('(pointer: coarse)').matches;
   const mobile=isMobileEditorEnvironment({platform,coarsePointer});
-  let active=false,blurTimer=0;
+  let active=false,pullStart=null;
 
   const updateViewport=()=>{
     if(!active)return;
@@ -81,39 +88,60 @@ export function initComposerEditorKeyboardLayout({
   };
   const activate=()=>{
     if(!mobile)return;
-    win.clearTimeout(blurTimer);
     active=true;
     root.classList.add('is-keyboard-layout');
     updateViewport();
   };
   const deactivate=()=>{
     active=false;
+    pullStart=null;
     root.classList.remove('is-keyboard-layout');
     root.style.removeProperty('--composer-editor-vv-top');
     root.style.removeProperty('--composer-editor-vv-bottom');
   };
-  const onFocus=()=>activate();
-  const onBlur=()=>{
-    win.clearTimeout(blurTimer);
-    blurTimer=win.setTimeout(()=>{if(!editor.isFocused)deactivate()},0);
+  const exitByPull=()=>{
+    deactivate();
+    if(typeof editor.commands?.blur==='function')editor.commands.blur();
   };
+  const onFocus=()=>activate();
   const keepClearFocus=event=>{if(active)event.preventDefault()};
+  const onTouchStart=event=>{
+    if(!active||event.touches?.length!==1||host.scrollTop>1){pullStart=null;return}
+    const touch=event.touches[0];
+    pullStart={x:touch.clientX,y:touch.clientY};
+  };
+  const onTouchMove=event=>{
+    if(!active||!pullStart||event.touches?.length!==1)return;
+    if(host.scrollTop>1){pullStart=null;return}
+    const touch=event.touches[0];
+    const dx=touch.clientX-pullStart.x;
+    const dy=touch.clientY-pullStart.y;
+    if(dy>8&&dy>Math.abs(dx))event.preventDefault();
+    if(shouldExitFullscreenOnPull({scrollTop:host.scrollTop,startX:pullStart.x,startY:pullStart.y,currentX:touch.clientX,currentY:touch.clientY}))exitByPull();
+  };
+  const clearPull=()=>{pullStart=null};
 
   editor.on('focus',onFocus);
-  editor.on('blur',onBlur);
   clear.addEventListener('mousedown',keepClearFocus);
+  host.addEventListener('touchstart',onTouchStart,{passive:true});
+  host.addEventListener('touchmove',onTouchMove,{passive:false});
+  host.addEventListener('touchend',clearPull);
+  host.addEventListener('touchcancel',clearPull);
   win.addEventListener('resize',updateViewport);
   viewport?.addEventListener?.('resize',updateViewport);
   viewport?.addEventListener?.('scroll',updateViewport);
 
   const controller={
     update:updateViewport,
+    exit:exitByPull,
     destroy(){
-      win.clearTimeout(blurTimer);
       deactivate();
       editor.off('focus',onFocus);
-      editor.off('blur',onBlur);
       clear.removeEventListener('mousedown',keepClearFocus);
+      host.removeEventListener('touchstart',onTouchStart);
+      host.removeEventListener('touchmove',onTouchMove);
+      host.removeEventListener('touchend',clearPull);
+      host.removeEventListener('touchcancel',clearPull);
       win.removeEventListener('resize',updateViewport);
       viewport?.removeEventListener?.('resize',updateViewport);
       viewport?.removeEventListener?.('scroll',updateViewport);
