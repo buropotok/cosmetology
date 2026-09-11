@@ -93,18 +93,19 @@
   function addImage(blob,prefix){
     const images=window.CosmoComposerImages;
     const beforeCount=images?.getFiles?.().length||0;
-    if(beforeCount>=10)return false;
+    if(beforeCount>=10){
+      const error=new Error('Уже добавлено 10 изображений. Удалите одно, чтобы добавить новое.');
+      error.code='IMAGE_LIMIT_REACHED';
+      throw error;
+    }
     const extension=extensionFor(blob.type);
     const file=new File([blob],`${prefix}-${Date.now()}.${extension}`,{type:blob.type,lastModified:Date.now()});
     images?.addFiles?.([file]);
-    return (images?.getFiles?.().length||0)>beforeCount;
-  }
-
-  function assertImageAdded(blob,prefix){
-    if(addImage(blob,prefix))return;
-    const error=new Error('Уже добавлено 10 изображений. Удалите одно, чтобы добавить новое.');
-    error.code='IMAGE_LIMIT_REACHED';
-    throw error;
+    if((images?.getFiles?.().length||0)<=beforeCount){
+      const error=new Error('Не удалось добавить изображение к публикации.');
+      error.code='IMAGE_ADD_FAILED';
+      throw error;
+    }
   }
 
   async function generateImage(postText,operation){
@@ -112,7 +113,7 @@
     if(status){status.textContent='Gemini создаёт изображение по тексту публикации…';status.className=''}
     const {blob}=await requestImage('/api/miniapp/ai/image',{text:postText},operation.controller.signal);
     assertCurrentRequest(operation);
-    assertImageAdded(blob,'gemini');
+    addImage(blob,'gemini');
     assertCurrentRequest(operation);
     if(status){status.textContent='Изображение сгенерировано и добавлено к публикации.';status.className='success'}
   }
@@ -127,7 +128,7 @@
       sourcePolicy:options.sourcePolicy,
     },operation.controller.signal);
     assertCurrentRequest(operation);
-    assertImageAdded(blob,'official');
+    addImage(blob,'official');
     assertCurrentRequest(operation);
     if(status){
       let sourceHost='';
