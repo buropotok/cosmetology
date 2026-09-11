@@ -161,14 +161,14 @@ async function fetchImageCandidate(imageUrl: string, signal: AbortSignal) {
   if (!contentType.startsWith('image/')) return null;
   const declaredSize = Number(response.headers.get('content-length') || 0);
   if (declaredSize > MINIAPP_IMAGE_MAX_BYTES) return null;
-  let bytes: Uint8Array;
+  let bytes: ArrayBuffer;
   try {
-    bytes = new Uint8Array(await response.arrayBuffer());
+    bytes = await response.arrayBuffer();
   } catch (error) {
     if (signal.aborted) throw new AppError('AI_IMAGE_SEARCH_CANCELLED', 'Поиск изображения отменён', 499);
     return null;
   }
-  if (!bytes.length || bytes.byteLength > MINIAPP_IMAGE_MAX_BYTES) return null;
+  if (!bytes.byteLength || bytes.byteLength > MINIAPP_IMAGE_MAX_BYTES) return null;
   return { bytes, contentType };
 }
 
