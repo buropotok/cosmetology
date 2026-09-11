@@ -1,18 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { AppError } from './types';
+import { AppError, isAppError } from './types';
 
 describe('AppError',()=>{
-  it('recognizes an AppError-shaped value crossing a bundle boundary',()=>{
-    const transported=Object.assign(new Error('Официальное изображение не найдено'),{
-      name:'AppError',
-      code:'AI_IMAGE_SEARCH_NOT_FOUND',
-      status:404,
-    });
-    expect(transported instanceof AppError).toBe(true);
+  it('keeps Error and AppError identity',()=>{
+    const error=new AppError('AI_IMAGE_SEARCH_NOT_FOUND','Официальное изображение не найдено',404);
+    expect(error).toBeInstanceOf(Error);
+    expect(error).toBeInstanceOf(AppError);
+    expect(isAppError(error)).toBe(true);
   });
 
-  it('does not classify arbitrary errors as AppError',()=>{
-    expect(new Error('boom') instanceof AppError).toBe(false);
-    expect({name:'AppError',code:'BROKEN',status:200,message:'bad'} instanceof AppError).toBe(false);
+  it('recognizes a serialized AppError-shaped value without accepting arbitrary errors',()=>{
+    expect(isAppError({name:'AppError',code:'AI_IMAGE_SEARCH_NOT_FOUND',message:'Официальное изображение не найдено',status:404})).toBe(true);
+    expect(isAppError(new Error('boom'))).toBe(false);
+    expect(isAppError({name:'AppError',code:'X',message:'bad',status:200})).toBe(false);
   });
 });
