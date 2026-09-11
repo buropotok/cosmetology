@@ -92,11 +92,12 @@
 
   function addImage(blob,prefix){
     const images=window.CosmoComposerImages;
-    if((images?.getFiles?.().length||0)>=10)return false;
+    const beforeCount=images?.getFiles?.().length||0;
+    if(beforeCount>=10)return false;
     const extension=extensionFor(blob.type);
     const file=new File([blob],`${prefix}-${Date.now()}.${extension}`,{type:blob.type,lastModified:Date.now()});
     images?.addFiles?.([file]);
-    return (images?.getFiles?.()||[]).includes(file);
+    return (images?.getFiles?.().length||0)>beforeCount;
   }
 
   function assertImageAdded(blob,prefix){
