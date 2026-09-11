@@ -19,7 +19,7 @@ test('fullscreen lifecycle is gesture-owned instead of blur-owned and toolbar me
   assert.match(source,/host\.addEventListener\('touchmove',onTouchMove,\{passive:false\}\)/);
   assert.match(source,/shouldExitFullscreenOnPull\(/);
   assert.match(source,/\.composer-tool-menu \.composer-tool-panel\{top:auto!important;bottom:calc\(100% \+ 6px\)!important\}/);
-  assert.match(source,/deactivate\(\);if\(typeof editor\.commands\?\.blur==='function'\)editor\.commands\.blur\(\)/);
+  assert.match(source,/deactivate\(\);\s*if\(typeof editor\.commands\?\.blur==='function'\)editor\.commands\.blur\(\)/);
 });
 
 test('fullscreen state clears when Composer editor leaves its route or publish mode',()=>{
