@@ -17,6 +17,23 @@ import { AppError, type Env } from './types';
 
 const json = (body: unknown, status = 200, extra: HeadersInit = {}) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', ...extra } });
 const onboardingCors = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'content-type', 'access-control-allow-methods': 'GET, POST, OPTIONS' };
+const imageSearchTrace=(req:Request,event:string,details:Record<string,unknown>={})=>console.log(JSON.stringify({component:'miniapp-image-search',event,traceId:req.headers.get('x-cosmo-trace-id')||'missing',...details}));
+async function handleImageSearch(req:Request,env:Env){
+  const started=Date.now();
+  imageSearchTrace(req,'request.started');
+  try{
+    const response=await searchMiniAppImage(req, env);
+    let sourceHost='';
+    const source=response.headers.get('x-cosmo-image-source');
+    try{sourceHost=source?new URL(source).hostname.replace(/^www\./,''):''}catch{}
+    imageSearchTrace(req,'request.completed',{status:response.status,durationMs:Date.now()-started,sourceHost});
+    return response;
+  }catch(error){
+    const appError=error instanceof AppError?error:null;
+    imageSearchTrace(req,'request.failed',{status:appError?.status||500,errorCode:appError?.code||'INTERNAL_ERROR',reason:appError?.message||'unexpected_error',durationMs:Date.now()-started});
+    throw error;
+  }
+}
 
 type VkBackupTarget={telegram_bot_id:string;telegram_chat_id:string;token_ciphertext:string;token_iv:string;token_key_version:number};
 async function prepareVkLink(req: Request, env: Env) {
@@ -51,7 +68,7 @@ export default { async fetch(req: Request, env: Env, ctx: ExecutionContext) {
     if (req.method === 'POST' && url.pathname === '/api/miniapp/ai/chat') return json(await generateMiniAppAiReply(req, env));
     if (req.method === 'GET' && url.pathname === '/api/miniapp/news/status') return json(await getMiniAppNewsGenerationStatus(req, env));
     if (req.method === 'POST' && url.pathname === '/api/miniapp/ai/image') return generateMiniAppImage(req, env);
-    if (req.method === 'POST' && url.pathname === '/api/miniapp/ai/image/search') return searchMiniAppImage(req, env);
+    if (req.method === 'POST' && url.pathname === '/api/miniapp/ai/image/search') return handleImageSearch(req, env);
     if (req.method === 'POST' && url.pathname === '/api/miniapp/vk-link') return json(await prepareVkLink(req,env));
     if (req.method === 'GET' && url.pathname === '/api/miniapp/draft') return json(await getMiniAppDraft(req,env));
     if (req.method === 'POST' && url.pathname === '/api/miniapp/draft') return json(await saveMiniAppDraft(req,env));
