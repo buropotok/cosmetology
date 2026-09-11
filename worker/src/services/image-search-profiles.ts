@@ -25,7 +25,7 @@ export function buildImageSearchPrompt(searchProfile: string, sourcePolicy: stri
 
   const failures = failedAttempts.length ? `\n\nПРЕДЫДУЩИЕ НЕУДАЧНЫЕ ПОПЫТКИ:\n${failedAttempts.map((item, index) => `${index + 1}. IMAGE_URL: ${item.imageUrl}\n   Причина: ${item.reason}`).join('\n')}\nНе возвращай ни один из этих IMAGE_URL повторно. Найди другое официальное изображение.` : '';
 
-  return `Ты выполняешь поиск реального изображения для иллюстрации публикации.
+  const prompt = `Ты выполняешь поиск реального изображения для иллюстрации публикации.
 
 Твоя задача:
 1. Определи продукт из текста публикации.
@@ -63,4 +63,7 @@ NOT_FOUND разрешается только если невозможно оп
 <<<
 ${postText}
 >>>`;
+
+  console.info('Mini App image search Gemini request', { searchProfile, sourcePolicy, prompt });
+  return prompt;
 }
