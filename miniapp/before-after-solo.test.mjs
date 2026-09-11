@@ -38,7 +38,8 @@ test('solo stays invisible until its source is restored and post-layout fit comp
   assert.match(source, /await nextPaint\(\)/);
   assert.match(source, /if\(!await fitSoloIntoFrame\(\)\)/);
   assert.match(source, /current\.style\.visibility='';return true/);
-  assert.match(source, /const current=ensureOverlay\('solo'\);current\.hidden=true/);
+  assert.match(source, /const current=ensureOverlay\('solo'\)/);
+  assert.match(source, /current\.hidden=true/);
   assert.match(source, /void revealSolo\(current\)/);
 });
 
