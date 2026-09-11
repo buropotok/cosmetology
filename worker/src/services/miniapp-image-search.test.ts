@@ -56,19 +56,35 @@ describe('bounded external response reads',()=>{
 });
 
 function pngFixture(){
-  return new Uint8Array([137,80,78,71,13,10,26,10,0,0,0,13,73,72,68,82,0,0,0,1,0,0,0,1,8,4,0,0,0,1,2,3,4]);
+  return new Uint8Array([
+    137,80,78,71,13,10,26,10,
+    0,0,0,13,73,72,68,82,0,0,0,1,0,0,0,1,8,4,0,0,0,0,0,0,0,
+    0,0,0,1,73,68,65,84,0,0,0,0,0,0,
+    0,0,0,0,73,69,78,68,0,0,0,0,
+  ]);
 }
-function jpegFixture(){ return new Uint8Array([0xff,0xd8,0xff,0xe0,0,16,0x4a,0x46,0x49,0x46,0,1,1,0,0,1,0xff,0xd9]); }
-function gifFixture(){ return new Uint8Array([0x47,0x49,0x46,0x38,0x39,0x61,1,0,1,0,0,0,0,0x2c,0,0,0,0,0,0x3b]); }
-function webpFixture(){ return new Uint8Array([0x52,0x49,0x46,0x46,12,0,0,0,0x57,0x45,0x42,0x50,0x56,0x50,0x38,0x20,1,2,3,4]); }
+function jpegFixture(){ return new Uint8Array([0xff,0xd8,0xff,0xc0,0,11,8,0,1,0,1,1,1,0,0,0xff,0xda,0,8,1,1,0,0,0,0,1,2,0xff,0xd9]); }
+function gifFixture(){ return new Uint8Array([0x47,0x49,0x46,0x38,0x39,0x61,1,0,1,0,0,0,0,0x2c,0,0,0,0,1,0,1,0,0,2,1,0,0,0x3b]); }
+function webpFixture(){ return new Uint8Array([0x52,0x49,0x46,0x46,16,0,0,0,0x57,0x45,0x42,0x50,0x56,0x50,0x38,0x20,4,0,0,0,1,2,3,4]); }
 
 describe('downloaded image validation',()=>{
-  it('accepts supported image signatures and rejects non-images',()=>{
+  it('accepts structurally complete supported images and rejects non-images',()=>{
     expect(detectSupportedImageContentType(pngFixture())).toBe('image/png');
     expect(detectSupportedImageContentType(jpegFixture())).toBe('image/jpeg');
     expect(detectSupportedImageContentType(gifFixture())).toBe('image/gif');
     expect(detectSupportedImageContentType(webpFixture())).toBe('image/webp');
     expect(detectSupportedImageContentType(new TextEncoder().encode('<html>not an image</html>'))).toBe('');
+  });
+
+  it('rejects truncated files even when their signatures are intact',()=>{
+    const png=pngFixture();
+    const jpeg=jpegFixture();
+    const gif=gifFixture();
+    const webp=webpFixture();
+    expect(detectSupportedImageContentType(png.slice(0,-12))).toBe('');
+    expect(detectSupportedImageContentType(jpeg.slice(0,-2))).toBe('');
+    expect(detectSupportedImageContentType(gif.slice(0,-1))).toBe('');
+    expect(detectSupportedImageContentType(webp.slice(0,-2))).toBe('');
   });
 
   it('classifies a broken link for retry',async()=>{
@@ -81,6 +97,14 @@ describe('downloaded image validation',()=>{
   it('classifies invalid downloaded bytes for retry',async()=>{
     vi.stubGlobal('fetch',vi.fn(async()=>new Response('<html>blocked</html>',{status:200,headers:{'content-type':'text/html'}})));
     const result=await downloadImage('https://brand.example/product.png',new AbortController().signal);
+    expect(result.image).toBeNull();
+    expect(result.reason).toBe('invalid_image');
+  });
+
+  it('classifies a truncated image as invalid so Gemini can retry',async()=>{
+    const truncated=pngFixture().slice(0,-12);
+    vi.stubGlobal('fetch',vi.fn(async()=>new Response(truncated,{status:200,headers:{'content-type':'image/png'}})));
+    const result=await downloadImage('https://brand.example/truncated.png',new AbortController().signal);
     expect(result.image).toBeNull();
     expect(result.reason).toBe('invalid_image');
   });
