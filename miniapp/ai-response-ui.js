@@ -7,18 +7,15 @@ if (aiResultTitle) {
 
 const responseBody = document.querySelector('[data-ai-response]');
 const DEFAULT_IMAGE_OPTIONS = Object.freeze({ internetSearch: false });
-const IMAGE_OPTIONS_BY_PRESET = Object.freeze({
-  'Разбор препарата': Object.freeze({
-    internetSearch: true,
-    searchProfile: 'cosmetic_product',
-    sourcePolicy: 'official',
-  }),
-});
 
 function currentImageOptions() {
-  const preset = window.CosmoAiWizardState?.getSnapshot?.().preset;
-  const configured = typeof preset === 'string' ? IMAGE_OPTIONS_BY_PRESET[preset] : null;
-  return configured ? { ...configured } : { ...DEFAULT_IMAGE_OPTIONS };
+  const value = window.CosmoAiWizardState?.getSnapshot?.().imageOptions;
+  if (value?.internetSearch !== true) return { ...DEFAULT_IMAGE_OPTIONS };
+  return {
+    internetSearch: true,
+    searchProfile: typeof value.searchProfile === 'string' ? value.searchProfile : '',
+    sourcePolicy: typeof value.sourcePolicy === 'string' ? value.sourcePolicy : '',
+  };
 }
 
 function publishPostDocument(doc) {
