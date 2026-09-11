@@ -107,7 +107,7 @@ export function initComposerEditorKeyboardLayout({
   const onFocus=()=>activate();
   const onRoute=route=>{if(route!=='composer')deactivate()};
   const onPublishMode=event=>{if(event?.detail?.mode!=='compose')deactivate()};
-  const onBeforeAfterLifecycle=event=>{if(event?.detail?.state==='open')exitByPull()};
+  const onBeforeAfterOpen=()=>exitByPull();
   const keepClearFocus=event=>{if(active)event.preventDefault()};
   const onTouchStart=event=>{
     if(!active||event.touches?.length!==1||host.scrollTop>1){pullStart=null;return}
@@ -133,7 +133,7 @@ export function initComposerEditorKeyboardLayout({
   host.addEventListener('touchcancel',clearPull);
   win.addEventListener('resize',updateViewport);
   win.addEventListener('cosmo-publish-mode',onPublishMode);
-  win.addEventListener('cosmo-before-after-lifecycle',onBeforeAfterLifecycle);
+  win.addEventListener('cosmo-before-after-open',onBeforeAfterOpen);
   viewport?.addEventListener?.('resize',updateViewport);
   viewport?.addEventListener?.('scroll',updateViewport);
   const unsubscribeRoute=typeof router?.subscribe==='function'?router.subscribe(onRoute):()=>{};
@@ -151,7 +151,7 @@ export function initComposerEditorKeyboardLayout({
       host.removeEventListener('touchcancel',clearPull);
       win.removeEventListener('resize',updateViewport);
       win.removeEventListener('cosmo-publish-mode',onPublishMode);
-      win.removeEventListener('cosmo-before-after-lifecycle',onBeforeAfterLifecycle);
+      win.removeEventListener('cosmo-before-after-open',onBeforeAfterOpen);
       viewport?.removeEventListener?.('resize',updateViewport);
       viewport?.removeEventListener?.('scroll',updateViewport);
       unsubscribeRoute();
