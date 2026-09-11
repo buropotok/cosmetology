@@ -22,6 +22,8 @@ function startRuntimeDiagnostics(){
   void import('/runtime-diagnostics.js')
     .then(diagnostics=>diagnostics.startRuntimeDiagnostics?.())
     .catch(error=>console.warn('Runtime diagnostics failed to start',error));
+  void import('/diagnostic-trace-panel.js')
+    .catch(error=>console.warn('Diagnostic trace panel failed to start',error));
 }
 
 async function loadPlatform(){
