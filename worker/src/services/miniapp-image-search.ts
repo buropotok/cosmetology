@@ -10,6 +10,7 @@ const MAX_POST_LENGTH = 12000;
 const MAX_SOURCE_PAGES = 5;
 const MAX_IMAGES_PER_PAGE = 6;
 const MAX_HTML_BYTES = 750_000;
+const EXTERNAL_RESOLUTION_TIMEOUT_MS = 12_000;
 const BLOCKED_NON_OFFICIAL_HOSTS = [
   'amazon.',
   'aliexpress.',
@@ -101,13 +102,21 @@ export function officialHostMatches(actual: string, expected: string) {
   return Boolean(left && right && (left === right || left.endsWith(`.${right}`)));
 }
 
+export function officialPageHostMatches(actual: string, expected: string) {
+  const left = normalizedHost(actual);
+  const right = normalizedHost(expected);
+  return Boolean(left && right && left === right);
+}
+
 export function extractExpectedOfficialHost(text: string) {
   const match = text.trim().match(/^FOUND\s*[—-]\s*.+?\s*[—-]\s*([^\s]+)\s*$/i);
   if (!match) return '';
   const rawHost = match[1].trim();
   if (/[\/:?#@]/.test(rawHost)) return '';
   const host = normalizedHost(rawHost);
-  if (!host || host.includes(':') || host === 'localhost' || host.endsWith('.local') || host.endsWith('.internal')) return '';
+  const labels = host.split('.');
+  if (!host || host.length > 253 || labels.length < 2 || labels.some(label => !label || label.length > 63 || !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/i.test(label))) return '';
+  if (host.includes(':') || host === 'localhost' || host.endsWith('.local') || host.endsWith('.internal')) return '';
   return host;
 }
 
@@ -167,6 +176,27 @@ export function detectSupportedImageContentType(bytes: Uint8Array) {
   return '';
 }
 
+export function createSearchDeadline(parentSignal: AbortSignal, timeoutMs: number) {
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0) throw new RangeError('timeoutMs must be a positive safe integer');
+  const controller = new AbortController();
+  let timedOut = false;
+  const onParentAbort = () => controller.abort();
+  if (parentSignal.aborted) controller.abort();
+  else parentSignal.addEventListener('abort', onParentAbort, { once: true });
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+  return {
+    signal: controller.signal,
+    timedOut: () => timedOut,
+    dispose: () => {
+      clearTimeout(timer);
+      parentSignal.removeEventListener('abort', onParentAbort);
+    },
+  };
+}
+
 async function fetchWithSafeRedirects(urlValue: string, init: RequestInit, signal: AbortSignal) {
   let url = urlValue;
   for (let redirectCount = 0; redirectCount <= 5; redirectCount += 1) {
@@ -198,7 +228,7 @@ async function fetchOfficialPage(sourceUrl: string, expectedHost: string, signal
   }, signal);
   if (!response?.ok || !isSafeHttpsUrl(response.url)) return null;
   const finalUrl = new URL(response.url);
-  if (isBlockedOfficialHost(finalUrl.hostname) || !officialHostMatches(finalUrl.hostname, expectedHost)) return null;
+  if (isBlockedOfficialHost(finalUrl.hostname) || !officialPageHostMatches(finalUrl.hostname, expectedHost)) return null;
   const contentType = (response.headers.get('content-type') || '').toLowerCase();
   if (!contentType.includes('text/html') && !contentType.includes('application/xhtml+xml')) return null;
   const bytes = await readLimitedResponseBody(response, MAX_HTML_BYTES, signal);
@@ -269,25 +299,35 @@ export async function searchMiniAppImage(req: Request, env: Env) {
   const officialHost = extractExpectedOfficialHost(grounded.text);
   if (!officialHost || isBlockedOfficialHost(officialHost)) throw new AppError('AI_IMAGE_SEARCH_NOT_FOUND', 'Официальное изображение не найдено', 404);
 
-  const sourceUrls = groundedSourceUrls((grounded as unknown as { sources?: readonly UrlSource[] }).sources || []).slice(0, MAX_SOURCE_PAGES);
-  for (const sourceUrl of sourceUrls) {
-    const page = await fetchOfficialPage(sourceUrl, officialHost, req.signal);
-    if (!page) continue;
-    const imageUrls = extractPageImageCandidates(page.html, page.url).slice(0, MAX_IMAGES_PER_PAGE);
-    for (const imageUrl of imageUrls) {
-      const image = await fetchImageCandidate(imageUrl, req.signal);
-      if (!image) continue;
-      return new Response(image.bytes, {
-        status: 200,
-        headers: {
-          'content-type': image.contentType,
-          'cache-control': 'no-store',
-          'content-disposition': 'inline; filename="official-post-image"',
-          'x-cosmo-image-source': page.url,
-          'x-content-type-options': 'nosniff',
-        },
-      });
+  const resolution = createSearchDeadline(req.signal, EXTERNAL_RESOLUTION_TIMEOUT_MS);
+  try {
+    const sourceUrls = groundedSourceUrls((grounded as unknown as { sources?: readonly UrlSource[] }).sources || []).slice(0, MAX_SOURCE_PAGES);
+    for (const sourceUrl of sourceUrls) {
+      const page = await fetchOfficialPage(sourceUrl, officialHost, resolution.signal);
+      if (!page) continue;
+      const imageUrls = extractPageImageCandidates(page.html, page.url).slice(0, MAX_IMAGES_PER_PAGE);
+      for (const imageUrl of imageUrls) {
+        const image = await fetchImageCandidate(imageUrl, resolution.signal);
+        if (!image) continue;
+        return new Response(image.bytes, {
+          status: 200,
+          headers: {
+            'content-type': image.contentType,
+            'cache-control': 'no-store',
+            'content-disposition': 'inline; filename="official-post-image"',
+            'x-cosmo-image-source': page.url,
+            'x-content-type-options': 'nosniff',
+          },
+        });
+      }
     }
+    if (resolution.timedOut()) throw new AppError('AI_IMAGE_SEARCH_TIMEOUT', 'Поиск официального изображения занял слишком много времени. Попробуйте ещё раз.', 504);
+  } catch (error) {
+    if (req.signal.aborted) throw new AppError('AI_IMAGE_SEARCH_CANCELLED', 'Поиск изображения отменён', 499);
+    if (resolution.timedOut()) throw new AppError('AI_IMAGE_SEARCH_TIMEOUT', 'Поиск официального изображения занял слишком много времени. Попробуйте ещё раз.', 504);
+    throw error;
+  } finally {
+    resolution.dispose();
   }
 
   throw new AppError('AI_IMAGE_SEARCH_NOT_FOUND', 'Официальное изображение не найдено', 404);

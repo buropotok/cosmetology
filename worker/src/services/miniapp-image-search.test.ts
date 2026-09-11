@@ -1,9 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
+  createSearchDeadline,
   detectSupportedImageContentType,
   extractExpectedOfficialHost,
   extractPageImageCandidates,
   officialHostMatches,
+  officialPageHostMatches,
   readLimitedResponseBody,
 } from './miniapp-image-search';
 
@@ -35,9 +37,16 @@ describe('official grounded source selection',()=>{
     expect(officialHostMatches('unrelated-store.example','brand.example')).toBe(false);
   });
 
+  it('requires the fetched grounded page to use the exact selected hostname',()=>{
+    expect(officialPageHostMatches('www.brand.example','brand.example')).toBe(true);
+    expect(officialPageHostMatches('products.brand.example','brand.example')).toBe(false);
+    expect(officialPageHostMatches('brand.co.uk','co.uk')).toBe(false);
+  });
+
   it('rejects malformed FOUND responses without an official hostname',()=>{
     expect(extractExpectedOfficialHost('FOUND — Test Product')).toBe('');
     expect(extractExpectedOfficialHost('FOUND — Test Product — http://brand.example/path')).toBe('');
+    expect(extractExpectedOfficialHost('FOUND — Test Product — com')).toBe('');
   });
 });
 
@@ -63,6 +72,38 @@ describe('bounded external response reads',()=>{
     const response=new Response(new Uint8Array([1,2,3,4]));
     const result=await readLimitedResponseBody(response,4,new AbortController().signal);
     expect(Array.from(result||[])).toEqual([1,2,3,4]);
+  });
+});
+
+describe('external resolution deadline',()=>{
+  it('aborts the resolution signal when the application deadline expires',()=>{
+    vi.useFakeTimers();
+    try{
+      const parent=new AbortController();
+      const deadline=createSearchDeadline(parent.signal,1000);
+      expect(deadline.signal.aborted).toBe(false);
+      expect(deadline.timedOut()).toBe(false);
+      vi.advanceTimersByTime(1000);
+      expect(deadline.signal.aborted).toBe(true);
+      expect(deadline.timedOut()).toBe(true);
+      deadline.dispose();
+    }finally{
+      vi.useRealTimers();
+    }
+  });
+
+  it('preserves request cancellation separately from a timeout',()=>{
+    vi.useFakeTimers();
+    try{
+      const parent=new AbortController();
+      const deadline=createSearchDeadline(parent.signal,1000);
+      parent.abort();
+      expect(deadline.signal.aborted).toBe(true);
+      expect(deadline.timedOut()).toBe(false);
+      deadline.dispose();
+    }finally{
+      vi.useRealTimers();
+    }
   });
 });
 
