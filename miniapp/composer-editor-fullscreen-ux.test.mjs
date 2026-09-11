@@ -19,7 +19,17 @@ test('fullscreen lifecycle is gesture-owned instead of blur-owned and toolbar me
   assert.match(source,/host\.addEventListener\('touchmove',onTouchMove,\{passive:false\}\)/);
   assert.match(source,/shouldExitFullscreenOnPull\(/);
   assert.match(source,/\.composer-tool-menu \.composer-tool-panel\{top:auto!important;bottom:calc\(100% \+ 6px\)!important\}/);
-  assert.match(source,/deactivate\(\);\s*if\(typeof editor\.commands\?\.blur==='function'\)editor\.commands\.blur\(\)/);
+  assert.match(source,/deactivate\(\);if\(typeof editor\.commands\?\.blur==='function'\)editor\.commands\.blur\(\)/);
+});
+
+test('fullscreen state clears when Composer editor leaves its route or publish mode',()=>{
+  const source=read('./composer-editor-keyboard-layout.js');
+  assert.match(source,/const onRoute=route=>\{if\(route!=='composer'\)deactivate\(\)\}/);
+  assert.match(source,/const onPublishMode=event=>\{if\(event\?\.detail\?\.mode!=='compose'\)deactivate\(\)\}/);
+  assert.match(source,/router\.subscribe\(onRoute\)/);
+  assert.match(source,/win\.addEventListener\('cosmo-publish-mode',onPublishMode\)/);
+  assert.match(source,/win\.removeEventListener\('cosmo-publish-mode',onPublishMode\)/);
+  assert.match(source,/unsubscribeRoute\(\)/);
 });
 
 test('emoji popup is anchored above the toolbar, draggable and toggles closed on a second button press',()=>{
