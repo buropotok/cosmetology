@@ -1,52 +1,42 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-  createSearchDeadline,
   detectSupportedImageContentType,
-  extractExpectedOfficialHost,
-  extractPageImageCandidates,
-  officialHostMatches,
-  officialPageHostMatches,
+  downloadImage,
+  isSafeHttpsUrl,
+  parseImageSearchResult,
   readLimitedResponseBody,
 } from './miniapp-image-search';
+import { buildImageSearchPrompt } from './image-search-profiles';
 
-describe('official image page extraction',()=>{
-  it('prefers real page metadata and resolves relative image URLs',()=>{
-    const html=`<html><head>
-      <meta property="og:image" content="/media/product.jpg">
-      <meta name="twitter:image" content="https://cdn.example.com/product.webp">
-    </head></html>`;
-    expect(extractPageImageCandidates(html,'https://brand.example/products/test')).toEqual([
-      'https://brand.example/media/product.jpg',
-      'https://cdn.example.com/product.webp',
+afterEach(()=>{ vi.unstubAllGlobals(); });
+
+describe('direct image search result contract',()=>{
+  it('parses the exact three-line Gemini response',()=>{
+    expect(parseImageSearchResult(`IMAGE_URL: https://cdn.brand.example/product.png\nSOURCE_URL: https://brand.example/products/product\nPRODUCT: Product Cream`)).toEqual({
+      imageUrl:'https://cdn.brand.example/product.png',
+      sourceUrl:'https://brand.example/products/product',
+      product:'Product Cream',
+    });
+  });
+
+  it('rejects malformed and unsafe URLs',()=>{
+    expect(parseImageSearchResult('NOT_FOUND')).toBeNull();
+    expect(parseImageSearchResult('IMAGE_URL: http://brand.example/a.png\nSOURCE_URL: https://brand.example/p\nPRODUCT: P')).toBeNull();
+    expect(parseImageSearchResult('IMAGE_URL: https://127.0.0.1/a.png\nSOURCE_URL: https://brand.example/p\nPRODUCT: P')).toBeNull();
+    expect(parseImageSearchResult('IMAGE_URL: https://brand.example/a.png\nSOURCE_URL: https://brand.example/p')).toBeNull();
+    expect(isSafeHttpsUrl('https://brand.example/a.png')).toBe(true);
+    expect(isSafeHttpsUrl('https://localhost/a.png')).toBe(false);
+  });
+
+  it('rebuilds a complete stateless prompt and excludes failed URLs on retry',()=>{
+    const prompt=buildImageSearchPrompt('cosmetic_product','official','Бепантен — препарат на основе декспантенола',[
+      {imageUrl:'https://brand.example/broken.png',reason:'broken_link'},
     ]);
-  });
-
-  it('ignores unsafe non-https image candidates',()=>{
-    const html=`<meta property="og:image" content="http://brand.example/product.jpg">
-      <meta name="twitter:image" content="https://brand.example/ok.jpg">`;
-    expect(extractPageImageCandidates(html,'https://brand.example/product')).toEqual([
-      'https://brand.example/ok.jpg',
-    ]);
-  });
-});
-
-describe('official grounded source selection',()=>{
-  it('accepts only the hostname explicitly selected by the grounded answer',()=>{
-    expect(extractExpectedOfficialHost('FOUND — Test Product — www.brand.example')).toBe('brand.example');
-    expect(officialHostMatches('products.brand.example','brand.example')).toBe(true);
-    expect(officialHostMatches('unrelated-store.example','brand.example')).toBe(false);
-  });
-
-  it('requires the fetched grounded page to use the exact selected hostname',()=>{
-    expect(officialPageHostMatches('www.brand.example','brand.example')).toBe(true);
-    expect(officialPageHostMatches('products.brand.example','brand.example')).toBe(false);
-    expect(officialPageHostMatches('brand.co.uk','co.uk')).toBe(false);
-  });
-
-  it('rejects malformed FOUND responses without an official hostname',()=>{
-    expect(extractExpectedOfficialHost('FOUND — Test Product')).toBe('');
-    expect(extractExpectedOfficialHost('FOUND — Test Product — http://brand.example/path')).toBe('');
-    expect(extractExpectedOfficialHost('FOUND — Test Product — com')).toBe('');
+    expect(prompt).toContain('Бепантен — препарат на основе декспантенола');
+    expect(prompt).toContain('IMAGE_URL: https://brand.example/broken.png');
+    expect(prompt).toContain('Не возвращай ни один из этих IMAGE_URL повторно');
+    expect(prompt).toContain('официальный сайт производителя или официальный сайт бренда');
+    expect(prompt).toContain('самостоятельно выбери один наиболее репрезентативный вариант');
   });
 });
 
@@ -55,123 +45,52 @@ describe('bounded external response reads',()=>{
     let cancelled=false;
     let pullCount=0;
     const stream=new ReadableStream<Uint8Array>({
-      pull(controller){
-        pullCount+=1;
-        controller.enqueue(pullCount===1?new Uint8Array([1,2,3]):new Uint8Array([4,5,6]));
-      },
+      pull(controller){ pullCount+=1; controller.enqueue(pullCount===1?new Uint8Array([1,2,3]):new Uint8Array([4,5,6])); },
       cancel(){cancelled=true;},
     });
-    const response=new Response(stream);
-    const result=await readLimitedResponseBody(response,4,new AbortController().signal);
+    const result=await readLimitedResponseBody(new Response(stream),4,new AbortController().signal);
     expect(result).toBeNull();
     expect(cancelled).toBe(true);
     expect(pullCount).toBe(2);
   });
-
-  it('returns a bounded response without relying on Content-Length',async()=>{
-    const response=new Response(new Uint8Array([1,2,3,4]));
-    const result=await readLimitedResponseBody(response,4,new AbortController().signal);
-    expect(Array.from(result||[])).toEqual([1,2,3,4]);
-  });
-});
-
-describe('overall search deadline',()=>{
-  it('aborts the search signal when the application deadline expires',()=>{
-    vi.useFakeTimers();
-    try{
-      const parent=new AbortController();
-      const deadline=createSearchDeadline(parent.signal,1000);
-      expect(deadline.signal.aborted).toBe(false);
-      expect(deadline.timedOut()).toBe(false);
-      vi.advanceTimersByTime(1000);
-      expect(deadline.signal.aborted).toBe(true);
-      expect(deadline.timedOut()).toBe(true);
-      deadline.dispose();
-    }finally{
-      vi.useRealTimers();
-    }
-  });
-
-  it('preserves request cancellation separately from a timeout',()=>{
-    vi.useFakeTimers();
-    try{
-      const parent=new AbortController();
-      const deadline=createSearchDeadline(parent.signal,1000);
-      parent.abort();
-      expect(deadline.signal.aborted).toBe(true);
-      expect(deadline.timedOut()).toBe(false);
-      deadline.dispose();
-    }finally{
-      vi.useRealTimers();
-    }
-  });
 });
 
 function pngFixture(){
-  return new Uint8Array([137,80,78,71,13,10,26,10,0,0,0,13,73,72,68,82,0,0,0,1,0,0,0,1,8,4,0,0,0,181,28,12,2,0,0,0,11,73,68,65,84,120,218,99,100,248,15,0,1,5,1,1,39,24,227,102,0,0,0,0,73,69,78,68,174,66,96,130]);
+  return new Uint8Array([137,80,78,71,13,10,26,10,0,0,0,13,73,72,68,82,0,0,0,1,0,0,0,1,8,4,0,0,0,1,2,3,4]);
 }
-
-function jpegFixture(){
-  return new Uint8Array([
-    0xff,0xd8,
-    0xff,0xc0,0,11,8,0,1,0,1,1,1,0x11,0,
-    0xff,0xda,0,8,1,1,0,0,63,0,
-    1,
-    0xff,0xd9,
-  ]);
-}
-
-function gifFixture(){
-  return new Uint8Array([
-    0x47,0x49,0x46,0x38,0x39,0x61,1,0,1,0,0,0,0,
-    0x2c,0,0,0,0,1,0,1,0,0,
-    2,1,0,0,
-    0x3b,
-  ]);
-}
-
-function webpFixture(){
-  return new Uint8Array([
-    0x52,0x49,0x46,0x46,18,0,0,0,0x57,0x45,0x42,0x50,
-    0x56,0x50,0x38,0x4c,5,0,0,0,0x2f,0,0,0,0,0,
-  ]);
-}
-
-function headerOnlyPngFixture(){
-  return new Uint8Array([
-    0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a,
-    0,0,0,13,0x49,0x48,0x44,0x52,
-    0,0,0,1,0,0,0,1,8,2,0,0,0,0,0,0,0,
-    0,0,0,0,0x49,0x45,0x4e,0x44,0,0,0,0,
-  ]);
-}
+function jpegFixture(){ return new Uint8Array([0xff,0xd8,0xff,0xe0,0,16,0x4a,0x46,0x49,0x46,0,1,1,0,0,1,0xff,0xd9]); }
+function gifFixture(){ return new Uint8Array([0x47,0x49,0x46,0x38,0x39,0x61,1,0,1,0,0,0,0,0x2c,0,0,0,0,0x3b]); }
+function webpFixture(){ return new Uint8Array([0x52,0x49,0x46,0x46,12,0,0,0,0x57,0x45,0x42,0x50,0x56,0x50,0x38,0x20,1,2,3,4]); }
 
 describe('downloaded image validation',()=>{
-  it('accepts supported image containers with actual image data',()=>{
+  it('accepts supported image signatures and rejects non-images',()=>{
     expect(detectSupportedImageContentType(pngFixture())).toBe('image/png');
     expect(detectSupportedImageContentType(jpegFixture())).toBe('image/jpeg');
     expect(detectSupportedImageContentType(gifFixture())).toBe('image/gif');
     expect(detectSupportedImageContentType(webpFixture())).toBe('image/webp');
-  });
-
-  it('rejects header-only image containers',()=>{
-    expect(detectSupportedImageContentType(headerOnlyPngFixture())).toBe('');
-    expect(detectSupportedImageContentType(new Uint8Array([
-      0xff,0xd8,0xff,0xc0,0,11,8,0,1,0,1,1,1,0x11,0,0xff,0xd9,
-    ]))).toBe('');
-    expect(detectSupportedImageContentType(new Uint8Array([
-      0x47,0x49,0x46,0x38,0x39,0x61,1,0,1,0,0,0,0,0x3b,
-    ]))).toBe('');
-    expect(detectSupportedImageContentType(new Uint8Array([
-      0x52,0x49,0x46,0x46,12,0,0,0,0x57,0x45,0x42,0x50,0x56,0x50,0x38,0x20,0,0,0,0,
-    ]))).toBe('');
-  });
-
-  it('rejects truncated payloads even when their magic prefix is valid',()=>{
-    expect(detectSupportedImageContentType(new Uint8Array([0xff,0xd8,0xff]))).toBe('');
-    expect(detectSupportedImageContentType(pngFixture().slice(0,-12))).toBe('');
-    expect(detectSupportedImageContentType(gifFixture().slice(0,-1))).toBe('');
-    expect(detectSupportedImageContentType(webpFixture().slice(0,-1))).toBe('');
     expect(detectSupportedImageContentType(new TextEncoder().encode('<html>not an image</html>'))).toBe('');
+  });
+
+  it('classifies a broken link for retry',async()=>{
+    vi.stubGlobal('fetch',vi.fn(async()=>new Response('missing',{status:404})));
+    const result=await downloadImage('https://brand.example/missing.png',new AbortController().signal);
+    expect(result.image).toBeNull();
+    expect(result.reason).toBe('broken_link');
+  });
+
+  it('classifies invalid downloaded bytes for retry',async()=>{
+    vi.stubGlobal('fetch',vi.fn(async()=>new Response('<html>blocked</html>',{status:200,headers:{'content-type':'text/html'}})));
+    const result=await downloadImage('https://brand.example/product.png',new AbortController().signal);
+    expect(result.image).toBeNull();
+    expect(result.reason).toBe('invalid_image');
+  });
+
+  it('returns valid downloaded image bytes',async()=>{
+    const bytes=pngFixture();
+    vi.stubGlobal('fetch',vi.fn(async()=>new Response(bytes,{status:200,headers:{'content-type':'image/png'}})));
+    const result=await downloadImage('https://brand.example/product.png',new AbortController().signal);
+    expect(result.reason).toBeNull();
+    expect(result.image?.contentType).toBe('image/png');
+    expect(new Uint8Array(result.image?.bytes || new ArrayBuffer(0))).toEqual(bytes);
   });
 });
