@@ -20,7 +20,10 @@ function loadWorkspaceStyles(){
 
 function startRuntimeDiagnostics(){
   void import('/runtime-diagnostics.js')
-    .then(diagnostics=>diagnostics.startRuntimeDiagnostics?.())
+    .then(diagnostics=>{
+      diagnostics.startRuntimeDiagnostics?.();
+      return import('/diagnostic-trace-panel.js').catch(error=>console.warn('Diagnostic trace panel failed to start',error));
+    })
     .catch(error=>console.warn('Runtime diagnostics failed to start',error));
 }
 
