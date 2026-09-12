@@ -147,38 +147,59 @@ export async function readLimitedResponseBody(response: Response, maxBytes: numb
 function hasBytes(bytes: Uint8Array, offset: number, expected: readonly number[]) {
   return expected.every((value, index) => bytes[offset + index] === value);
 }
+
 function readUint32BE(bytes: Uint8Array, offset: number) {
   return (((bytes[offset] << 24) >>> 0) + (bytes[offset + 1] << 16) + (bytes[offset + 2] << 8) + bytes[offset + 3]) >>> 0;
 }
+
 function readUint32LE(bytes: Uint8Array, offset: number) {
   return (bytes[offset] + (bytes[offset + 1] << 8) + (bytes[offset + 2] << 16) + ((bytes[offset + 3] << 24) >>> 0)) >>> 0;
 }
+
 function isCompletePng(bytes: Uint8Array) {
   if (bytes.length < 45 || !hasBytes(bytes, 0, [0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a])) return false;
-  let offset = 8, sawIhdr = false, sawIdat = false;
+  let offset = 8;
+  let sawIhdr = false;
+  let sawIdat = false;
   while (offset + 12 <= bytes.length) {
-    const length = readUint32BE(bytes, offset), chunkEnd = offset + 12 + length;
+    const length = readUint32BE(bytes, offset);
+    const chunkEnd = offset + 12 + length;
     if (chunkEnd > bytes.length) return false;
     const type = String.fromCharCode(bytes[offset + 4], bytes[offset + 5], bytes[offset + 6], bytes[offset + 7]);
-    if (!sawIhdr) { if (type !== 'IHDR' || length !== 13) return false; sawIhdr = true; }
-    else if (type === 'IHDR') return false;
+    if (!sawIhdr) {
+      if (type !== 'IHDR' || length !== 13) return false;
+      sawIhdr = true;
+    } else if (type === 'IHDR') return false;
     if (type === 'IDAT') sawIdat = true;
     if (type === 'IEND') return length === 0 && sawIhdr && sawIdat && chunkEnd === bytes.length;
     offset = chunkEnd;
   }
   return false;
 }
+
 function isCompleteJpeg(bytes: Uint8Array) {
   if (bytes.length < 16 || !hasBytes(bytes, 0, [0xff,0xd8]) || !hasBytes(bytes, bytes.length - 2, [0xff,0xd9])) return false;
-  let offset = 2, sawFrame = false, sawScan = false;
+  let offset = 2;
+  let sawFrame = false;
+  let sawScan = false;
   while (offset < bytes.length - 2) {
-    if (bytes[offset] !== 0xff) { if (!sawScan) return false; offset += 1; continue; }
+    if (bytes[offset] !== 0xff) {
+      if (!sawScan) return false;
+      offset += 1;
+      continue;
+    }
     while (offset < bytes.length && bytes[offset] === 0xff) offset += 1;
     if (offset >= bytes.length) return false;
     const marker = bytes[offset++];
-    if (marker === 0x00) { if (!sawScan) return false; continue; }
+    if (marker === 0x00) {
+      if (!sawScan) return false;
+      continue;
+    }
     if (marker === 0xd9) return sawFrame && sawScan && offset === bytes.length;
-    if (marker >= 0xd0 && marker <= 0xd7) { if (!sawScan) return false; continue; }
+    if (marker >= 0xd0 && marker <= 0xd7) {
+      if (!sawScan) return false;
+      continue;
+    }
     if (marker === 0x01) continue;
     if (offset + 2 > bytes.length) return false;
     const length = (bytes[offset] << 8) | bytes[offset + 1];
@@ -189,6 +210,7 @@ function isCompleteJpeg(bytes: Uint8Array) {
   }
   return sawFrame && sawScan;
 }
+
 function isCompleteGif(bytes: Uint8Array) {
   if (bytes.length < 20 || !(hasBytes(bytes, 0, [0x47,0x49,0x46,0x38,0x37,0x61]) || hasBytes(bytes, 0, [0x47,0x49,0x46,0x38,0x39,0x61])) || bytes[bytes.length - 1] !== 0x3b) return false;
   let offset = 13;
@@ -204,9 +226,12 @@ function isCompleteGif(bytes: Uint8Array) {
       offset += 9;
       if (imagePacked & 0x80) offset += 3 * (1 << ((imagePacked & 0x07) + 1));
       if (offset >= bytes.length) return false;
-      offset += 1; sawImage = true;
-    } else if (introducer === 0x21) { if (offset >= bytes.length) return false; offset += 1; }
-    else return false;
+      offset += 1;
+      sawImage = true;
+    } else if (introducer === 0x21) {
+      if (offset >= bytes.length) return false;
+      offset += 1;
+    } else return false;
     while (offset < bytes.length) {
       const blockSize = bytes[offset++];
       if (blockSize === 0) break;
@@ -216,19 +241,23 @@ function isCompleteGif(bytes: Uint8Array) {
   }
   return false;
 }
+
 function isCompleteWebp(bytes: Uint8Array) {
   if (bytes.length < 20 || !hasBytes(bytes, 0, [0x52,0x49,0x46,0x46]) || !hasBytes(bytes, 8, [0x57,0x45,0x42,0x50])) return false;
   if (readUint32LE(bytes, 4) + 8 !== bytes.length) return false;
-  let offset = 12, sawImageChunk = false;
+  let offset = 12;
+  let sawImageChunk = false;
   while (offset + 8 <= bytes.length) {
     const type = String.fromCharCode(bytes[offset], bytes[offset + 1], bytes[offset + 2], bytes[offset + 3]);
-    const length = readUint32LE(bytes, offset + 4), paddedLength = length + (length & 1);
+    const length = readUint32LE(bytes, offset + 4);
+    const paddedLength = length + (length & 1);
     if (offset + 8 + paddedLength > bytes.length) return false;
     if (type === 'VP8 ' || type === 'VP8L' || type === 'VP8X') sawImageChunk = true;
     offset += 8 + paddedLength;
   }
   return sawImageChunk && offset === bytes.length;
 }
+
 export function detectSupportedImageContentType(bytes: Uint8Array) {
   if (isCompletePng(bytes)) return 'image/png';
   if (isCompleteJpeg(bytes)) return 'image/jpeg';
@@ -244,7 +273,11 @@ function createOperationDeadline(parentSignal: AbortSignal, timeoutMs: number) {
   if (parentSignal.aborted) controller.abort();
   else parentSignal.addEventListener('abort', onParentAbort, { once: true });
   const timer = setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs);
-  return { signal: controller.signal, timedOut: () => timedOut, dispose: () => { clearTimeout(timer); parentSignal.removeEventListener('abort', onParentAbort); } };
+  return {
+    signal: controller.signal,
+    timedOut: () => timedOut,
+    dispose: () => { clearTimeout(timer); parentSignal.removeEventListener('abort', onParentAbort); },
+  };
 }
 
 async function fetchWithSafeRedirects(urlValue: string, signal: AbortSignal) {
@@ -253,7 +286,10 @@ async function fetchWithSafeRedirects(urlValue: string, signal: AbortSignal) {
     if (!isSafeHttpsUrl(url)) return null;
     let response: Response;
     try {
-      response = await fetch(url, { redirect: 'manual', signal, headers: { accept: 'image/*', 'user-agent': 'Mozilla/5.0 (compatible; CosmoSofa/1.0; +https://cosmetology-social-publisher.buropotok.workers.dev)' } });
+      response = await fetch(url, {
+        redirect: 'manual', signal,
+        headers: { accept: 'image/*', 'user-agent': 'Mozilla/5.0 (compatible; CosmoSofa/1.0; +https://cosmetology-social-publisher.buropotok.workers.dev)' },
+      });
     } catch {
       if (signal.aborted) throw new Error('download_aborted');
       return null;
@@ -288,7 +324,9 @@ export async function downloadImage(imageUrl: string, parentSignal: AbortSignal)
     if (parentSignal.aborted) throw new AppError('AI_IMAGE_SEARCH_CANCELLED', 'Поиск изображения отменён', 499);
     if (deadline.timedOut()) return { image: null, reason: 'timeout' as const };
     throw error;
-  } finally { deadline.dispose(); }
+  } finally {
+    deadline.dispose();
+  }
 }
 
 export function buildOpenAIImageSearchRequest(prompt: string) {
@@ -306,8 +344,12 @@ async function callOpenAIImageSearch(apiKey: string, prompt: string, parentSigna
   const deadline = createOperationDeadline(parentSignal, OPENAI_TIMEOUT_MS);
   try {
     const response = await fetch(OPENAI_RESPONSES_URL, {
-      method: 'POST', signal: deadline.signal,
-      headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
+      method: 'POST',
+      signal: deadline.signal,
+      headers: {
+        authorization: `Bearer ${apiKey}`,
+        'content-type': 'application/json',
+      },
       body: JSON.stringify(buildOpenAIImageSearchRequest(prompt)),
     });
     if (parentSignal.aborted) throw new AppError('AI_IMAGE_SEARCH_CANCELLED', 'Поиск изображения отменён', 499);
@@ -323,7 +365,9 @@ async function callOpenAIImageSearch(apiKey: string, prompt: string, parentSigna
     if (parentSignal.aborted) throw new AppError('AI_IMAGE_SEARCH_CANCELLED', 'Поиск изображения отменён', 499);
     if (deadline.timedOut()) throw new AppError('AI_IMAGE_SEARCH_TIMEOUT', 'Поиск изображения занял слишком много времени. Попробуйте ещё раз.', 504);
     throw error;
-  } finally { deadline.dispose(); }
+  } finally {
+    deadline.dispose();
+  }
 }
 
 export async function searchMiniAppImage(req: Request, env: Env) {
@@ -366,8 +410,9 @@ export async function searchMiniAppImage(req: Request, env: Env) {
 
   const prompt = buildImageSearchPrompt(searchProfile, sourcePolicy, text);
   let rawResults: Array<Omit<ImageSearchResult, 'importToken'>>;
-  try { rawResults = await callOpenAIImageSearch(env.OPENAI_API_KEY, prompt, req.signal); }
-  catch (error) {
+  try {
+    rawResults = await callOpenAIImageSearch(env.OPENAI_API_KEY, prompt, req.signal);
+  } catch (error) {
     if (error instanceof AppError) throw error;
     console.error('Mini App image search OpenAI error', error instanceof Error ? error.message : String(error));
     throw new AppError('AI_IMAGE_SEARCH_FAILED', 'Не удалось выполнить поиск изображений. Попробуйте ещё раз.', 502);
