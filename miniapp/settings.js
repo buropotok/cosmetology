@@ -4,7 +4,9 @@ if(!settings||!controller)return;
 function addAction(value,id,label){const item=value?.closest('.settings-item'),row=item?.querySelector('.settings-row'),dot=row?.querySelector('.status-dot');let button=$('#'+id);if(row&&!button){button=document.createElement('button');button.id=id;button.className='secondary';button.type='button';button.setAttribute('aria-label',label);row.insertBefore(button,dot)}return{item,row,button,dot,status:row?.querySelector('.settings-copy span')}}
 const botValue=$('#settings-bot-value'),previewValue=$('#settings-preview-value'),groupValue=$('#settings-tg-group-value');
 const botUi=addAction(botValue,'edit-personal-bot','Настроить Личный чат'),groupUi={item:groupValue?.closest('.settings-item'),row:$('#edit-tg-group')?.closest('.settings-row'),button:$('#edit-tg-group'),dot:$('#settings-tg-group-dot'),status:$('#settings-tg-group-status')},vkUi=addAction($('#settings-vk-group-value'),'edit-vk-group','Добавить или сменить группу ВКонтакте');
+for(const value of [botValue,groupValue]){const detail=value?.closest('.accordion-panel');if(detail)detail.hidden=true}
 const previewItem=previewValue?.closest('.settings-item');if(previewItem){const divider=previewItem.previousElementSibling;if(divider?.classList.contains('settings-divider'))divider.hidden=true;previewItem.hidden=true}
+const note=settings.querySelector('.settings-note');if(note)note.hidden=true;
 const botTitle=botUi.row?.querySelector('.settings-copy strong');if(botTitle)botTitle.textContent='Личный чат';
 const groupTitle=groupUi.row?.querySelector('.settings-copy strong');if(groupTitle)groupTitle.textContent='Группа';
 function text(selector,value){const element=$(selector);if(element)element.textContent=value}
