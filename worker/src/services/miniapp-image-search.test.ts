@@ -46,12 +46,12 @@ describe('OpenAI image web search contract',()=>{
     },{
       imageUrl:'https://brand.example/no-source.jpg',
       thumbnailUrl:'https://brand.example/no-source.jpg',
-      sourceUrl:'',
+      sourceUrl:'https://brand.example/no-source.jpg',
       caption:'No source metadata',
     },{
       imageUrl:'https://brand.example/unsafe-source.jpg',
       thumbnailUrl:'https://brand.example/unsafe-source.jpg',
-      sourceUrl:'',
+      sourceUrl:'https://brand.example/unsafe-source.jpg',
       caption:'Unsafe source metadata',
     }]);
   });
