@@ -1,5 +1,6 @@
 import {afterEach,describe,expect,it,vi} from 'vitest';
 import {publishTelegram} from './telegram';
+import {renderTelegram} from '../../../shared/telegram-renderer';
 import type {Env} from '../types';
 
 const env={TELEGRAM_BOT_TOKEN:'token'} as Env;
@@ -49,6 +50,43 @@ describe('structured Telegram publishing',()=>{
     expect(body.get('parse_mode')).toBe('HTML');
     expect(fetch.mock.calls.some(call=>String(call[0]).endsWith('/sendRichMessage'))).toBe(false);
     expect(fetch.mock.calls.some(call=>String(call[0]).endsWith('/sendMessage'))).toBe(false);
+  });
+
+  it('preserves nested marks inside details when using a photo caption',async()=>{
+    const fetch=okFetch();vi.stubGlobal('fetch',fetch);
+    const rendered=renderTelegram({schemaVersion:2,blocks:[{type:'details',title:[{text:'Подробнее'}],blocks:[{type:'paragraph',content:[
+      {text:'B',marks:[{type:'bold'}]},
+      {text:'I',marks:[{type:'italic'}]},
+      {text:'U',marks:[{type:'underline'}]},
+      {text:'S',marks:[{type:'strikethrough'}]},
+      {text:'X',marks:[{type:'spoiler'}]},
+      {text:'L',marks:[{type:'link',href:'https://example.com'}]},
+    ]}]}]});
+    const result=await publishTelegram(env,rendered,new File(['photo'],'post.jpg',{type:'image/jpeg'}),'@channel');
+    expect(fetch).toHaveBeenCalledTimes(1);
+    const body=fetch.mock.calls[0][1].body as FormData;
+    const caption=body.get('caption') as string;
+    expect(caption).toContain('<b>B</b>');
+    expect(caption).toContain('<i>I</i>');
+    expect(caption).toContain('<u>U</u>');
+    expect(caption).toContain('<s>S</s>');
+    expect(caption).toContain('<tg-spoiler>X</tg-spoiler>');
+    expect(caption).toContain('<a href="https://example.com/">L</a>');
+    expect(body.get('parse_mode')).toBe('HTML');
+    expect(result.delivery_mode).toBe('photo_with_caption');
+  });
+
+  it('keeps nested quote marks in the first caption of a media group',async()=>{
+    const fetch=vi.fn(async(url:string,_init:RequestInit)=>new Response(JSON.stringify({ok:true,result:url.endsWith('/sendMediaGroup')?[{message_id:30},{message_id:31}]:{message_id:32}}),{status:200}));vi.stubGlobal('fetch',fetch);
+    const rendered=renderTelegram({schemaVersion:2,blocks:[{type:'quote',blocks:[{type:'paragraph',content:[{text:'Bold',marks:[{type:'bold'}]},{text:' link',marks:[{type:'link',href:'https://example.com'}]}]}]}]});
+    const images=[new File(['one'],'one.jpg',{type:'image/jpeg'}),new File(['two'],'two.jpg',{type:'image/jpeg'})];
+    await publishTelegram(env,rendered,images,'@channel');
+    expect(fetch).toHaveBeenCalledTimes(1);
+    const media=JSON.parse((fetch.mock.calls[0][1].body as FormData).get('media') as string);
+    expect(media[0].caption).toContain('<b>Bold</b>');
+    expect(media[0].caption).toContain('<a href="https://example.com/"> link</a>');
+    expect(media[0].parse_mode).toBe('HTML');
+    expect(media[1].caption).toBeUndefined();
   });
 
   it('keeps the caption-limit fallback for long rich text',async()=>{
