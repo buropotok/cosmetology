@@ -48,7 +48,7 @@ async function loadAppShell(){
   await import('/publish-ai-wizard.js');
   await import('/ai-generation-status.js');
   await import('/navigation.js');
-  await import('/d1-diagnostic.js');
+  void import('/d1-diagnostic.js').catch(error=>console.warn('D1 diagnostic failed to load',error));
   await import('/draft-loading-overlay.js');
   await import('/ai-response-ui.js');
 }
