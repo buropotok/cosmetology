@@ -66,16 +66,18 @@ test('first Continue is the explicit server restore boundary and opens the menu'
   assert.doesNotMatch(resume,/STATES\.(AI|PUBLISH|BEFORE_AFTER)/);
 });
 
-test('restore overlay exposes Cancel and cancellation aborts restore and returns Home',()=>{
+test('restore overlay exposes Cancel and cancellation aborts restore, releases retry guard, and returns Home',()=>{
   assert.match(overlay,/cosmo-draft-load-action[^>]*>Отмена<\/button>/);
   assert.match(overlay,/function showLoading\(cancel\)/);
   assert.match(overlay,/onCancel=typeof cancel==='function'\?cancel:null/);
   const start=navigation.indexOf('async function resumeDraft()');
   const end=navigation.indexOf("home.querySelector('#flow-new')",start);
   const resume=navigation.slice(start,end);
+  assert.match(resume,/const operation=\+\+resumeOperation/);
+  assert.match(resume,/resumeOperation\+\+;\s*resumeInFlight=false;\s*continueButton\.disabled=false/);
   assert.match(resume,/draft\.cancelRestore\?\.\(\)/);
   assert.match(resume,/navigation\.reset\(\[STATES\.HOME\]\)/);
-  assert.match(resume,/if\(cancelled\)return/);
+  assert.match(resume,/operation!==resumeOperation/);
 });
 
 test('restored live session makes later Continue network-free',()=>{
@@ -101,10 +103,10 @@ test('missing saved session is acknowledged and Continue is hidden for this fron
   assert.match(resume,/continueButton\.hidden=true/);
 });
 
-test('Continue ignores repeated clicks while restore is in flight',()=>{
-  assert.match(navigation,/let resumeInFlight=false/);
+test('Continue ignores repeated clicks while an active restore is in flight',()=>{
+  assert.match(navigation,/let resumeInFlight=false,resumeOperation=0/);
   assert.match(navigation,/if\(resumeInFlight\)return/);
-  assert.match(navigation,/finally\{resumeInFlight=false;continueButton\.disabled=false\}/);
+  assert.match(navigation,/if\(operation===resumeOperation\)\{resumeInFlight=false;continueButton\.disabled=false\}/);
 });
 
 test('draft load errors hide restore modal and do not navigate',()=>{
