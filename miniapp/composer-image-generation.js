@@ -90,6 +90,44 @@ import{recordRuntimeDiagnostic}from'/runtime-diagnostics.js';
     return{blob,source:response.headers.get('x-cosmo-image-source')||''};
   }
 
+  async function requestImages(path,body,operation){
+    const webApp=window.Telegram?.WebApp;
+    const started=performance.now();
+    trace(operation,'http.request','started',{method:'POST',path,textLength:String(body.text||'').length,searchProfile:body.searchProfile||'',sourcePolicy:body.sourcePolicy||''});
+    let response;
+    try{
+      response=await fetch(path,{
+        method:'POST',
+        headers:{Authorization:`tma ${webApp?.initData||''}`,'content-type':'application/json','x-cosmo-trace-id':operation.traceId},
+        body:JSON.stringify(body),
+        signal:operation.controller.signal,
+      });
+    }catch(error){
+      trace(operation,'http.request','failed',{method:'POST',path,durationMs:Math.round(performance.now()-started)},error);
+      throw error;
+    }
+    const contentType=response.headers.get('content-type')||'';
+    trace(operation,'http.response',response.ok?'ok':'error',{method:'POST',path,httpStatus:response.status,durationMs:Math.round(performance.now()-started),contentType});
+    if(!response.ok){
+      const result=await response.json().catch(()=>null);
+      const error=new Error(result?.error?.message||'Не удалось получить изображения.');
+      error.code=result?.error?.code||'IMAGE_REQUEST_FAILED';
+      trace(operation,'http.error_payload','error',{path,errorCode:error.code},error);
+      throw error;
+    }
+    if(!contentType.toLowerCase().startsWith('multipart/form-data'))throw new Error('Сервер вернул некорректные изображения.');
+    const form=await response.formData();
+    const files=form.getAll('images').filter(value=>value instanceof File&&value.type.startsWith('image/'));
+    if(!files.length)throw new Error('Сервер не вернул изображения.');
+    let metadata=[];
+    const metadataRaw=form.get('metadata');
+    if(typeof metadataRaw==='string'){
+      try{const parsed=JSON.parse(metadataRaw);if(Array.isArray(parsed))metadata=parsed}catch{}
+    }
+    trace(operation,'http.image_payload','received',{path,imageCount:files.length,totalSizeBytes:files.reduce((sum,file)=>sum+file.size,0),metadataCount:metadata.length});
+    return{files,metadata};
+  }
+
   function confirmGeneratedFallback(webApp,operation){
     const title='Официальное изображение не найдено';
     const message='Не удалось найти подходящее изображение на официальном сайте производителя, бренда или официального дистрибьютора.';
@@ -131,6 +169,21 @@ import{recordRuntimeDiagnostic}from'/runtime-diagnostics.js';
     trace(operation,'image.add','completed',{beforeCount,afterCount});
   }
 
+  function addImages(files){
+    const operation=activeRequest;
+    const images=window.CosmoComposerImages;
+    const beforeCount=images?.getFiles?.().length||0;
+    const available=Math.max(0,10-beforeCount);
+    if(!available){const error=new Error('Уже добавлено 10 изображений. Удалите одно, чтобы добавить новое.');error.code='IMAGE_LIMIT_REACHED';throw error}
+    const accepted=files.slice(0,available);
+    trace(operation,'image.add','started',{beforeCount,imageCount:accepted.length,totalSizeBytes:accepted.reduce((sum,file)=>sum+file.size,0)});
+    images?.addFiles?.(accepted);
+    const afterCount=images?.getFiles?.().length||0;
+    if(afterCount<=beforeCount){const error=new Error('Не удалось добавить изображения к публикации.');error.code='IMAGE_ADD_FAILED';throw error}
+    trace(operation,'image.add','completed',{beforeCount,afterCount,addedCount:afterCount-beforeCount});
+    return afterCount-beforeCount;
+  }
+
   async function generateImage(postText,operation){
     assertCurrentRequest(operation);
     trace(operation,'generation.started','started',{textLength:postText.length});
@@ -148,20 +201,21 @@ import{recordRuntimeDiagnostic}from'/runtime-diagnostics.js';
     if(!options.searchProfile||!options.sourcePolicy)throw new Error('Не настроен профиль поиска изображения.');
     trace(operation,'search.started','started',{textLength:postText.length,internetSearch:true,searchProfile:options.searchProfile,sourcePolicy:options.sourcePolicy});
     if(status){status.textContent=options.sourcePolicy==='official'?'Ищу официальное изображение…':'Ищу изображение в интернете…';status.className=''}
-    const {blob,source}=await requestImage('/api/miniapp/ai/image/search',{
+    const {files,metadata}=await requestImages('/api/miniapp/ai/image/search',{
       text:postText,
       searchProfile:options.searchProfile,
       sourcePolicy:options.sourcePolicy,
     },operation);
     assertCurrentRequest(operation);
-    addImage(blob,'official');
+    const addedCount=addImages(files);
     assertCurrentRequest(operation);
     if(status){
+      const source=typeof metadata[0]?.sourceUrl==='string'?metadata[0].sourceUrl:'';
       let sourceHost='';
       try{sourceHost=source?new URL(source).hostname.replace(/^www\./,''):''}catch{}
-      status.textContent=sourceHost?`Официальное фото найдено на ${sourceHost} и добавлено к публикации.`:'Официальное фото найдено и добавлено к публикации.';
+      status.textContent=sourceHost?`${addedCount} фото найдено на ${sourceHost} и добавлено к публикации.`:`Добавлено найденных фото: ${addedCount}.`;
       status.className='success';
-      trace(operation,'search.completed','success',{sourceHost});
+      trace(operation,'search.completed','success',{sourceHost,addedCount});
     }
   }
 
