@@ -42,7 +42,7 @@ describe('Telegram capability guards',()=>{
     await expect(window.CosmoOnboardingFlow.guard('telegram_preview')).resolves.toBe(false);
     expect(title()).toBe('Настройте Личный чат');expect(primary()?.textContent).toBe('В настройки');
     primary().click();await Promise.resolve();
-    expect(window.CosmoSofaDraft.flush).toHaveBeenCalledWith('telegram-settings');expect(openSettings).not.toHaveBeenCalled();
+    expect(window.CosmoSofaDraft.flush).toHaveBeenCalledWith('integration-settings');expect(openSettings).not.toHaveBeenCalled();
     release(true);await vi.waitFor(()=>expect(openSettings).toHaveBeenCalledOnce());
   });
 
@@ -77,7 +77,7 @@ describe('Telegram capability guards',()=>{
     await expect(window.CosmoOnboardingFlow.guard('telegram_publish')).resolves.toBe(false);
     expect(title()).toBe('Выберите группу для публикаций');expect(primary()?.textContent).toBe('В настройки');
     primary().click();await vi.waitFor(()=>expect(openSettings).toHaveBeenCalledOnce());
-    expect(window.CosmoSofaDraft.flush).toHaveBeenCalledWith('telegram-settings');
+    expect(window.CosmoSofaDraft.flush).toHaveBeenCalledWith('integration-settings');
   });
 
   it('uses one-shot bypasses only after a capability guard succeeds',()=>{
@@ -90,5 +90,29 @@ describe('Telegram capability guards',()=>{
   it('uses factual AccountState and contains no persisted reconciliation workflow',()=>{
     expect(source).toContain('window.CosmoAccountState');expect(source).toContain('store.refresh()');
     for(const obsolete of ['/api/miniapp/onboarding-intent','/api/miniapp/onboarding-flow',"decision==='continue_bot'","decision==='continue_group'",'visibleFlowDecision','confirmationInFlight','reconciling'])expect(source).not.toContain(obsolete);
+  });
+});
+
+describe('VK publication capability guard',()=>{
+  it('allows VK publication immediately when a group is connected',async()=>{
+    window.CosmoAccountState.refresh.mockResolvedValue({vkGroup:{connected:true,groupName:'Clinic VK'}});
+    await expect(window.CosmoOnboardingFlow.guard('vk_publish')).resolves.toBe(true);
+    expect(openSettings).not.toHaveBeenCalled();
+  });
+
+  it('routes a missing VK group through Settings and preserves the draft first',async()=>{
+    let release;window.CosmoAccountState.refresh.mockResolvedValue({vkGroup:{connected:false}});
+    window.CosmoSofaDraft.flush.mockImplementation(()=>new Promise(resolve=>{release=resolve}));
+    await expect(window.CosmoOnboardingFlow.guard('vk_publish')).resolves.toBe(false);
+    expect(title()).toBe('Выберите группу для публикации');expect(primary()?.textContent).toBe('В настройки');
+    primary().click();await Promise.resolve();
+    expect(window.CosmoSofaDraft.flush).toHaveBeenCalledWith('integration-settings');expect(openSettings).not.toHaveBeenCalled();
+    release(true);await vi.waitFor(()=>expect(openSettings).toHaveBeenCalledOnce());
+  });
+
+  it('guards the VK publish control and bypasses exactly once after success',()=>{
+    expect(source).toContain("event.preventDefault();event.stopImmediatePropagation();guard('vk_publish')");
+    expect(source).toContain('if(bypassVkPublish){bypassVkPublish=false;return}');
+    expect(source).toContain("if(ready){bypassVkPublish=true;button.click()}");
   });
 });
