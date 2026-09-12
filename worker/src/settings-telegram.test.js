@@ -10,7 +10,7 @@ const styles=readFileSync(resolve(root,'miniapp','styles.css'),'utf8');
 function markup(){return `<div id="settings-screen">
   <div class="settings-item" data-personal-chat><div class="settings-row"><div class="settings-copy"><strong>Bot</strong><span></span></div><i class="status-dot"></i></div><div class="accordion-panel static-detail"><strong id="settings-bot-value"></strong></div></div>
   <div class="settings-divider"></div>
-  <div class="settings-item" data-group><div class="settings-row"><div class="settings-copy"><strong>Group</strong><span id="settings-tg-group-status"></span></div><button id="edit-tg-group" type="button"></button><i id="settings-tg-group-dot" class="status-dot"></i></div><div class="accordion-panel static-detail"><strong id="settings-tg-group-value"></strong></div></div>
+  <div class="settings-item" data-group><div class="settings-row"><div class="settings-copy"><strong>Group</strong><span id="settings-tg-group-status"></span></div><span id="settings-tg-group-dot" class="status-dot"></span><button id="edit-tg-group" type="button"></button></div><div class="accordion-panel static-detail"><strong id="settings-tg-group-value"></strong></div></div>
   <div class="settings-divider" data-preview-divider></div>
   <div class="settings-item" data-preview><div class="settings-row"><div class="settings-copy"><strong>Preview</strong><span></span></div></div><div class="accordion-panel static-detail"><strong id="settings-preview-value"></strong></div></div>
   <div class="settings-item" data-vk><div class="settings-row"><div class="settings-copy"><strong>VK</strong><span></span></div><i class="status-dot"></i></div><div class="accordion-panel static-detail"><strong id="settings-vk-group-value"></strong></div></div>
@@ -51,6 +51,12 @@ describe('Telegram Settings capability UI',()=>{
     expect(document.querySelector('[data-group] .accordion-panel')?.style.display).toBe('none');
     expect(document.querySelector('[data-preview]')?.hidden).toBe(true);
     expect(document.querySelector('[data-preview-divider]')?.hidden).toBe(true);
+  });
+
+  it('keeps Telegram status dots after their action buttons',()=>{
+    mount({managedBot:{id:'bot-1',username:'personal_chat',destination:{connected:false}},previewReady:true,vkGroup:{connected:false}});
+    expect(botButton()?.nextElementSibling).toBe(botDot());
+    expect(groupButton()?.nextElementSibling).toBe(groupDot());
   });
 
   it('requires the personal chat before group selection is exposed',()=>{
