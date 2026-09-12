@@ -4,20 +4,17 @@ if(!settings||!controller)return;
 function addAction(value,id,label){const item=value?.closest('.settings-item'),row=item?.querySelector('.settings-row'),dot=row?.querySelector('.status-dot');let button=$('#'+id);if(row&&!button){button=document.createElement('button');button.id=id;button.className='secondary';button.type='button';button.setAttribute('aria-label',label);row.insertBefore(button,dot)}return{item,row,button,dot,status:row?.querySelector('.settings-copy span')}}
 const botValue=$('#settings-bot-value'),previewValue=$('#settings-preview-value'),groupValue=$('#settings-tg-group-value');
 const botUi=addAction(botValue,'edit-personal-bot','Настроить Личный чат'),groupUi={item:groupValue?.closest('.settings-item'),row:$('#edit-tg-group')?.closest('.settings-row'),button:$('#edit-tg-group'),dot:$('#settings-tg-group-dot'),status:$('#settings-tg-group-status')},vkUi=addAction($('#settings-vk-group-value'),'edit-vk-group','Добавить или сменить группу ВКонтакте');
-for(const value of [botValue,groupValue]){const detail=value?.closest('.accordion-panel');if(detail)detail.hidden=true}
 const previewItem=previewValue?.closest('.settings-item');if(previewItem){const divider=previewItem.previousElementSibling;if(divider?.classList.contains('settings-divider'))divider.hidden=true;previewItem.hidden=true}
-const note=settings.querySelector('.settings-note');if(note)note.hidden=true;
 const botTitle=botUi.row?.querySelector('.settings-copy strong');if(botTitle)botTitle.textContent='Личный чат';
 const groupTitle=groupUi.row?.querySelector('.settings-copy strong');if(groupTitle)groupTitle.textContent='Группа';
 function text(selector,value){const element=$(selector);if(element)element.textContent=value}
 function setDot(ui,ready){if(ui.dot)ui.dot.className=`status-dot ${ready?'ok':'error'}`}
 function setAction(ui,label,{hidden=false}={}){if(!ui.button)return;ui.button.hidden=hidden;ui.button.textContent=label;ui.button.className='secondary';ui.button.removeAttribute('aria-label')}
 function render(account){if(!account)return;const bot=account.managedBot,botReady=!!bot,previewReady=!!account.previewReady,groupReady=!!bot?.destination?.connected,vk=account.vkGroup?.connected?account.vkGroup:null,vkUrl=vk?(vk.screenName?`vk.com/${vk.screenName}`:vk.groupUrl||''):'';
-  if(!botReady){if(botUi.status)botUi.status.textContent='Не настроен';text('#settings-bot-value','Не настроен');setAction(botUi,'Подключить');setDot(botUi,false)}
-  else if(!previewReady){if(botUi.status)botUi.status.textContent='Не активирован';text('#settings-bot-value',`${bot.displayName||'Cosmo Sofa Личный чат'}${bot.username?` · @${bot.username}`:''}`);setAction(botUi,'Активировать');setDot(botUi,false)}
-  else{const name=bot.displayName||'Cosmo Sofa Личный чат';if(botUi.status)botUi.status.textContent=name;text('#settings-bot-value',`${name}${bot.username?` · @${bot.username}`:''}`);setAction(botUi,'Сменить');setDot(botUi,true)}
+  if(!previewReady){if(botUi.status)botUi.status.textContent='Не настроен';text('#settings-bot-value','Не настроен');setAction(botUi,'Подключить');setDot(botUi,false)}
+  else{const name=bot?.displayName||'Cosmo Sofa Личный чат';if(botUi.status)botUi.status.textContent=name;text('#settings-bot-value',`${name}${bot?.username?` · @${bot.username}`:''}`);setAction(botUi,'Сменить');setDot(botUi,true)}
   if(!botReady){if(groupUi.status)groupUi.status.textContent='Создайте Личный чат';text('#settings-tg-group-value','Создайте Личный чат');setAction(groupUi,'',{hidden:true});setDot(groupUi,false)}
-  else if(!groupReady){if(groupUi.status)groupUi.status.textContent='Не выбрана';text('#settings-tg-group-value','Не выбрана');setAction(groupUi,'Выбрать');setDot(groupUi,false)}
+  else if(!groupReady){if(groupUi.status)groupUi.status.textContent='Не выбрана';text('#settings-tg-group-value','Не выбрана');setAction(groupUi,'Подключить');setDot(groupUi,false)}
   else{const title=bot.destination.chatTitle||'Telegram-группа';if(groupUi.status)groupUi.status.textContent=title;text('#settings-tg-group-value',title);setAction(groupUi,'Сменить');setDot(groupUi,true)}
   text('#settings-vk-group-value',vk?(vk.groupName&&vkUrl?`${vk.groupName} · ${vkUrl}`:vk.groupName||vkUrl):'Не подключена');setDot(vkUi,!!vk)
 }
