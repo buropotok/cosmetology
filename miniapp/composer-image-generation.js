@@ -65,7 +65,7 @@ import{recordRuntimeDiagnostic}from'/runtime-diagnostics.js';
   function sourceHost(value){try{return value?new URL(value).hostname.replace(/^www\./,''):''}catch{return''}}
 
   syncButtonLabel();
-  composerState.subscribe?.(change=>{if(change.fields?.includes?.('imageOptions'))resetImageAcquisition()});
+  composerState.subscribe?.(change=>{if(change.fields?.includes?.('imageOptions')||change.fields?.includes?.('content'))resetImageAcquisition()});
   window.addEventListener('cosmo-composer-restore',resetImageAcquisition);
   window.addEventListener('cosmo-new-post',()=>cancelActiveRequest({clearResults:true}));
   window.addEventListener('cosmo-publish-mode',event=>{if(event.detail?.mode!=='compose')cancelActiveRequest({clearResults:true})});
