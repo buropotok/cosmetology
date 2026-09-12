@@ -40,6 +40,11 @@ test('image search chooser uses a feature-owned lazy stylesheet',()=>{
   assert.match(source,/composer-image-search-results/);
 });
 
+test('image search is invalidated when composer content or image options change',()=>{
+  assert.match(source,/change\.fields\?\.includes\?\.\('imageOptions'\)\|\|change\.fields\?\.includes\?\.\('content'\)/);
+  assert.match(source,/function resetImageAcquisition\(\)\{cancelActiveRequest\(\{clearResults:true\}\)/);
+});
+
 test('diagnostic panel renders the runtime snapshot at the bottom of Composer and supports Copy',()=>{
   assert.match(panelSource,/document\.querySelector\('#composer-content'\)/);
   assert.match(panelSource,/composerContent\.append\(root\)/);
