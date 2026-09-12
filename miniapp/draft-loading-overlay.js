@@ -13,34 +13,43 @@ overlay.hidden=true;
 overlay.setAttribute('role','dialog');
 overlay.setAttribute('aria-modal','true');
 overlay.setAttribute('aria-live','polite');
-overlay.innerHTML='<div class="cosmo-draft-load-card"><div class="cosmo-draft-load-spinner" aria-hidden="true"></div><p class="cosmo-draft-load-title">Восстанавливаем сессию…</p><div class="cosmo-draft-load-actions" hidden><button type="button" class="cosmo-draft-load-action">Продолжить</button></div></div>';
+overlay.innerHTML='<div class="cosmo-draft-load-card"><div class="cosmo-draft-load-spinner" aria-hidden="true"></div><p class="cosmo-draft-load-title">Восстанавливаем сессию…</p><div class="cosmo-draft-load-actions"><button type="button" class="cosmo-draft-load-action">Отмена</button></div></div>';
 document.body.append(overlay);
 
 const spinner=overlay.querySelector('.cosmo-draft-load-spinner');
 const title=overlay.querySelector('.cosmo-draft-load-title');
 const actions=overlay.querySelector('.cosmo-draft-load-actions');
 const action=overlay.querySelector('.cosmo-draft-load-action');
-let resolveAction=null;
+let resolveAction=null,onCancel=null;
 
-function showLoading(){
+function showLoading(cancel){
   if(resolveAction){resolveAction();resolveAction=null}
+  onCancel=typeof cancel==='function'?cancel:null;
   overlay.hidden=false;
   spinner.hidden=false;
-  actions.hidden=true;
+  actions.hidden=false;
+  action.textContent='Отмена';
   title.textContent='Восстанавливаем сессию…';
 }
 function showEmpty(){
+  onCancel=null;
   overlay.hidden=false;
   spinner.hidden=true;
   actions.hidden=false;
+  action.textContent='Отмена';
   title.textContent='Нет сохранённых сессий!';
   return new Promise(resolve=>{resolveAction=resolve;action.focus({preventScroll:true})});
 }
 function hide(){
   overlay.hidden=true;
+  onCancel=null;
   if(resolveAction){resolveAction();resolveAction=null}
 }
-action.addEventListener('click',()=>{const resolve=resolveAction;resolveAction=null;hide();resolve?.()});
+action.addEventListener('click',()=>{
+  const cancel=onCancel,resolve=resolveAction;
+  onCancel=null;resolveAction=null;overlay.hidden=true;
+  cancel?.();resolve?.();
+});
 
 window.CosmoDraftLoadingOverlay=Object.freeze({showLoading,showEmpty,hide});
 })();
