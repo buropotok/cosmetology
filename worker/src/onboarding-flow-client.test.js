@@ -46,6 +46,16 @@ describe('Telegram capability guards',()=>{
     release(true);await vi.waitFor(()=>expect(openSettings).toHaveBeenCalledOnce());
   });
 
+  it('does not leave Composer when draft persistence reports failure',async()=>{
+    window.CosmoAccountState.refresh.mockResolvedValue({managedBot:null,previewReady:false});
+    window.CosmoSofaDraft.flush.mockResolvedValue(false);
+    await expect(window.CosmoOnboardingFlow.guard('telegram_preview')).resolves.toBe(false);
+    primary().click();
+    await vi.waitFor(()=>expect(tgAlert).toHaveBeenCalledWith('Не удалось сохранить черновик. Попробуйте ещё раз.'));
+    expect(openSettings).not.toHaveBeenCalled();expect(openTelegramLink).not.toHaveBeenCalled();
+    expect(document.querySelector('#cosmo-onboarding-flow-modal')?.hidden).toBe(false);
+  });
+
   it('flushes the draft before opening an existing personal chat for activation',async()=>{
     let release;window.CosmoAccountState.refresh.mockResolvedValue({managedBot:{username:'personal_chat'},previewReady:false});
     window.CosmoSofaDraft.flush.mockImplementation(()=>new Promise(resolve=>{release=resolve}));
