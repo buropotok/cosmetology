@@ -33,6 +33,21 @@ test('image acquisition records request, response, fallback and final UI diagnos
   assert.doesNotMatch(source,/details:\{[^}]*text:postText/);
 });
 
+test('internet image search parses multipart files and passes them through the existing Composer image owner',()=>{
+  assert.match(source,/contentType\.toLowerCase\(\)\.startsWith\('multipart\/form-data'\)/);
+  assert.match(source,/const form=await response\.formData\(\)/);
+  assert.match(source,/form\.getAll\('images'\)/);
+  assert.match(source,/value instanceof File&&value\.type\.startsWith\('image\/'\)/);
+  assert.match(source,/images\?\.addFiles\?\.\(accepted\)/);
+  assert.match(source,/const \{files,metadata\}=await requestImages\('\/api\/miniapp\/ai\/image\/search'/);
+  assert.doesNotMatch(source,/importToken/);
+});
+
+test('multipart search respects the existing ten-image Composer limit',()=>{
+  assert.match(source,/const available=Math\.max\(0,10-beforeCount\)/);
+  assert.match(source,/const accepted=files\.slice\(0,available\)/);
+});
+
 test('diagnostic panel renders the runtime snapshot at the bottom of Composer and supports Copy',()=>{
   assert.match(panelSource,/document\.querySelector\('#composer-content'\)/);
   assert.match(panelSource,/composerContent\.append\(root\)/);
