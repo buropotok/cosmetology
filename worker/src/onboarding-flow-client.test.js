@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
 import {beforeAll,beforeEach,describe,expect,it,vi} from 'vitest';
 import {readFileSync} from 'node:fs';
+import {resolve} from 'node:path';
 
-const source=readFileSync(new URL('../../miniapp/onboarding-flow.js',import.meta.url),'utf8');
+const root=process.cwd().endsWith('/worker')?resolve(process.cwd(),'..'):process.cwd();
+const source=readFileSync(resolve(root,'miniapp','onboarding-flow.js'),'utf8');
 const tgAlert=vi.fn(),openTelegramLink=vi.fn(),openSettings=vi.fn();
 
 beforeAll(()=>{
