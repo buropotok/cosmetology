@@ -56,22 +56,22 @@ describe('Telegram Settings capability UI',()=>{
   it('requires the personal chat before group selection is exposed',()=>{
     mount({managedBot:null,previewReady:false,vkGroup:{connected:false}});
     expect(botStatus()).toBe('Не настроен');expect(botButton()?.textContent).toBe('Подключить');
-    expect(botButton()?.className).toBe('settings-action-button setup');expect(botDot()?.className).toBe('status-dot pending');
+    expect(botButton()?.className).toBe('settings-action-button attention');expect(botDot()?.className).toBe('status-dot warning');
     expect(groupStatus()).toBe('Создайте Личный чат');expect(groupButton()?.hidden).toBe(true);
-    expect(groupButton()?.className).toBe('settings-action-button setup');expect(getComputedStyle(groupButton()).display).toBe('none');
-    expect(groupDot()?.hidden).toBe(false);expect(groupDot()?.className).toBe('status-dot pending');
+    expect(groupButton()?.className).toBe('settings-action-button attention');expect(getComputedStyle(groupButton()).display).toBe('none');
+    expect(groupDot()?.hidden).toBe(false);expect(groupDot()?.className).toBe('status-dot warning');
   });
 
   it('shows activation separately from creation and allows group selection before activation',()=>{
     mount({managedBot:{id:'bot-1',username:'personal_chat',destination:{connected:false}},previewReady:false,vkGroup:{connected:false}});
-    expect(botStatus()).toBe('Не активирован');expect(botButton()?.textContent).toBe('Активировать');expect(botButton()?.className).toBe('settings-action-button setup');expect(botDot()?.className).toBe('status-dot pending');
-    expect(groupStatus()).toBe('Не выбрана');expect(groupButton()?.hidden).toBe(false);expect(groupButton()?.textContent).toBe('Выбрать');expect(groupButton()?.className).toBe('settings-action-button setup');expect(groupDot()?.className).toBe('status-dot pending');
+    expect(botStatus()).toBe('Не активирован');expect(botButton()?.textContent).toBe('Активировать');expect(botButton()?.className).toBe('settings-action-button attention');expect(botDot()?.className).toBe('status-dot warning');
+    expect(groupStatus()).toBe('Не выбрана');expect(groupButton()?.hidden).toBe(false);expect(groupButton()?.textContent).toBe('Выбрать');expect(groupButton()?.className).toBe('settings-action-button attention');expect(groupDot()?.className).toBe('status-dot warning');
   });
 
   it('shows configured names with white change actions and green status dots',()=>{
     mount({managedBot:{id:'bot-1',username:'personal_chat',displayName:'Cosmo Sofa Личный чат',destination:{connected:true,chatTitle:'Clinic'}},previewReady:true,vkGroup:{connected:false}});
-    expect(botStatus()).toBe('Cosmo Sofa Личный чат');expect(botButton()?.textContent).toBe('Сменить');expect(botButton()?.className).toBe('settings-action-button change');expect(botDot()?.className).toBe('status-dot ok');
-    expect(groupStatus()).toBe('Clinic');expect(groupButton()?.textContent).toBe('Сменить');expect(groupButton()?.className).toBe('settings-action-button change');expect(groupDot()?.className).toBe('status-dot ok');
+    expect(botStatus()).toBe('Cosmo Sofa Личный чат');expect(botButton()?.textContent).toBe('Сменить');expect(botButton()?.className).toBe('settings-action-button neutral');expect(botDot()?.className).toBe('status-dot ok');
+    expect(groupStatus()).toBe('Clinic');expect(groupButton()?.textContent).toBe('Сменить');expect(groupButton()?.className).toBe('settings-action-button neutral');expect(groupDot()?.className).toBe('status-dot ok');
   });
 
   it('opens the existing personal chat for activation instead of creating another one',()=>{
