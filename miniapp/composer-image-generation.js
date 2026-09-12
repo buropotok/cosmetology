@@ -60,12 +60,13 @@ import{recordRuntimeDiagnostic}from'/runtime-diagnostics.js';
     if(generateButton.disabled){generateButton.disabled=false;syncButtonLabel()}
     if(status){status.textContent='';status.className=''}
   }
+  function resetImageAcquisition(){cancelActiveRequest({clearResults:true});syncButtonLabel()}
   function isExpectedCancellation(error,operation){return operation.controller.signal.aborted||!isCurrentRequest(operation)||error?.name==='AbortError'}
   function sourceHost(value){try{return value?new URL(value).hostname.replace(/^www\./,''):''}catch{return''}}
 
   syncButtonLabel();
-  composerState.subscribe?.(change=>{if(change.fields?.includes?.('imageOptions')){clearSearchResults();syncButtonLabel()}});
-  window.addEventListener('cosmo-composer-restore',()=>{clearSearchResults();syncButtonLabel()});
+  composerState.subscribe?.(change=>{if(change.fields?.includes?.('imageOptions'))resetImageAcquisition()});
+  window.addEventListener('cosmo-composer-restore',resetImageAcquisition);
   window.addEventListener('cosmo-new-post',()=>cancelActiveRequest({clearResults:true}));
   window.addEventListener('cosmo-publish-mode',event=>{if(event.detail?.mode!=='compose')cancelActiveRequest({clearResults:true})});
   window.addEventListener('pagehide',()=>cancelActiveRequest({clearResults:true}));
