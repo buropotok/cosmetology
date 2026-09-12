@@ -7,8 +7,10 @@ const bootstrap=await readFile(new URL('./bootstrap.js',import.meta.url),'utf8')
 const entry=await readFile(new URL('../worker/src/watermark-entry.ts',import.meta.url),'utf8');
 const diagnostic=await readFile(new URL('../worker/src/services/d1-diagnostic.ts',import.meta.url),'utf8');
 
-test('Home D1 diagnostic is mounted after navigation and calls authenticated endpoint',()=>{
+test('Home D1 diagnostic is mounted after navigation without blocking the shell',()=>{
   assert.ok(bootstrap.indexOf("import('/navigation.js')")<bootstrap.indexOf("import('/d1-diagnostic.js')"));
+  assert.match(bootstrap,/void import\('\/d1-diagnostic\.js'\)\.catch/);
+  assert.doesNotMatch(bootstrap,/await import\('\/d1-diagnostic\.js'\)/);
   assert.match(client,/querySelector\('#home-screen'\)/);
   assert.match(client,/textContent='Test D1'/);
   assert.match(client,/fetch\('\/api\/miniapp\/diagnostics\/d1'/);
