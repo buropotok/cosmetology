@@ -11,15 +11,18 @@ function text(selector,value){const element=$(selector);if(element)element.textC
 function setDot(ui,ready){if(ui.dot)ui.dot.className=`status-dot ${ready?'ok':'error'}`}
 function setAction(ui,label,{hidden=false}={}){if(!ui.button)return;ui.button.hidden=hidden;ui.button.textContent=label;ui.button.className='secondary';ui.button.removeAttribute('aria-label')}
 function render(account){if(!account)return;const bot=account.managedBot,botReady=!!bot,previewReady=!!account.previewReady,groupReady=!!bot?.destination?.connected,vk=account.vkGroup?.connected?account.vkGroup:null,vkUrl=vk?(vk.screenName?`vk.com/${vk.screenName}`:vk.groupUrl||''):'';
-  if(!previewReady){if(botUi.status)botUi.status.textContent='Не настроен';text('#settings-bot-value','Не настроен');setAction(botUi,'Подключить');setDot(botUi,false)}
+  if(!botReady){if(botUi.status)botUi.status.textContent='Не настроен';text('#settings-bot-value','Не настроен');setAction(botUi,'Подключить');setDot(botUi,false)}
+  else if(!previewReady){if(botUi.status)botUi.status.textContent='Не активирован';text('#settings-bot-value','Не активирован');setAction(botUi,'Активировать');setDot(botUi,false)}
   else{const name=bot?.displayName||'Cosmo Sofa Личный чат';if(botUi.status)botUi.status.textContent=name;text('#settings-bot-value',`${name}${bot?.username?` · @${bot.username}`:''}`);setAction(botUi,'Сменить');setDot(botUi,true)}
   if(!botReady){if(groupUi.status)groupUi.status.textContent='Создайте Личный чат';text('#settings-tg-group-value','Создайте Личный чат');setAction(groupUi,'',{hidden:true});setDot(groupUi,false)}
-  else if(!groupReady){if(groupUi.status)groupUi.status.textContent='Не выбрана';text('#settings-tg-group-value','Не выбрана');setAction(groupUi,'Подключить');setDot(groupUi,false)}
+  else if(!groupReady){if(groupUi.status)groupUi.status.textContent='Не выбрана';text('#settings-tg-group-value','Не выбрана');setAction(groupUi,'Выбрать');setDot(groupUi,false)}
   else{const title=bot.destination.chatTitle||'Telegram-группа';if(groupUi.status)groupUi.status.textContent=title;text('#settings-tg-group-value',title);setAction(groupUi,'Сменить');setDot(groupUi,true)}
   text('#settings-vk-group-value',vk?(vk.groupName&&vkUrl?`${vk.groupName} · ${vkUrl}`:vk.groupName||vkUrl):'Не подключена');setDot(vkUi,!!vk)
 }
 controller.subscribe(state=>render(state.account));controller.refresh().catch(()=>{});
-async function act(action){try{await action();await controller.refresh()}catch(error){window.CosmoTelegramGateway.create().showAlert(error instanceof Error?error.message:'Не удалось выполнить действие.')}}
+let telegramAction=null;
+function setTelegramBusy(busy){if(botUi.button)botUi.button.disabled=busy;if(groupUi.button)groupUi.button.disabled=busy}
+async function act(action){if(telegramAction)return telegramAction;setTelegramBusy(true);const run=(async()=>{try{await action();await controller.refresh()}catch(error){window.CosmoTelegramGateway.create().showAlert(error instanceof Error?error.message:'Не удалось выполнить действие.')}})();telegramAction=run;try{return await run}finally{if(telegramAction===run){telegramAction=null;setTelegramBusy(false)}}}
 botUi.button?.addEventListener('click',()=>{const account=controller.getState().account;if(account?.managedBot&&!account.previewReady)return act(()=>controller.openPreview());return act(()=>controller.prepareManagedBot())});
 groupUi.button?.addEventListener('click',()=>act(()=>controller.connectTelegramGroup()));
 vkUi.button?.addEventListener('click',()=>window.CosmoRouter.openOnboarding({mode:'edit',initialStep:'vk_group',returnTo:'settings'}));
