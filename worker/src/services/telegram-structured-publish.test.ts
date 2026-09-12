@@ -74,6 +74,27 @@ describe('structured Telegram publishing',()=>{
     expect(result.delivery_mode).toBe('photo_then_text');
   });
 
+  it('decodes renderer quote entities before applying the caption limit',async()=>{
+    const fetch=okFetch();vi.stubGlobal('fetch',fetch);
+    const html=`${'x'.repeat(1022)}&quot;&#39;`;
+    const result=await publishTelegram(env,{plainText:`${'x'.repeat(1022)}"'`,html,blocks:[]},new File(['photo'],'post.jpg',{type:'image/jpeg'}),'@channel');
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect((fetch.mock.calls[0][1].body as FormData).get('caption')).toBe(html);
+    expect(result.delivery_mode).toBe('photo_with_caption');
+  });
+
+  it('measures unparsed plain text literally for the caption limit',async()=>{
+    const fetch=okFetch();vi.stubGlobal('fetch',fetch);
+    const text=`${'x'.repeat(1022)}<b>`;
+    const result=await publishTelegram(env,text,new File(['photo'],'post.jpg',{type:'image/jpeg'}),'@channel');
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect((fetch.mock.calls[0][1].body as FormData).get('caption')).toBeNull();
+    expect(fetch.mock.calls[1][0]).toBe('https://api.telegram.org/bottoken/sendMessage');
+    expect((fetch.mock.calls[1][1].body as FormData).get('text')).toBe(text);
+    expect((fetch.mock.calls[1][1].body as FormData).get('parse_mode')).toBeNull();
+    expect(result.delivery_mode).toBe('photo_then_text');
+  });
+
   it('avoids sendMessage when rendered rich text exceeds the 4096-character message limit',async()=>{
     const fetch=okFetch();vi.stubGlobal('fetch',fetch);
     const plainText='x'.repeat(4096),html=`${plainText}\n`;
