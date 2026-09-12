@@ -64,6 +64,26 @@ describe('structured Telegram publishing',()=>{
     expect(result.delivery_mode).toBe('photo_then_text');
   });
 
+  it('uses rendered HTML text length at the 1024-character caption boundary',async()=>{
+    const fetch=okFetch();vi.stubGlobal('fetch',fetch);
+    const plainText='x'.repeat(1024),html=`${plainText}\n`;
+    const result=await publishTelegram(env,{plainText,html,blocks:[],richMessageHtml:'<details><summary>X</summary><p>Body</p></details>'},new File(['photo'],'post.jpg',{type:'image/jpeg'}),'@channel');
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect((fetch.mock.calls[0][1].body as FormData).get('caption')).toBeNull();
+    expect(fetch.mock.calls[1][0]).toBe('https://api.telegram.org/bottoken/sendMessage');
+    expect(result.delivery_mode).toBe('photo_then_text');
+  });
+
+  it('avoids sendMessage when rendered rich text exceeds the 4096-character message limit',async()=>{
+    const fetch=okFetch();vi.stubGlobal('fetch',fetch);
+    const plainText='x'.repeat(4096),html=`${plainText}\n`;
+    const result=await publishTelegram(env,{plainText,html,blocks:[],richMessageHtml:'<details><summary>X</summary><p>Body</p></details>'},new File(['photo'],'post.jpg',{type:'image/jpeg'}),'@channel');
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(fetch.mock.calls[0][0]).toBe('https://api.telegram.org/bottoken/sendPhoto');
+    expect(fetch.mock.calls[1][0]).toBe('https://api.telegram.org/bottoken/sendRichMessage');
+    expect(result.delivery_mode).toBe('photo_then_rich_message');
+  });
+
   it('puts short rich HTML on the first media-group item instead of sending a Rich Message',async()=>{
     const fetch=vi.fn(async(url:string,_init:RequestInit)=>new Response(JSON.stringify({ok:true,result:url.endsWith('/sendMediaGroup')?[{message_id:30},{message_id:31}]:{message_id:32}}),{status:200}));vi.stubGlobal('fetch',fetch);
     const images=[new File(['one'],'one.jpg',{type:'image/jpeg'}),new File(['two'],'two.jpg',{type:'image/jpeg'})];
