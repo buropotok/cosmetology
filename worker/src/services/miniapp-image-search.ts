@@ -9,7 +9,6 @@ const MAX_IMAGE_RESULTS = 8;
 const OPENAI_TIMEOUT_MS = 20_000;
 const IMAGE_DOWNLOAD_TIMEOUT_MS = 10_000;
 const MAX_REDIRECTS = 5;
-const IMPORT_TOKEN_TTL_SECONDS = 10 * 60;
 const OPENAI_RESPONSES_URL = 'https://api.openai.com/v1/responses';
 
 type RawImageResult = {
@@ -28,7 +27,6 @@ export type ImageSearchResult = {
   thumbnailUrl: string;
   sourceUrl: string;
   caption: string;
-  importToken: string;
 };
 
 function getMiniAppInitData(req: Request) {
@@ -51,7 +49,7 @@ function cleanText(value: unknown, maxLength: number) {
 }
 
 export function extractImageSearchResults(payload: OpenAIResponse) {
-  const results: Array<Omit<ImageSearchResult, 'importToken'>> = [];
+  const results: ImageSearchResult[] = [];
   const seen = new Set<string>();
   for (const item of payload.output || []) {
     if (item?.type !== 'web_search_call' || !Array.isArray(item.results)) continue;
@@ -69,37 +67,6 @@ export function extractImageSearchResults(payload: OpenAIResponse) {
     }
   }
   return results;
-}
-
-function bytesToToken(bytes: Uint8Array) {
-  let binary = '';
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
-}
-
-async function importSignature(env: Env, imageUrl: string, expires: number) {
-  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(env.TELEGRAM_BOT_TOKEN), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-  const signature = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${imageUrl}\n${expires}`));
-  return bytesToToken(new Uint8Array(signature));
-}
-
-async function importToken(env: Env, imageUrl: string) {
-  const expires = Math.floor(Date.now() / 1000) + IMPORT_TOKEN_TTL_SECONDS;
-  return `${expires}.${await importSignature(env, imageUrl, expires)}`;
-}
-
-async function validateImportToken(env: Env, imageUrl: string, token: string) {
-  const separator = token.indexOf('.');
-  if (separator <= 0) return false;
-  const expires = Number(token.slice(0, separator));
-  const signature = token.slice(separator + 1);
-  const now = Math.floor(Date.now() / 1000);
-  if (!Number.isSafeInteger(expires) || expires < now || expires > now + IMPORT_TOKEN_TTL_SECONDS + 60) return false;
-  const expected = await importSignature(env, imageUrl, expires);
-  if (signature.length !== expected.length) return false;
-  let diff = 0;
-  for (let i = 0; i < signature.length; i += 1) diff |= signature.charCodeAt(i) ^ expected.charCodeAt(i);
-  return diff === 0;
 }
 
 async function cancelReader(reader: ReadableStreamDefaultReader<Uint8Array>) {
@@ -375,34 +342,20 @@ async function callOpenAIImageSearch(apiKey: string, prompt: string, parentSigna
   }
 }
 
+function imageExtension(contentType: string) {
+  if (contentType === 'image/png') return 'png';
+  if (contentType === 'image/jpeg') return 'jpg';
+  if (contentType === 'image/gif') return 'gif';
+  return 'webp';
+}
+
 export async function searchMiniAppImage(req: Request, env: Env) {
   await validateTelegramMiniAppInitData(getMiniAppInitData(req), env.TELEGRAM_BOT_TOKEN);
   const body = await req.json().catch(() => null) as {
     text?: unknown;
     searchProfile?: unknown;
     sourcePolicy?: unknown;
-    imageUrl?: unknown;
-    importToken?: unknown;
   } | null;
-
-  const selectedImageUrl = typeof body?.imageUrl === 'string' ? body.imageUrl.trim() : '';
-  const selectedImportToken = typeof body?.importToken === 'string' ? body.importToken.trim() : '';
-  if (selectedImageUrl || selectedImportToken) {
-    if (!isSafeHttpsUrl(selectedImageUrl) || !selectedImportToken || !await validateImportToken(env, selectedImageUrl, selectedImportToken)) {
-      throw new AppError('AI_IMAGE_SEARCH_RESULT_INVALID', 'Результат поиска изображения недействителен или устарел', 400);
-    }
-    const downloaded = await downloadImage(selectedImageUrl, req.signal);
-    if (!downloaded.image) throw new AppError('AI_IMAGE_SEARCH_IMAGE_UNAVAILABLE', 'Выбранное изображение недоступно. Выберите другой вариант.', 422);
-    return new Response(downloaded.image.bytes, {
-      status: 200,
-      headers: {
-        'content-type': downloaded.image.contentType,
-        'cache-control': 'no-store',
-        'content-disposition': 'inline; filename="web-search-image"',
-        'x-content-type-options': 'nosniff',
-      },
-    });
-  }
 
   const text = typeof body?.text === 'string' ? body.text.trim() : '';
   const searchProfile = typeof body?.searchProfile === 'string' ? body.searchProfile.trim() : '';
@@ -414,7 +367,7 @@ export async function searchMiniAppImage(req: Request, env: Env) {
   if (!env.OPENAI_API_KEY) throw new AppError('AI_NOT_CONFIGURED', 'AI пока не настроен', 503);
 
   const prompt = buildImageSearchPrompt(searchProfile, sourcePolicy, text);
-  let rawResults: Array<Omit<ImageSearchResult, 'importToken'>>;
+  let rawResults: ImageSearchResult[];
   try {
     rawResults = await callOpenAIImageSearch(env.OPENAI_API_KEY, prompt, req.signal);
   } catch (error) {
@@ -423,12 +376,30 @@ export async function searchMiniAppImage(req: Request, env: Env) {
     throw new AppError('AI_IMAGE_SEARCH_FAILED', 'Не удалось выполнить поиск изображений. Попробуйте ещё раз.', 502);
   }
   if (!rawResults.length) throw new AppError('AI_IMAGE_SEARCH_NOT_FOUND', 'Подходящие изображения не найдены', 404);
-  const images: ImageSearchResult[] = [];
-  for (const result of rawResults) images.push({ ...result, importToken: await importToken(env, result.imageUrl) });
-  return new Response(JSON.stringify({ images }), {
+
+  const attempts = await Promise.all(rawResults.map(async (result) => {
+    try {
+      const downloaded = await downloadImage(result.imageUrl, req.signal);
+      return downloaded.image ? { result, image: downloaded.image } : null;
+    } catch (error) {
+      if (error instanceof AppError) throw error;
+      return null;
+    }
+  }));
+  const downloaded = attempts.filter((item): item is NonNullable<typeof item> => Boolean(item));
+  if (!downloaded.length) throw new AppError('AI_IMAGE_SEARCH_NOT_FOUND', 'Подходящие изображения не найдены', 404);
+
+  const form = new FormData();
+  const metadata: Array<{ sourceUrl: string; caption: string }> = [];
+  downloaded.forEach(({ result, image }, index) => {
+    const blob = new Blob([image.bytes], { type: image.contentType });
+    form.append('images', blob, `web-search-image-${index + 1}.${imageExtension(image.contentType)}`);
+    metadata.push({ sourceUrl: result.sourceUrl, caption: result.caption });
+  });
+  form.append('metadata', JSON.stringify(metadata));
+  return new Response(form, {
     status: 200,
     headers: {
-      'content-type': 'application/json; charset=utf-8',
       'cache-control': 'no-store',
       'x-content-type-options': 'nosniff',
     },

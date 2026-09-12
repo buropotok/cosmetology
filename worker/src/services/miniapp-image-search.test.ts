@@ -68,28 +68,55 @@ describe('OpenAI image web search contract',()=>{
     expect(isSafeHttpsUrl('https://localhost/a.png')).toBe(false);
   });
 
-  it('signs returned URLs and rejects a tampered selection token before downloading',async()=>{
-    const openAiFetch=vi.fn(async()=>new Response(JSON.stringify({output:[{type:'web_search_call',results:[
-      {type:'image_result',image_url:'https://brand.example/product.png',thumbnail_url:'https://brand.example/thumb.png',source_website_url:'https://brand.example/product',caption:'Product'},
-    ]}]}),{status:200,headers:{'content-type':'application/json'}}));
-    vi.stubGlobal('fetch',openAiFetch);
+  it('downloads search results and returns image files in one multipart response',async()=>{
+    const bytes=pngFixture();
+    const fetchMock=vi.fn(async(input:RequestInfo|URL)=>{
+      const url=String(input);
+      if(url==='https://api.openai.com/v1/responses') return new Response(JSON.stringify({output:[{type:'web_search_call',results:[
+        {type:'image_result',image_url:'https://brand.example/one.png',source_website_url:'https://brand.example/one',caption:'One'},
+        {type:'image_result',image_url:'https://brand.example/two.png',caption:'Two'},
+      ]}]}),{status:200,headers:{'content-type':'application/json'}});
+      if(url==='https://brand.example/one.png'||url==='https://brand.example/two.png') return new Response(bytes,{status:200,headers:{'content-type':'image/png'}});
+      return new Response('missing',{status:404});
+    });
+    vi.stubGlobal('fetch',fetchMock);
     const env={TELEGRAM_BOT_TOKEN:'test-bot-secret',OPENAI_API_KEY:'test-openai-key'} as any;
-    const searchRequest=new Request('https://app.example/api/miniapp/ai/image/search',{
+    const request=new Request('https://app.example/api/miniapp/ai/image/search',{
       method:'POST',headers:{authorization:'tma test','content-type':'application/json'},
       body:JSON.stringify({text:'Пост про Product',searchProfile:'cosmetic_product',sourcePolicy:'official'}),
     });
-    const searchResponse=await searchMiniAppImage(searchRequest,env);
-    const payload=await searchResponse.json() as {images:Array<{imageUrl:string;importToken:string}>};
-    expect(payload.images).toHaveLength(1);
-    expect(payload.images[0].importToken).toContain('.');
-    const token=payload.images[0].importToken;
-    const tampered=`${token.slice(0,-1)}${token.endsWith('a')?'b':'a'}`;
-    const importRequest=new Request('https://app.example/api/miniapp/ai/image/search',{
+    const response=await searchMiniAppImage(request,env);
+    expect(response.headers.get('content-type')).toContain('multipart/form-data');
+    const form=await response.formData();
+    const images=form.getAll('images');
+    expect(images).toHaveLength(2);
+    expect(images.every(item=>item instanceof File&&item.type==='image/png')).toBe(true);
+    expect(JSON.parse(String(form.get('metadata')))).toEqual([
+      {sourceUrl:'https://brand.example/one',caption:'One'},
+      {sourceUrl:'https://brand.example/two.png',caption:'Two'},
+    ]);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('keeps valid downloads when another search result cannot be downloaded',async()=>{
+    const bytes=pngFixture();
+    vi.stubGlobal('fetch',vi.fn(async(input:RequestInfo|URL)=>{
+      const url=String(input);
+      if(url==='https://api.openai.com/v1/responses') return new Response(JSON.stringify({output:[{type:'web_search_call',results:[
+        {type:'image_result',image_url:'https://brand.example/good.png'},
+        {type:'image_result',image_url:'https://brand.example/broken.png'},
+      ]}]}),{status:200,headers:{'content-type':'application/json'}});
+      if(url==='https://brand.example/good.png') return new Response(bytes,{status:200});
+      return new Response('missing',{status:404});
+    }));
+    const env={TELEGRAM_BOT_TOKEN:'test-bot-secret',OPENAI_API_KEY:'test-openai-key'} as any;
+    const request=new Request('https://app.example/api/miniapp/ai/image/search',{
       method:'POST',headers:{authorization:'tma test','content-type':'application/json'},
-      body:JSON.stringify({imageUrl:payload.images[0].imageUrl,importToken:tampered}),
+      body:JSON.stringify({text:'Пост',searchProfile:'cosmetic_product',sourcePolicy:'official'}),
     });
-    await expect(searchMiniAppImage(importRequest,env)).rejects.toMatchObject({code:'AI_IMAGE_SEARCH_RESULT_INVALID',status:400});
-    expect(openAiFetch).toHaveBeenCalledTimes(1);
+    const response=await searchMiniAppImage(request,env);
+    const form=await response.formData();
+    expect(form.getAll('images')).toHaveLength(1);
   });
 });
 
