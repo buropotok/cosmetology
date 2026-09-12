@@ -121,14 +121,26 @@ describe('VK Settings capability UI',()=>{
     release(true);await Promise.resolve();
   });
 
-  it('refreshes and re-enables VK selection when Telegram reports activation',async()=>{
+  it('ignores focus noise before the VK handoff has actually opened',async()=>{
+    let release;const connectVk=vi.fn(()=>new Promise(resolve=>{release=resolve}));
+    const mounted=mount({managedBot:null,previewReady:false,vkGroup:{connected:false}},{connectVk});
+    mounted.controller.refresh.mockClear();
+    vkButton().click();window.dispatchEvent(new Event('focus'));
+    await Promise.resolve();
+    expect(mounted.controller.refresh).not.toHaveBeenCalled();expect(vkButton().disabled).toBe(true);
+    release(true);await Promise.resolve();
+  });
+
+  it('refreshes on Telegram activation even while document visibility is stale',async()=>{
     const mounted=mount({managedBot:null,previewReady:false,vkGroup:{connected:false}});
     mounted.controller.refresh.mockClear();
     vkButton().click();
     await vi.waitFor(()=>expect(mounted.connectVk).toHaveBeenCalledOnce());
     expect(vkButton().disabled).toBe(true);
-    mounted.fireTelegramEvent('activated');
-    await vi.waitFor(()=>expect(vkButton().disabled).toBe(false));
+    const visibility=Object.getOwnPropertyDescriptor(document,'visibilityState');
+    Object.defineProperty(document,'visibilityState',{configurable:true,value:'hidden'});
+    try{mounted.fireTelegramEvent('activated');await vi.waitFor(()=>expect(vkButton().disabled).toBe(false))}
+    finally{if(visibility)Object.defineProperty(document,'visibilityState',visibility);else delete document.visibilityState}
     expect(mounted.controller.refresh).toHaveBeenCalledOnce();
   });
 });
