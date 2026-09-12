@@ -42,7 +42,7 @@ describe('Telegram capability guards',()=>{
     await expect(window.CosmoOnboardingFlow.guard('telegram_preview')).resolves.toBe(false);
     expect(title()).toBe('Настройте Личный чат');expect(primary()?.textContent).toBe('В настройки');
     primary().click();await Promise.resolve();
-    expect(window.CosmoSofaDraft.flush).toHaveBeenCalledWith('integration-settings');expect(openSettings).not.toHaveBeenCalled();
+    expect(window.CosmoSofaDraft.flush).toHaveBeenCalledWith('telegram-settings');expect(openSettings).not.toHaveBeenCalled();
     release(true);await vi.waitFor(()=>expect(openSettings).toHaveBeenCalledOnce());
   });
 
@@ -77,7 +77,7 @@ describe('Telegram capability guards',()=>{
     await expect(window.CosmoOnboardingFlow.guard('telegram_publish')).resolves.toBe(false);
     expect(title()).toBe('Выберите группу для публикаций');expect(primary()?.textContent).toBe('В настройки');
     primary().click();await vi.waitFor(()=>expect(openSettings).toHaveBeenCalledOnce());
-    expect(window.CosmoSofaDraft.flush).toHaveBeenCalledWith('integration-settings');
+    expect(window.CosmoSofaDraft.flush).toHaveBeenCalledWith('telegram-settings');
   });
 
   it('uses one-shot bypasses only after a capability guard succeeds',()=>{
@@ -106,7 +106,7 @@ describe('VK publication capability guard',()=>{
     await expect(window.CosmoOnboardingFlow.guard('vk_publish')).resolves.toBe(false);
     expect(title()).toBe('Выберите группу для публикации');expect(primary()?.textContent).toBe('В настройки');
     primary().click();await Promise.resolve();
-    expect(window.CosmoSofaDraft.flush).toHaveBeenCalledWith('integration-settings');expect(openSettings).not.toHaveBeenCalled();
+    expect(window.CosmoSofaDraft.flush).toHaveBeenCalledWith('vk-settings');expect(openSettings).not.toHaveBeenCalled();
     release(true);await vi.waitFor(()=>expect(openSettings).toHaveBeenCalledOnce());
   });
 
