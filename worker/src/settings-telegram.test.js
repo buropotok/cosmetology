@@ -16,7 +16,7 @@ function markup(){return `<div id="settings-screen">
   <div class="settings-item" data-vk><div class="settings-row"><div class="settings-copy"><strong>VK</strong><span></span></div><i class="status-dot"></i></div><div class="accordion-panel static-detail"><strong id="settings-vk-group-value"></strong></div></div>
 </div>`}
 
-function mount(account,{prepareManagedBot=vi.fn(async()=>true),openPreview=vi.fn(),connectTelegramGroup=vi.fn(async()=>true)}={}){
+function mount(account,{prepareManagedBot=vi.fn(async()=>true),openPreview=vi.fn(),connectTelegramGroup=vi.fn(async()=>true),openVk=vi.fn(async()=>true)}={}){
   document.head.innerHTML=`<style>${styles}</style>`;
   document.body.innerHTML=markup();
   let state={status:'ready',account};const listeners=new Set();
@@ -27,10 +27,12 @@ function mount(account,{prepareManagedBot=vi.fn(async()=>true),openPreview=vi.fn
     prepareManagedBot,openPreview,connectTelegramGroup
   };
   window.CosmoOnboardingControllerInstance=controller;
+  window.CosmoAccountState={subscribe:vi.fn(listener=>{listeners.add(value=>listener(value.account));listener(state.account);return()=>{}}),refresh:vi.fn(async()=>state.account)};
+  window.CosmoVkDestinationSelection={open:openVk};
   window.CosmoTelegramGateway={create:()=>({showAlert:vi.fn()})};
   window.CosmoRouter={openOnboarding:vi.fn()};
   window.eval(source);
-  return {controller,prepareManagedBot,openPreview,connectTelegramGroup,setAccount(account){state={...state,account};for(const listener of listeners)listener(state)}};
+  return {controller,prepareManagedBot,openPreview,connectTelegramGroup,openVk,setAccount(account){state={...state,account};for(const listener of listeners)listener(state)}};
 }
 
 beforeEach(()=>{document.head.innerHTML='';document.body.innerHTML='';vi.clearAllMocks()});
@@ -94,9 +96,21 @@ describe('Telegram Settings capability UI',()=>{
     release(true);await vi.waitFor(()=>expect(groupButton().disabled).toBe(false));expect(controller.refresh).toHaveBeenCalledOnce();
   });
 
-  it('preserves the existing VK edit control outside the Telegram refactor',()=>{
-    mount({managedBot:null,previewReady:false,vkGroup:{connected:false}});
+  it('shows the warning capability action and opens VK selection directly when no group exists',()=>{
+    const {openVk}=mount({managedBot:null,previewReady:false,vkGroup:{connected:false}});
     const button=document.querySelector('#edit-vk-group');
-    expect(button?.className).toBe('row-edit-button');expect(button?.querySelector('svg')).not.toBeNull();expect(button?.textContent).toBe('');
+    expect(document.querySelector('[data-vk] .settings-copy span')?.textContent).toBe('Не выбрана');
+    expect(button?.textContent).toBe('Выбрать');expect(button?.className).toBe('settings-action-button attention');
+    expect(document.querySelector('[data-vk] .status-dot')?.className).toBe('status-dot warning');
+    button?.click();expect(openVk).toHaveBeenCalledOnce();expect(window.CosmoRouter.openOnboarding).not.toHaveBeenCalled();
+  });
+
+  it('shows the connected VK group and uses the same operation to change it',()=>{
+    const {openVk}=mount({managedBot:null,previewReady:false,vkGroup:{connected:true,groupName:'Clinic',screenName:'clinic'}});
+    const button=document.querySelector('#edit-vk-group');
+    expect(document.querySelector('[data-vk] .settings-copy span')?.textContent).toBe('Clinic · vk.com/clinic');
+    expect(button?.textContent).toBe('Сменить');expect(button?.className).toBe('settings-action-button neutral');
+    expect(document.querySelector('[data-vk] .status-dot')?.className).toBe('status-dot ok');
+    button?.click();expect(openVk).toHaveBeenCalledOnce();expect(window.CosmoRouter.openOnboarding).not.toHaveBeenCalled();
   });
 });

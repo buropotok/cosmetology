@@ -35,12 +35,12 @@ async function loadPlatform(){
 
 async function loadOnboardingAndSettings(){
   await import('/onboarding-api.js');
+  await import('/vk-destination-selection.js');
   await import('/onboarding-controller.js');
   await import('/onboarding-view.js');
   await import('/onboarding-router.js');
   await import('/settings.js');
   await import('/composer-mockup.js');
-  await import('/vk-group-publish-guard.js');
 }
 
 async function loadAppShell(){
@@ -65,6 +65,7 @@ async function loadComposerRuntime(){
   await import('/draft-store.js');
   await import('/drafts.js');
   await import('/composer-actions.js');
+  await import('/composer-vk-destination.js');
   await import('/onboarding-flow.js');
 }
 

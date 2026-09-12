@@ -3,9 +3,9 @@ const STEPS=Object.freeze(['telegram_bot','telegram_group','telegram_preview','v
 const STATUS=Object.freeze({IDLE:'idle',LOADING:'loading',READY:'ready',SUBMITTING:'submitting',WAITING_EXTERNAL_RETURN:'waiting_external_return',ERROR:'error'});
 
 class OnboardingController{
-  constructor({api,telegram}){
+  constructor({api,telegram,vkSelection=window.CosmoVkDestinationSelection}){
     if(!api||!telegram)throw new TypeError('OnboardingController requires api and telegram');
-    this.api=api;this.telegram=telegram;this.listeners=new Set();this.state={status:STATUS.IDLE,step:null,mode:null,account:null,error:null};this.refreshPromise=null;this.resolveRun=null;
+    this.api=api;this.telegram=telegram;this.vkSelection=vkSelection;this.listeners=new Set();this.state={status:STATUS.IDLE,step:null,mode:null,account:null,error:null};this.refreshPromise=null;this.resolveRun=null;
     this.unsubscribeAccount=api.accountState?.subscribe?.(account=>this.acceptAccountState(account),{immediate:true})||null;
   }
   getState(){return this.state}
@@ -22,7 +22,7 @@ class OnboardingController{
   async prepareManagedBot(){const data=await this.run(()=>this.api.prepareManagedBot());const accepted=await this.run(()=>this.telegram.requestManagedBot(data.requestId),{waiting:true});if(accepted)setTimeout(()=>this.refresh().catch(()=>{}),500);return accepted}
   async connectTelegramGroup(){const bot=this.state.account?.managedBot;if(!bot)throw new Error('Сначала создайте Личный чат');const data=await this.run(()=>this.api.createTelegramGroupLink(bot.id),{waiting:true});this.telegram.openTelegramLink(data.url);return data}
   openPreview(){const username=this.state.account?.managedBot?.username;if(!username)throw new Error('Сначала создайте Личный чат');this.telegram.openTelegramLink(`https://t.me/${username}`);this.emit({status:STATUS.WAITING_EXTERNAL_RETURN,error:null})}
-  async connectVk(){const data=await this.run(async()=>{const handoff=await this.api.createVkHandoff();if(!handoff?.vkUrl)throw new Error('Не удалось открыть выбор группы.');return handoff},{waiting:true});this.telegram.notifySelection();this.telegram.openExternalLink(data.vkUrl);return data}
+  connectVk(){if(typeof this.vkSelection?.open!=='function')throw new Error('Выбор группы VK недоступен.');return this.run(()=>this.vkSelection.open(),{waiting:true})}
   async skip(step=this.state.step){if(!STEPS.includes(step))throw new RangeError(`Unknown onboarding step: ${step}`);await this.run(()=>this.api.skipStep(step));await this.refresh();return this.next()}
   async resume(){if(this.state.status!==STATUS.WAITING_EXTERNAL_RETURN)return this.state.account;return this.refresh()}
   result(status='completed'){const skips=new Set(this.state.account?.onboardingSkips||[]);return Object.freeze({status,completedSteps:STEPS.filter(step=>this.isComplete(step)),skippedSteps:STEPS.filter(step=>skips.has(step)),accountState:this.state.account})}
