@@ -12,6 +12,7 @@ function markup(){return `<div id="settings-screen">
   <div class="settings-item" data-group><div class="settings-row"><div class="settings-copy"><strong>Group</strong><span id="settings-tg-group-status"></span></div><button id="edit-tg-group" type="button"></button><i id="settings-tg-group-dot" class="status-dot"></i></div><div class="accordion-panel static-detail"><strong id="settings-tg-group-value"></strong></div></div>
   <div class="settings-divider" data-preview-divider></div>
   <div class="settings-item" data-preview><div class="settings-row"><div class="settings-copy"><strong>Preview</strong><span></span></div></div><div class="accordion-panel static-detail"><strong id="settings-preview-value"></strong></div></div>
+  <div class="settings-item" data-vk><div class="settings-row"><div class="settings-copy"><strong>VK</strong><span></span></div><i class="status-dot"></i></div><div class="accordion-panel static-detail"><strong id="settings-vk-group-value"></strong></div></div>
 </div>`}
 
 function mount(account,{prepareManagedBot=vi.fn(async()=>true),openPreview=vi.fn(),connectTelegramGroup=vi.fn(async()=>true)}={}){
@@ -25,6 +26,7 @@ function mount(account,{prepareManagedBot=vi.fn(async()=>true),openPreview=vi.fn
   };
   window.CosmoOnboardingControllerInstance=controller;
   window.CosmoTelegramGateway={create:()=>({showAlert:vi.fn()})};
+  window.CosmoRouter={openOnboarding:vi.fn()};
   window.eval(source);
   return {controller,prepareManagedBot,openPreview,connectTelegramGroup,setAccount(account){state={...state,account};for(const listener of listeners)listener(state)}};
 }
@@ -77,5 +79,11 @@ describe('Telegram Settings capability UI',()=>{
     groupButton().click();groupButton().click();
     expect(connectTelegramGroup).toHaveBeenCalledOnce();expect(groupButton().disabled).toBe(true);expect(botButton().disabled).toBe(true);
     release(true);await vi.waitFor(()=>expect(groupButton().disabled).toBe(false));expect(controller.refresh).toHaveBeenCalledOnce();
+  });
+
+  it('preserves the existing VK edit control outside the Telegram refactor',()=>{
+    mount({managedBot:null,previewReady:false,vkGroup:{connected:false}});
+    const button=document.querySelector('#edit-vk-group');
+    expect(button?.className).toBe('row-edit-button');expect(button?.querySelector('svg')).not.toBeNull();expect(button?.textContent).toBe('');
   });
 });
