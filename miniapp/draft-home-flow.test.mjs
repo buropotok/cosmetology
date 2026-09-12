@@ -68,8 +68,8 @@ test('first Continue is the explicit server restore boundary and opens the menu'
 
 test('restore overlay exposes Cancel and cancellation aborts restore and returns Home',()=>{
   assert.match(overlay,/cosmo-draft-load-action[^>]*>Отмена<\/button>/);
-  assert.match(overlay,/function showLoading\(onCancel\)/);
-  assert.match(overlay,/cancelHandler=typeof onCancel==='function'\?onCancel:null/);
+  assert.match(overlay,/function showLoading\(cancel\)/);
+  assert.match(overlay,/onCancel=typeof cancel==='function'\?cancel:null/);
   const start=navigation.indexOf('async function resumeDraft()');
   const end=navigation.indexOf("home.querySelector('#flow-new')",start);
   const resume=navigation.slice(start,end);
