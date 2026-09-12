@@ -59,9 +59,9 @@ export function extractImageSearchResults(payload: OpenAIResponse) {
       if (raw?.type !== 'image_result') continue;
       const imageUrl = cleanText(raw.image_url, 4096);
       const sourceCandidate = cleanText(raw.source_website_url, 4096);
-      const sourceUrl = isSafeHttpsUrl(sourceCandidate) ? sourceCandidate : '';
       const thumbnailCandidate = cleanText(raw.thumbnail_url, 4096);
       if (!isSafeHttpsUrl(imageUrl) || seen.has(imageUrl)) continue;
+      const sourceUrl = isSafeHttpsUrl(sourceCandidate) ? sourceCandidate : imageUrl;
       const thumbnailUrl = isSafeHttpsUrl(thumbnailCandidate) ? thumbnailCandidate : imageUrl;
       results.push({ imageUrl, thumbnailUrl, sourceUrl, caption: cleanText(raw.caption, 500) });
       seen.add(imageUrl);
@@ -345,7 +345,8 @@ async function callOpenAIImageSearch(apiKey: string, prompt: string, parentSigna
   const deadline = createOperationDeadline(parentSignal, OPENAI_TIMEOUT_MS);
   try {
     const request = buildOpenAIImageSearchRequest(prompt);
-    console.info('OPENAI request', JSON.stringify(request));
+    const { input: _input, ...requestMetadata } = request;
+    console.info('OPENAI request', JSON.stringify({ ...requestMetadata, inputLength: prompt.length }));
     const response = await fetch(OPENAI_RESPONSES_URL, {
       method: 'POST',
       signal: deadline.signal,
