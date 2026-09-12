@@ -1,4 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('./telegram-miniapp-auth',()=>({
+  validateTelegramMiniAppInitData:vi.fn(async()=>({user:{id:1}})),
+}));
+
 import {
   buildOpenAIImageSearchRequest,
   detectSupportedImageContentType,
@@ -6,6 +11,7 @@ import {
   extractImageSearchResults,
   isSafeHttpsUrl,
   readLimitedResponseBody,
+  searchMiniAppImage,
 } from './miniapp-image-search';
 
 afterEach(()=>{ vi.unstubAllGlobals(); });
@@ -48,6 +54,30 @@ describe('OpenAI image web search contract',()=>{
     ]);
     expect(isSafeHttpsUrl('https://brand.example/a.png')).toBe(true);
     expect(isSafeHttpsUrl('https://localhost/a.png')).toBe(false);
+  });
+
+  it('signs returned URLs and rejects a tampered selection token before downloading',async()=>{
+    const openAiFetch=vi.fn(async()=>new Response(JSON.stringify({output:[{type:'web_search_call',results:[
+      {type:'image_result',image_url:'https://brand.example/product.png',thumbnail_url:'https://brand.example/thumb.png',source_website_url:'https://brand.example/product',caption:'Product'},
+    ]}]}),{status:200,headers:{'content-type':'application/json'}}));
+    vi.stubGlobal('fetch',openAiFetch);
+    const env={TELEGRAM_BOT_TOKEN:'test-bot-secret',OPENAI_API_KEY:'test-openai-key'} as any;
+    const searchRequest=new Request('https://app.example/api/miniapp/ai/image/search',{
+      method:'POST',headers:{authorization:'tma test','content-type':'application/json'},
+      body:JSON.stringify({text:'Пост про Product',searchProfile:'cosmetic_product',sourcePolicy:'official'}),
+    });
+    const searchResponse=await searchMiniAppImage(searchRequest,env);
+    const payload=await searchResponse.json() as {images:Array<{imageUrl:string;importToken:string}>};
+    expect(payload.images).toHaveLength(1);
+    expect(payload.images[0].importToken).toContain('.');
+    const token=payload.images[0].importToken;
+    const tampered=`${token.slice(0,-1)}${token.endsWith('a')?'b':'a'}`;
+    const importRequest=new Request('https://app.example/api/miniapp/ai/image/search',{
+      method:'POST',headers:{authorization:'tma test','content-type':'application/json'},
+      body:JSON.stringify({imageUrl:payload.images[0].imageUrl,importToken:tampered}),
+    });
+    await expect(searchMiniAppImage(importRequest,env)).rejects.toMatchObject({code:'AI_IMAGE_SEARCH_RESULT_INVALID',status:400});
+    expect(openAiFetch).toHaveBeenCalledTimes(1);
   });
 });
 
