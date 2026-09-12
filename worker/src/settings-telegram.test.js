@@ -5,6 +5,7 @@ import {resolve} from 'node:path';
 
 const root=process.cwd().endsWith('/worker')?resolve(process.cwd(),'..'):process.cwd();
 const source=readFileSync(resolve(root,'miniapp','settings.js'),'utf8');
+const styles=readFileSync(resolve(root,'miniapp','styles.css'),'utf8');
 
 function markup(){return `<div id="settings-screen">
   <div class="settings-item" data-personal-chat><div class="settings-row"><div class="settings-copy"><strong>Bot</strong><span></span></div><i class="status-dot"></i></div><div class="accordion-panel static-detail"><strong id="settings-bot-value"></strong></div></div>
@@ -16,6 +17,7 @@ function markup(){return `<div id="settings-screen">
 </div>`}
 
 function mount(account,{prepareManagedBot=vi.fn(async()=>true),openPreview=vi.fn(),connectTelegramGroup=vi.fn(async()=>true)}={}){
+  document.head.innerHTML=`<style>${styles}</style>`;
   document.body.innerHTML=markup();
   let state={status:'ready',account};const listeners=new Set();
   const controller={
@@ -31,7 +33,7 @@ function mount(account,{prepareManagedBot=vi.fn(async()=>true),openPreview=vi.fn
   return {controller,prepareManagedBot,openPreview,connectTelegramGroup,setAccount(account){state={...state,account};for(const listener of listeners)listener(state)}};
 }
 
-beforeEach(()=>{document.body.innerHTML='';vi.clearAllMocks()});
+beforeEach(()=>{document.head.innerHTML='';document.body.innerHTML='';vi.clearAllMocks()});
 
 const botButton=()=>document.querySelector('#edit-personal-bot');
 const groupButton=()=>document.querySelector('#edit-tg-group');
@@ -53,6 +55,7 @@ describe('Telegram Settings capability UI',()=>{
     mount({managedBot:null,previewReady:false,vkGroup:{connected:false}});
     expect(botStatus()).toBe('Не настроен');expect(botButton()?.textContent).toBe('Подключить');
     expect(groupStatus()).toBe('Создайте Личный чат');expect(groupButton()?.hidden).toBe(true);
+    expect(groupButton()?.className).toBe('settings-text-action');expect(getComputedStyle(groupButton()).display).toBe('none');
   });
 
   it('shows activation separately from creation and allows group selection before activation',()=>{
