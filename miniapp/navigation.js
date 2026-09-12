@@ -167,38 +167,54 @@ async function openNewPost(){
   const button=home.querySelector('#flow-new');button.disabled=true;
   const preparation=settlePreparation();
   try{
+    if(!(await confirmDraftReplacement()))return;
     const draft=window.CosmoSofaDraft;
     if(!draft){if(await prepareNewPostOrReport(preparation))await commitNewPost(draft);return}
     let state;
     try{state=draft.whenReady?await draft.whenReady():draft.getState?.()}catch{await showDraftLoadError();return}
     if(!state||state.loadStatus!=='ready'){await showDraftLoadError();return}
-    if(state.hasDraft&&!(await confirmDraftReplacement()))return;
     if(!(await prepareNewPostOrReport(preparation)))return;
     await commitNewPost(draft);
   }finally{newPostInFlight=false;button.disabled=false}
 }
-let resumeInFlight=false;
+let resumeInFlight=false,resumeOperation=0;
 async function resumeDraft(){
   if(resumeInFlight)return;
   const draft=window.CosmoSofaDraft,overlay=window.CosmoDraftLoadingOverlay;
   if(!draft?.load)return;
-  resumeInFlight=true;continueButton.disabled=true;overlay?.showLoading?.();
+  const operation=++resumeOperation;
+  let cancelled=false;
+  const cancelRestore=()=>{
+    if(cancelled||operation!==resumeOperation)return;
+    cancelled=true;
+    resumeOperation++;
+    resumeInFlight=false;
+    continueButton.disabled=false;
+    draft.cancelRestore?.();
+    overlay?.hide?.();
+    void navigation.reset([STATES.HOME]);
+  };
+  resumeInFlight=true;continueButton.disabled=true;overlay?.showLoading?.(cancelRestore);
   const preparation=settlePreparation();
   try{
     let restored;
-    try{restored=await draft.load()}catch{overlay?.hide?.();await showDraftLoadError();return}
+    try{restored=await draft.load()}catch{if(cancelled)return;overlay?.hide?.();await showDraftLoadError();return}
+    if(cancelled||operation!==resumeOperation)return;
     const prepared=await preparation;
+    if(cancelled||operation!==resumeOperation)return;
     if(!prepared?.ok)console.warn('Continue preparation completed with module failures',prepared?.error||prepared);
     const state=draft.getState?.();
     if(!restored||!state?.hasDraft){
       if(overlay?.showEmpty)await overlay.showEmpty();
-      else await popup({title:'Сессия не найдена',message:'Нет сохранённых сессий!',buttons:[{id:'continue',type:'ok',text:'Продолжить'}]});
+      else await popup({title:'Сессия не найдена',message:'Нет сохранённых сессий!',buttons:[{id:'cancel',type:'cancel',text:'Отмена'}]});
       continueButton.hidden=true;
       return;
     }
     overlay?.hide?.();
     await navigation.reset([STATES.HOME,STATES.MENU]);
-  }finally{resumeInFlight=false;continueButton.disabled=false}
+  }finally{
+    if(operation===resumeOperation){resumeInFlight=false;continueButton.disabled=false}
+  }
 }
 home.querySelector('#flow-new').addEventListener('click',()=>{void openNewPost()});
 continueButton.addEventListener('click',()=>{void resumeDraft()});
