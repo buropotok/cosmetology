@@ -11,9 +11,10 @@ import {
 afterEach(()=>{ vi.unstubAllGlobals(); });
 
 describe('OpenAI image web search contract',()=>{
-  it('requests raw image results from the Responses web_search tool',()=>{
+  it('requires raw image results from the Responses web_search tool',()=>{
     const request=buildOpenAIImageSearchRequest('find product images');
     expect(request.model).toBe('gpt-5.6-luna');
+    expect(request.tool_choice).toBe('required');
     expect(request.include).toEqual(['web_search_call.results']);
     expect(request.tools).toEqual([{
       type:'web_search',
