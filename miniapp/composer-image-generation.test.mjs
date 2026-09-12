@@ -23,26 +23,14 @@ test('empty image-generation input focuses Composer through its public contract'
   assert.match(editorSource,/window\.CosmoRichEditor=\{[^}]*getPlainText,focus,getSubmissionValue/);
 });
 
-test('image acquisition records search and selection diagnostics without logging post text',()=>{
+test('image acquisition records request, response, fallback and final UI diagnostics without logging post text',()=>{
   assert.match(source,/recordRuntimeDiagnostic/);
   assert.match(source,/'http\.request'/);
   assert.match(source,/'http\.response'/);
-  assert.match(source,/'search\.completed'/);
-  assert.match(source,/'search\.selection\.started'/);
+  assert.match(source,/'fallback\.opened'/);
   assert.match(source,/'image\.ui_restored'/);
   assert.match(source,/textLength:String\(body\.text\|\|''\)\.length/);
   assert.doesNotMatch(source,/details:\{[^}]*text:postText/);
-});
-
-test('image search chooser uses a feature-owned lazy stylesheet',()=>{
-  assert.match(source,/composer-image-search\.css/);
-  assert.match(source,/data-cosmo-image-search-style/);
-  assert.match(source,/composer-image-search-results/);
-});
-
-test('image search is invalidated when composer content or image options change',()=>{
-  assert.match(source,/change\.fields\?\.includes\?\.\('imageOptions'\)\|\|change\.fields\?\.includes\?\.\('content'\)/);
-  assert.match(source,/function resetImageAcquisition\(\)\{cancelActiveRequest\(\{clearResults:true\}\)/);
 });
 
 test('diagnostic panel renders the runtime snapshot at the bottom of Composer and supports Copy',()=>{
