@@ -36,11 +36,11 @@ function syncInput(){
 }
 
 function notifyChange(){
+ updateTelegramLayoutVisibility();
+ void updateVkAspectWarning();
  if(!syncInput())return;
  internalChange=true;
  try{input.dispatchEvent(new Event('change',{bubbles:true}))}finally{internalChange=false}
- updateTelegramLayoutVisibility();
- void updateVkAspectWarning();
 }
 
 function showLimit(){
