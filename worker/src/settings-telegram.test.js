@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
 import {beforeEach,describe,expect,it,vi} from 'vitest';
 import {readFileSync} from 'node:fs';
+import {resolve} from 'node:path';
 
-const source=readFileSync(new URL('../../miniapp/settings.js',import.meta.url),'utf8');
+const root=process.cwd().endsWith('/worker')?resolve(process.cwd(),'..'):process.cwd();
+const source=readFileSync(resolve(root,'miniapp','settings.js'),'utf8');
 
 function markup(){return `<div id="settings-screen">
   <div class="settings-item"><div class="settings-row"><div class="settings-copy"><strong>Bot</strong><span></span></div><span id="settings-bot-value"></span><i class="status-dot"></i></div></div>
