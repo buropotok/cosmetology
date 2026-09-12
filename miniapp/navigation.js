@@ -177,15 +177,19 @@ async function openNewPost(){
     await commitNewPost(draft);
   }finally{newPostInFlight=false;button.disabled=false}
 }
-let resumeInFlight=false;
+let resumeInFlight=false,resumeOperation=0;
 async function resumeDraft(){
   if(resumeInFlight)return;
   const draft=window.CosmoSofaDraft,overlay=window.CosmoDraftLoadingOverlay;
   if(!draft?.load)return;
+  const operation=++resumeOperation;
   let cancelled=false;
   const cancelRestore=()=>{
-    if(cancelled)return;
+    if(cancelled||operation!==resumeOperation)return;
     cancelled=true;
+    resumeOperation++;
+    resumeInFlight=false;
+    continueButton.disabled=false;
     draft.cancelRestore?.();
     overlay?.hide?.();
     void navigation.reset([STATES.HOME]);
@@ -195,9 +199,9 @@ async function resumeDraft(){
   try{
     let restored;
     try{restored=await draft.load()}catch{if(cancelled)return;overlay?.hide?.();await showDraftLoadError();return}
-    if(cancelled)return;
+    if(cancelled||operation!==resumeOperation)return;
     const prepared=await preparation;
-    if(cancelled)return;
+    if(cancelled||operation!==resumeOperation)return;
     if(!prepared?.ok)console.warn('Continue preparation completed with module failures',prepared?.error||prepared);
     const state=draft.getState?.();
     if(!restored||!state?.hasDraft){
@@ -208,7 +212,9 @@ async function resumeDraft(){
     }
     overlay?.hide?.();
     await navigation.reset([STATES.HOME,STATES.MENU]);
-  }finally{resumeInFlight=false;continueButton.disabled=false}
+  }finally{
+    if(operation===resumeOperation){resumeInFlight=false;continueButton.disabled=false}
+  }
 }
 home.querySelector('#flow-new').addEventListener('click',()=>{void openNewPost()});
 continueButton.addEventListener('click',()=>{void resumeDraft()});
