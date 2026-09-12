@@ -22,11 +22,11 @@ The image component must not inspect AI preset DOM or infer a rubric from public
 `internetSearch` selects the acquisition mode only.
 
 - `false` -> existing generative endpoint `/api/miniapp/ai/image`.
-- `true` -> internet-search endpoint `/api/miniapp/ai/image/search`.
+- `true` -> OpenAI image web search endpoint `/api/miniapp/ai/image/search`.
 
 `searchProfile` selects a server-side prompt profile. Prompt text is never sent by the browser as configuration.
 
-`sourcePolicy` restricts which source classes are acceptable. For `official`, only a manufacturer, brand, or explicitly official distributor is acceptable.
+`sourcePolicy` restricts which source classes the search prompt requests. For `official`, the search is constrained to manufacturer or brand websites.
 
 Unknown profiles or policies fail explicitly; there is no silent fallback.
 
@@ -46,21 +46,23 @@ Other current AI presets use `{ internetSearch: false }`.
 
 ## Persistence
 
-`ComposerState` is the canonical owner of `imageOptions` after handoff. `DraftStore` persists the value in `miniapp_drafts.image_options` and restores it with the Composer snapshot. This prevents a resumed product-review draft from silently reverting to generative image creation.
+`ComposerState` is the canonical owner of `imageOptions` after handoff. `DraftStore` persists the value in `miniapp_drafts.image_options` and restores it with the Composer snapshot.
+
+Search results themselves are not persisted. Once the user selects an image, Composer receives it as a normal `File`; from that point the existing Composer/DraftStore flow owns it and the existing draft save persists it to R2. Search code does not write to R2 or the database.
 
 ## Internet image search
 
-The server does not ask an image-generation model to recreate a found image.
+For `internetSearch: true` the Worker:
 
-For `internetSearch: true` it:
+1. builds the server-owned search prompt from `searchProfile` and `sourcePolicy`;
+2. calls the OpenAI Responses API with the `web_search` tool, `search_content_types: ['image', 'text']`, `image_settings`, and `include: ['web_search_call.results']`;
+3. reads `image_result` entries directly from `web_search_call.results[]`;
+4. normalizes and returns up to eight results to Composer as JSON containing the canonical image URL, thumbnail URL, source page URL, caption, and a short-lived import token.
 
-1. selects the prompt from the server-side `searchProfile` registry;
-2. uses grounded Google Search to locate an official page for the exact subject;
-3. requires the grounded answer to name the hostname of the official source it selected;
-4. follows only grounded URL sources whose final hostname matches that selected official hostname;
-5. validates redirects before following them and rejects obvious non-official hosts for `sourcePolicy: official`;
-6. extracts real page image metadata (`og:image`, `twitter:image`, `image_src`);
-7. downloads and validates the actual image bytes;
-8. returns those bytes to Composer with the official page URL in `X-Cosmo-Image-Source`.
+Composer renders these results as a chooser. Nothing is added to the post until the user selects one result.
 
-If no valid official image is found, the endpoint returns `AI_IMAGE_SEARCH_NOT_FOUND`. Composer then asks the user whether to fall back to the existing generative image flow. It never falls back silently.
+Because Telegram WebViews cannot reliably fetch arbitrary third-party image bytes because of CORS, selection posts the chosen `imageUrl + importToken` back to `/api/miniapp/ai/image/search`. The same image-search component accepts only a URL carrying the short-lived token created by its search response, downloads and validates that selected image, and streams the bytes back to Composer. It does not persist the image.
+
+Composer converts the returned blob to the same `File` contract used for manually selected/generated images and passes it to `CosmoComposerImages`. Draft persistence and publishing remain unchanged.
+
+There is no automatic fallback from internet search to image generation. A failed or empty search is surfaced locally and the user may retry.
