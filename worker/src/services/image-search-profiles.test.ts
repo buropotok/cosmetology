@@ -6,7 +6,7 @@ describe('image search profiles',()=>{
   it('builds a cosmetic-product prompt for OpenAI image web search',()=>{
     const prompt=buildImageSearchPrompt('cosmetic_product','official','Пост про препарат Test Product');
     expect(prompt).toContain('web image search');
-    expect(prompt).toContain('Не создавай, не синтезируй и не редактируй изображения');
+    expect(prompt).toContain('не создавай, не синтезируй и не редактируй изображения');
     expect(prompt).toContain('официальном сайте производителя');
     expect(prompt).toContain('несколько реальных фотографий');
     expect(prompt).not.toContain('IMAGE_URL:');
