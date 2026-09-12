@@ -55,7 +55,7 @@ Search results themselves are not persisted. Once the user selects an image, Com
 For `internetSearch: true` the Worker:
 
 1. builds the server-owned search prompt from `searchProfile` and `sourcePolicy`;
-2. calls the OpenAI Responses API with the `web_search` tool, `search_content_types: ['image', 'text']`, `image_settings`, and `include: ['web_search_call.results']`;
+2. calls the OpenAI Responses API with the `web_search` tool, `search_content_types: ['image', 'text']`, `image_settings`, `tool_choice: 'required'`, and `include: ['web_search_call.results']`;
 3. reads `image_result` entries directly from `web_search_call.results[]`;
 4. normalizes and returns up to eight results to Composer as JSON containing the canonical image URL, thumbnail URL, source page URL, caption, and a short-lived import token.
 
