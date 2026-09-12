@@ -8,6 +8,8 @@ const botValue=$('#settings-bot-value'),previewValue=$('#settings-preview-value'
 const botUi=addAction(botValue,'edit-personal-bot','Настроить Личный чат'),groupUi={item:groupValue?.closest('.settings-item'),row:$('#edit-tg-group')?.closest('.settings-row'),button:$('#edit-tg-group'),dot:$('#settings-tg-group-dot'),status:$('#settings-tg-group-status')},vkUi=addEdit($('#settings-vk-group-value'),'edit-vk-group','Добавить или сменить группу ВКонтакте');
 for(const item of [botUi.item,groupUi.item]){const detail=item?.querySelector('.accordion-panel.static-detail');if(detail){detail.hidden=true;detail.style.display='none'}}
 const previewItem=previewValue?.closest('.settings-item');if(previewItem){const divider=previewItem.previousElementSibling;if(divider?.classList.contains('settings-divider'))divider.hidden=true;previewItem.hidden=true}
+const readinessGroup=[...settings.querySelectorAll('.settings-group')].find(group=>group.querySelector(':scope > h2')?.textContent?.trim()==='Состояние');if(readinessGroup)readinessGroup.hidden=true;
+const settingsNote=settings.querySelector('.settings-note');if(settingsNote)settingsNote.hidden=true;
 const botTitle=botUi.row?.querySelector('.settings-copy strong');if(botTitle)botTitle.textContent='Личный чат';
 const groupTitle=groupUi.row?.querySelector('.settings-copy strong');if(groupTitle)groupTitle.textContent='Группа';
 function text(selector,value){const element=$(selector);if(element)element.textContent=value}
