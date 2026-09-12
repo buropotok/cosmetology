@@ -107,6 +107,24 @@ describe('selected web image validation',()=>{
     expect(detectSupportedImageContentType(new TextEncoder().encode('<html>not an image</html>'))).toBe('');
   });
 
+  it('rejects truncated files even when their signatures are intact',()=>{
+    const png=pngFixture();
+    const jpeg=jpegFixture();
+    const gif=gifFixture();
+    const webp=webpFixture();
+    expect(detectSupportedImageContentType(png.slice(0,-12))).toBe('');
+    expect(detectSupportedImageContentType(jpeg.slice(0,-2))).toBe('');
+    expect(detectSupportedImageContentType(gif.slice(0,-1))).toBe('');
+    expect(detectSupportedImageContentType(webp.slice(0,-2))).toBe('');
+  });
+
+  it('classifies a broken selected URL as unavailable',async()=>{
+    vi.stubGlobal('fetch',vi.fn(async()=>new Response('missing',{status:404})));
+    const result=await downloadImage('https://brand.example/missing.png',new AbortController().signal);
+    expect(result.image).toBeNull();
+    expect(result.reason).toBe('broken_link');
+  });
+
   it('returns valid downloaded image bytes for the selected result',async()=>{
     const bytes=pngFixture();
     vi.stubGlobal('fetch',vi.fn(async()=>new Response(bytes,{status:200,headers:{'content-type':'image/png'}})));
@@ -116,9 +134,16 @@ describe('selected web image validation',()=>{
     expect(new Uint8Array(result.image?.bytes||new ArrayBuffer(0))).toEqual(bytes);
   });
 
-  it('rejects broken or invalid selected images locally',async()=>{
+  it('rejects invalid selected image bytes',async()=>{
     vi.stubGlobal('fetch',vi.fn(async()=>new Response('<html>blocked</html>',{status:200,headers:{'content-type':'text/html'}})));
     const invalid=await downloadImage('https://brand.example/product.png',new AbortController().signal);
+    expect(invalid.image).toBeNull();expect(invalid.reason).toBe('invalid_image');
+  });
+
+  it('rejects truncated selected image bytes',async()=>{
+    const truncated=pngFixture().slice(0,-12);
+    vi.stubGlobal('fetch',vi.fn(async()=>new Response(truncated,{status:200,headers:{'content-type':'image/png'}})));
+    const invalid=await downloadImage('https://brand.example/truncated.png',new AbortController().signal);
     expect(invalid.image).toBeNull();expect(invalid.reason).toBe('invalid_image');
   });
 });
