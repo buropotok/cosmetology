@@ -16,7 +16,7 @@ function markup(){return `<div id="settings-screen">
   <div class="settings-item" data-vk><div class="settings-row"><div class="settings-copy"><strong>VK</strong><span></span></div><i class="status-dot"></i></div><div class="accordion-panel static-detail"><strong id="settings-vk-group-value"></strong></div></div>
 </div>`}
 
-function mount(account,{prepareManagedBot=vi.fn(async()=>true),openPreview=vi.fn(),connectTelegramGroup=vi.fn(async()=>true)}={}){
+function mount(account,{prepareManagedBot=vi.fn(async()=>true),openPreview=vi.fn(),connectTelegramGroup=vi.fn(async()=>true),connectVk=vi.fn(async()=>true)}={}){
   document.head.innerHTML=`<style>${styles}</style>`;
   document.body.innerHTML=markup();
   let state={status:'ready',account};const listeners=new Set();
@@ -24,23 +24,26 @@ function mount(account,{prepareManagedBot=vi.fn(async()=>true),openPreview=vi.fn
     subscribe:vi.fn(listener=>{listeners.add(listener);listener(state);return()=>listeners.delete(listener)}),
     refresh:vi.fn(async()=>state.account),
     getState:()=>state,
-    prepareManagedBot,openPreview,connectTelegramGroup
+    prepareManagedBot,openPreview,connectTelegramGroup,connectVk
   };
   window.CosmoOnboardingControllerInstance=controller;
   window.CosmoTelegramGateway={create:()=>({showAlert:vi.fn()})};
   window.CosmoRouter={openOnboarding:vi.fn()};
   window.eval(source);
-  return {controller,prepareManagedBot,openPreview,connectTelegramGroup,setAccount(account){state={...state,account};for(const listener of listeners)listener(state)}};
+  return {controller,prepareManagedBot,openPreview,connectTelegramGroup,connectVk,setAccount(account){state={...state,account};for(const listener of listeners)listener(state)}};
 }
 
 beforeEach(()=>{document.head.innerHTML='';document.body.innerHTML='';vi.clearAllMocks()});
 
 const botButton=()=>document.querySelector('#edit-personal-bot');
 const groupButton=()=>document.querySelector('#edit-tg-group');
+const vkButton=()=>document.querySelector('#edit-vk-group');
 const botDot=()=>document.querySelector('[data-personal-chat] .status-dot');
 const groupDot=()=>document.querySelector('#settings-tg-group-dot');
+const vkDot=()=>document.querySelector('[data-vk] .status-dot');
 const botStatus=()=>document.querySelector('[data-personal-chat] .settings-copy span')?.textContent;
 const groupStatus=()=>document.querySelector('#settings-tg-group-status')?.textContent;
+const vkStatus=()=>document.querySelector('[data-vk] .settings-copy span')?.textContent;
 
 describe('Telegram Settings capability UI',()=>{
   it('keeps Telegram Settings to two visible capability rows',()=>{
@@ -93,10 +96,27 @@ describe('Telegram Settings capability UI',()=>{
     expect(connectTelegramGroup).toHaveBeenCalledOnce();expect(groupButton().disabled).toBe(true);expect(botButton().disabled).toBe(true);
     release(true);await vi.waitFor(()=>expect(groupButton().disabled).toBe(false));expect(controller.refresh).toHaveBeenCalledOnce();
   });
+});
 
-  it('preserves the existing VK edit control outside the Telegram refactor',()=>{
+describe('VK Settings capability UI',()=>{
+  it('shows an unavailable VK group as a yellow Select action',()=>{
     mount({managedBot:null,previewReady:false,vkGroup:{connected:false}});
-    const button=document.querySelector('#edit-vk-group');
-    expect(button?.className).toBe('row-edit-button');expect(button?.querySelector('svg')).not.toBeNull();expect(button?.textContent).toBe('');
+    expect(vkStatus()).toBe('Не выбрана');expect(vkButton()?.textContent).toBe('Выбрать');
+    expect(vkButton()?.className).toBe('settings-action-button attention');expect(vkDot()?.className).toBe('status-dot warning');
+    expect(vkButton()?.nextElementSibling).toBe(vkDot());
+  });
+
+  it('shows a connected VK group as a white Change action with a green dot',()=>{
+    mount({managedBot:null,previewReady:false,vkGroup:{connected:true,groupName:'Clinic VK',screenName:'clinic_vk'}});
+    expect(vkStatus()).toBe('Clinic VK');expect(vkButton()?.textContent).toBe('Сменить');
+    expect(vkButton()?.className).toBe('settings-action-button neutral');expect(vkDot()?.className).toBe('status-dot ok');
+  });
+
+  it('starts VK selection directly from Settings and coalesces repeated taps',async()=>{
+    let release;const connectVk=vi.fn(()=>new Promise(resolve=>{release=resolve}));
+    mount({managedBot:null,previewReady:false,vkGroup:{connected:false}},{connectVk});
+    vkButton().click();vkButton().click();
+    expect(connectVk).toHaveBeenCalledOnce();expect(vkButton().disabled).toBe(true);
+    release(true);await Promise.resolve();
   });
 });
