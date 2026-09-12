@@ -1,8 +1,31 @@
 (()=>{
 const input=document.querySelector('#image'),previews=document.querySelector('#previews'),removeAll=document.querySelector('#remove-image'),status=document.querySelector('#status');
 if(!input||!previews)return;
-let files=Array.from(input.files||[]).slice(0,10),internalChange=false,wideCheckGeneration=0;
+let files=Array.from(input.files||[]).slice(0,10),internalChange=false,wideCheckGeneration=0,telegramLayout='slideshow';
 const VK_MAX_ASPECT=16/9;
+
+const telegramLayoutRow=document.createElement('div');
+telegramLayoutRow.className='composer-telegram-photo-layout';
+telegramLayoutRow.hidden=true;
+telegramLayoutRow.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:10px;padding:11px 12px 1px;border-top:1px solid #e5e5ea;color:#6e6e73;font-size:14px;line-height:1.2';
+const telegramLayoutLabel=document.createElement('span');
+telegramLayoutLabel.textContent='Отображение фото в Telegram:';
+const telegramLayoutButton=document.createElement('button');
+telegramLayoutButton.type='button';
+telegramLayoutButton.className='composer-telegram-layout-toggle';
+telegramLayoutButton.style.cssText='flex:0 0 auto;border:0;border-radius:9px;background:#e8f3fb;color:#2481cc;padding:8px 12px;font:600 14px/1.2 inherit';
+telegramLayoutButton.textContent='Карусель';
+telegramLayoutButton.setAttribute('aria-label','Отображение фото в Telegram: Карусель. Нажмите, чтобы выбрать коллаж.');
+telegramLayoutRow.append(telegramLayoutLabel,telegramLayoutButton);
+removeAll?.after(telegramLayoutRow);
+
+function updateTelegramLayoutVisibility(){telegramLayoutRow.hidden=files.length<2}
+function renderTelegramLayout(){
+ const isCollage=telegramLayout==='collage';
+ telegramLayoutButton.textContent=isCollage?'Коллаж':'Карусель';
+ telegramLayoutButton.setAttribute('aria-label',`Отображение фото в Telegram: ${isCollage?'Коллаж':'Карусель'}. Нажмите, чтобы выбрать ${isCollage?'карусель':'коллаж'}.`);
+}
+telegramLayoutButton.addEventListener('click',()=>{telegramLayout=telegramLayout==='slideshow'?'collage':'slideshow';renderTelegramLayout()});
 
 function syncInput(){
  if(typeof DataTransfer==='undefined')return false;
@@ -16,6 +39,7 @@ function notifyChange(){
  if(!syncInput())return;
  internalChange=true;
  try{input.dispatchEvent(new Event('change',{bubbles:true}))}finally{internalChange=false}
+ updateTelegramLayoutVisibility();
  void updateVkAspectWarning();
 }
 
@@ -73,14 +97,15 @@ window.CosmoComposerImages={
  addFiles,
  replaceFiles(incoming){files=Array.from(incoming||[]).slice(0,10);notifyChange()},
  replaceAt,
- getFiles(){return files.slice()}
+ getFiles(){return files.slice()},
+ getTelegramLayout(){return telegramLayout}
 };
 
 input.addEventListener('change',event=>{
  if(internalChange)return;
  const incoming=Array.from(input.files||[]).slice(0,10);
  if(event.isTrusted)addFiles(incoming);
- else{files=incoming;internalChange=true;try{input.dispatchEvent(new Event('change',{bubbles:true}))}finally{internalChange=false}void updateVkAspectWarning()}
+ else{files=incoming;internalChange=true;try{input.dispatchEvent(new Event('change',{bubbles:true}))}finally{internalChange=false}updateTelegramLayoutVisibility();void updateVkAspectWarning()}
 });
 
 removeAll?.addEventListener('click',()=>{files=[];notifyChange()});
@@ -114,6 +139,8 @@ function decorate(){
  });
 }
 
+renderTelegramLayout();
+updateTelegramLayoutVisibility();
 decorate();
 void updateVkAspectWarning();
 new MutationObserver(decorate).observe(previews,{childList:true});
