@@ -296,6 +296,7 @@ export function buildOpenAIImageSearchRequest(prompt: string) {
     model: SEARCH_MODEL,
     reasoning: { effort: 'low' },
     tools: [{ type: 'web_search', search_content_types: ['image', 'text'], image_settings: { max_results: MAX_IMAGE_RESULTS, caption: true } }],
+    tool_choice: 'required',
     include: ['web_search_call.results'],
     input: prompt,
   };
