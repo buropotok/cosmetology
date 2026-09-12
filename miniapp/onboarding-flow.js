@@ -6,7 +6,7 @@ function ensureModal(){let root=document.querySelector('#cosmo-onboarding-flow-m
 function closeModal(){const root=ensureModal();root.hidden=true;const ok=root.querySelector('[data-flow-primary]'),no=root.querySelector('[data-flow-cancel]');if(ok){ok.disabled=false;ok.onclick=null}if(no){no.disabled=false;no.onclick=null}}
 function modal({title,message,primary,onPrimary}){const root=ensureModal(),ok=root.querySelector('[data-flow-primary]'),no=root.querySelector('[data-flow-cancel]');root.querySelector('[data-flow-title]').textContent=title;root.querySelector('[data-flow-message]').textContent=message;ok.textContent=primary;ok.disabled=false;no.disabled=false;root.hidden=false;ok.onclick=async()=>{if(ok.disabled)return;ok.disabled=true;no.disabled=true;try{await onPrimary()}catch(error){ok.disabled=false;no.disabled=false;tg?.showAlert?.(error instanceof Error?error.message:'Не удалось выполнить действие.')}};no.onclick=closeModal;return root}
 async function flushDraft(reason){const flush=window.CosmoSofaDraft?.flush;if(!flush)return true;const saved=await flush(reason);if(saved===false)throw new Error('Не удалось сохранить черновик. Попробуйте ещё раз.');return true}
-async function openSettings(){await flushDraft('integration-settings');closeModal();window.CosmoRouter?.openSettings?.()}
+async function openSettings(reason='telegram-settings'){await flushDraft(reason);closeModal();window.CosmoRouter?.openSettings?.()}
 async function activatePersonalChat(state){const username=state?.managedBot?.username;if(!username)throw new Error('Личный чат ещё не создан.');await flushDraft('telegram-personal-chat-activation');closeModal();window.CosmoTelegramGateway.create().openTelegramLink(`https://t.me/${username}`)}
 async function guard(action){const state=await account(),botReady=!!state?.managedBot,previewReady=!!state?.previewReady,groupReady=!!state?.managedBot?.destination?.connected,vkReady=!!state?.vkGroup?.connected;
   if(action==='telegram_preview'){
@@ -20,7 +20,7 @@ async function guard(action){const state=await account(),botReady=!!state?.manag
   }
   if(action==='vk_publish'){
     if(vkReady)return true;
-    modal({title:'Выберите группу для публикации',message:'В настройках выберите группу ВКонтакте, в которую будут публиковаться ваши посты.',primary:'В настройки',onPrimary:openSettings});return false
+    modal({title:'Выберите группу для публикации',message:'В настройках выберите группу ВКонтакте, в которую будут публиковаться ваши посты.',primary:'В настройки',onPrimary:()=>openSettings('vk-settings')});return false
   }
   throw new Error(`Unknown guarded action: ${action}`)
 }
