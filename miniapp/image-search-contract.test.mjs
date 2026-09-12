@@ -32,28 +32,33 @@ test('ComposerState owns and DraftStore persists image acquisition options',()=>
   assert.match(draftStore,/imageOptions:draft\.imageOptions/);
 });
 
-test('image component switches between official search and existing generation without rubric knowledge',()=>{
+test('internetSearch renders OpenAI web image results and imports only the user-selected image',()=>{
   assert.match(imageGeneration,/🔎 Найти официальное фото/);
-  assert.match(imageGeneration,/\/api\/miniapp\/ai\/image\/search/);
-  assert.match(imageGeneration,/\/api\/miniapp\/ai\/image'/);
-  assert.match(imageGeneration,/AI_IMAGE_SEARCH_NOT_FOUND/);
-  assert.match(imageGeneration,/Сгенерировать изображение/);
+  assert.match(imageGeneration,/\/api\/miniapp\/ai\/image\/search'/);
+  assert.match(imageGeneration,/renderSearchResults\(result\?\.images\)/);
+  assert.match(imageGeneration,/selectSearchResult\(result\)/);
+  assert.match(imageGeneration,/addImage\(blob,'web'\)/);
+  assert.doesNotMatch(imageGeneration,/confirmGeneratedFallback/);
+  assert.doesNotMatch(imageGeneration,/Сгенерировать изображение/);
   assert.match(imageGeneration,/cosmo-composer-restore/);
   assert.doesNotMatch(imageGeneration,/Разбор препарата/);
 });
 
-test('image requests are aborted and stale completions cannot mutate a new draft',()=>{
+test('image requests are aborted and stale completions cannot mutate a restored or new draft',()=>{
   assert.match(imageGeneration,/new AbortController\(\)/);
-  assert.match(imageGeneration,/signal,/);
+  assert.match(imageGeneration,/signal:operation\.controller\.signal/);
   assert.match(imageGeneration,/function assertCurrentRequest\(operation\)/);
-  assert.match(imageGeneration,/assertCurrentRequest\(operation\);\s*addImage\(blob,'official'\)/);
+  assert.match(imageGeneration,/assertCurrentRequest\(operation\);\s*addImage\(blob,'web'\)/);
   assert.match(imageGeneration,/assertCurrentRequest\(operation\);\s*addImage\(blob,'gemini'\)/);
-  assert.match(imageGeneration,/window\.addEventListener\('cosmo-new-post',cancelActiveRequest\)/);
-  assert.match(imageGeneration,/cosmo-publish-mode'[\s\S]*mode!=='compose'[\s\S]*cancelActiveRequest\(\)/);
-  assert.match(imageGeneration,/window\.addEventListener\('pagehide',cancelActiveRequest\)/);
+  assert.match(imageGeneration,/function resetImageAcquisition\(\)\{cancelActiveRequest\(\{clearResults:true\}\);syncButtonLabel\(\)\}/);
+  assert.match(imageGeneration,/imageOptions'[\s\S]*resetImageAcquisition\(\)/);
+  assert.match(imageGeneration,/cosmo-composer-restore',resetImageAcquisition/);
+  assert.match(imageGeneration,/cosmo-new-post'[\s\S]*cancelActiveRequest\(\{clearResults:true\}\)/);
+  assert.match(imageGeneration,/cosmo-publish-mode'[\s\S]*mode!=='compose'[\s\S]*cancelActiveRequest\(\{clearResults:true\}\)/);
+  assert.match(imageGeneration,/pagehide'[\s\S]*cancelActiveRequest\(\{clearResults:true\}\)/);
   assert.match(imageGeneration,/if\(activeRequest===operation\)/);
 });
 
-test('Composer state loads before image generation because it is now an explicit dependency',()=>{
+test('Composer state loads before image generation because it is an explicit dependency',()=>{
   assert.ok(bootstrap.indexOf("import('/composer-state.js')")<bootstrap.indexOf("import('/composer-image-generation.js')"));
 });
