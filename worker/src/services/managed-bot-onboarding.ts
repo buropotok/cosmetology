@@ -31,9 +31,9 @@ export async function configureManagedBotWebhook(env: Env, managedBotId: string,
 type OwnedManagedBotRow = { telegram_bot_id: string; username: string };
 export async function createManagedBotGroupLink(request: Request, env: Env) {
   const { account } = await authenticatedAccount(request, env); const body = await request.json().catch(() => ({})) as { managedBotId?: unknown }; const managedBotId = typeof body.managedBotId === 'string' ? body.managedBotId : '';
-  if (!managedBotId) throw new AppError('MANAGED_BOT_ID_REQUIRED', 'Выберите персонального бота', 400);
+  if (!managedBotId) throw new AppError('MANAGED_BOT_ID_REQUIRED', 'Сначала создайте Личный чат', 400);
   const bot = await env.DB.prepare(`SELECT mb.telegram_bot_id,mb.username FROM telegram_managed_bots mb JOIN telegram_managed_bot_webhooks wh ON wh.telegram_bot_id=mb.telegram_bot_id AND wh.status='active' WHERE mb.telegram_bot_id=? AND mb.user_id=? AND mb.status='active' AND mb.username IS NOT NULL AND mb.token_ciphertext IS NOT NULL AND mb.token_iv IS NOT NULL`).bind(managedBotId, account.userId).first<OwnedManagedBotRow>();
-  if (!bot) throw new AppError('MANAGED_BOT_NOT_READY', 'Персональный бот не найден или ещё не готов', 404);
+  if (!bot) throw new AppError('MANAGED_BOT_NOT_READY', 'Личный чат не найден или ещё не готов', 404);
   const nonce = randomOpaque(24), nonceHash = await sha256(nonce), expiresAt = new Date(Date.now() + PAIRING_TTL_SECONDS * 1000).toISOString();
   await env.DB.batch([
     env.DB.prepare(`UPDATE telegram_managed_bot_group_pairings SET status='cancelled' WHERE user_id=? AND telegram_bot_id=? AND status='pending'`).bind(account.userId, bot.telegram_bot_id),
