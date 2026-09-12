@@ -58,9 +58,10 @@ export function extractImageSearchResults(payload: OpenAIResponse) {
     for (const raw of item.results) {
       if (raw?.type !== 'image_result') continue;
       const imageUrl = cleanText(raw.image_url, 4096);
-      const sourceUrl = cleanText(raw.source_website_url, 4096);
+      const sourceCandidate = cleanText(raw.source_website_url, 4096);
+      const sourceUrl = isSafeHttpsUrl(sourceCandidate) ? sourceCandidate : '';
       const thumbnailCandidate = cleanText(raw.thumbnail_url, 4096);
-      if (!isSafeHttpsUrl(imageUrl) || !isSafeHttpsUrl(sourceUrl) || seen.has(imageUrl)) continue;
+      if (!isSafeHttpsUrl(imageUrl) || seen.has(imageUrl)) continue;
       const thumbnailUrl = isSafeHttpsUrl(thumbnailCandidate) ? thumbnailCandidate : imageUrl;
       results.push({ imageUrl, thumbnailUrl, sourceUrl, caption: cleanText(raw.caption, 500) });
       seen.add(imageUrl);
@@ -343,6 +344,8 @@ export function buildOpenAIImageSearchRequest(prompt: string) {
 async function callOpenAIImageSearch(apiKey: string, prompt: string, parentSignal: AbortSignal) {
   const deadline = createOperationDeadline(parentSignal, OPENAI_TIMEOUT_MS);
   try {
+    const request = buildOpenAIImageSearchRequest(prompt);
+    console.info('OPENAI request', JSON.stringify(request));
     const response = await fetch(OPENAI_RESPONSES_URL, {
       method: 'POST',
       signal: deadline.signal,
@@ -350,11 +353,12 @@ async function callOpenAIImageSearch(apiKey: string, prompt: string, parentSigna
         authorization: `Bearer ${apiKey}`,
         'content-type': 'application/json',
       },
-      body: JSON.stringify(buildOpenAIImageSearchRequest(prompt)),
+      body: JSON.stringify(request),
     });
     if (parentSignal.aborted) throw new AppError('AI_IMAGE_SEARCH_CANCELLED', 'Поиск изображения отменён', 499);
     if (deadline.timedOut()) throw new AppError('AI_IMAGE_SEARCH_TIMEOUT', 'Поиск изображения занял слишком много времени. Попробуйте ещё раз.', 504);
     const payload = await response.json().catch(() => null) as OpenAIResponse | null;
+    console.info('OPENAI response', JSON.stringify({ status: response.status, payload }));
     if (!response.ok) {
       const message = typeof payload?.error?.message === 'string' ? payload.error.message : `OpenAI HTTP ${response.status}`;
       throw new Error(message);
@@ -414,7 +418,7 @@ export async function searchMiniAppImage(req: Request, env: Env) {
     rawResults = await callOpenAIImageSearch(env.OPENAI_API_KEY, prompt, req.signal);
   } catch (error) {
     if (error instanceof AppError) throw error;
-    console.error('Mini App image search OpenAI error', error instanceof Error ? error.message : String(error));
+    console.error('OPENAI error', error instanceof Error ? error.message : String(error));
     throw new AppError('AI_IMAGE_SEARCH_FAILED', 'Не удалось выполнить поиск изображений. Попробуйте ещё раз.', 502);
   }
   if (!rawResults.length) throw new AppError('AI_IMAGE_SEARCH_NOT_FOUND', 'Подходящие изображения не найдены', 404);
