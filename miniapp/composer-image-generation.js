@@ -6,6 +6,7 @@ import{recordRuntimeDiagnostic}from'/runtime-diagnostics.js';
   const status=document.querySelector('#status');
   const composerState=window.CosmoComposerState;
   if(!addButton||!text||!composerState)return;
+  if(!document.querySelector('link[data-cosmo-image-search-style]')){const link=document.createElement('link');link.rel='stylesheet';link.href='/composer-image-search.css';link.dataset.cosmoImageSearchStyle='1';document.head.append(link)}
 
   const currentPostText=()=>{
     try{return (window.CosmoRichEditor?.getPlainText?.()??text.value).trim()}
@@ -28,6 +29,12 @@ import{recordRuntimeDiagnostic}from'/runtime-diagnostics.js';
   generateButton.id='composer-generate-photo';
   addButton.after(generateButton);
 
+  const searchResults=document.createElement('section');
+  searchResults.id='composer-image-search-results';
+  searchResults.className='composer-image-search-results';
+  searchResults.hidden=true;
+  generateButton.after(searchResults);
+
   let requestSequence=0;
   let activeRequest=null;
 
@@ -42,25 +49,28 @@ import{recordRuntimeDiagnostic}from'/runtime-diagnostics.js';
     activeRequest=operation;
     return operation;
   }
-  function cancelActiveRequest(){
+  function clearSearchResults(){searchResults.replaceChildren();searchResults.hidden=true}
+  function cancelActiveRequest({clearResults=false}={}){
     requestSequence+=1;
     const operation=activeRequest;
     activeRequest=null;
     if(operation)trace(operation,'image.cancelled','cancelled');
     operation?.controller.abort();
+    if(clearResults)clearSearchResults();
     if(generateButton.disabled){generateButton.disabled=false;syncButtonLabel()}
     if(status){status.textContent='';status.className=''}
   }
   function isExpectedCancellation(error,operation){return operation.controller.signal.aborted||!isCurrentRequest(operation)||error?.name==='AbortError'}
+  function sourceHost(value){try{return value?new URL(value).hostname.replace(/^www\./,''):''}catch{return''}}
 
   syncButtonLabel();
-  composerState.subscribe?.(change=>{if(change.fields?.includes?.('imageOptions'))syncButtonLabel()});
-  window.addEventListener('cosmo-composer-restore',syncButtonLabel);
-  window.addEventListener('cosmo-new-post',cancelActiveRequest);
-  window.addEventListener('cosmo-publish-mode',event=>{if(event.detail?.mode!=='compose')cancelActiveRequest()});
-  window.addEventListener('pagehide',cancelActiveRequest);
+  composerState.subscribe?.(change=>{if(change.fields?.includes?.('imageOptions')){clearSearchResults();syncButtonLabel()}});
+  window.addEventListener('cosmo-composer-restore',()=>{clearSearchResults();syncButtonLabel()});
+  window.addEventListener('cosmo-new-post',()=>cancelActiveRequest({clearResults:true}));
+  window.addEventListener('cosmo-publish-mode',event=>{if(event.detail?.mode!=='compose')cancelActiveRequest({clearResults:true})});
+  window.addEventListener('pagehide',()=>cancelActiveRequest({clearResults:true}));
 
-  async function requestImage(path,body,operation){
+  async function request(path,body,operation,responseType){
     const webApp=window.Telegram?.WebApp;
     const started=performance.now();
     trace(operation,'http.request','started',{method:'POST',path,textLength:String(body.text||'').length,searchProfile:body.searchProfile||'',sourcePolicy:body.sourcePolicy||''});
@@ -84,29 +94,11 @@ import{recordRuntimeDiagnostic}from'/runtime-diagnostics.js';
       trace(operation,'http.error_payload','error',{path,errorCode:error.code},error);
       throw error;
     }
+    if(responseType==='json')return response.json();
     const blob=await response.blob();
-    trace(operation,'http.image_payload','received',{path,mimeType:blob.type,sizeBytes:blob.size,hasSource:Boolean(response.headers.get('x-cosmo-image-source'))});
+    trace(operation,'http.image_payload','received',{path,mimeType:blob.type,sizeBytes:blob.size});
     if(!blob.type.startsWith('image/'))throw new Error('Сервер вернул некорректное изображение.');
-    return{blob,source:response.headers.get('x-cosmo-image-source')||''};
-  }
-
-  function confirmGeneratedFallback(webApp,operation){
-    const title='Официальное изображение не найдено';
-    const message='Не удалось найти подходящее изображение на официальном сайте производителя, бренда или официального дистрибьютора.';
-    trace(operation,'fallback.opened','shown');
-    if(typeof webApp?.showPopup==='function'){
-      return new Promise(resolve=>webApp.showPopup({
-        title,
-        message,
-        buttons:[
-          {id:'generate',type:'default',text:'Сгенерировать изображение'},
-          {id:'cancel',type:'cancel',text:'Отмена'},
-        ],
-      },buttonId=>{trace(operation,'fallback.selected','completed',{choice:buttonId||'dismissed'});resolve(buttonId==='generate')}));
-    }
-    const accepted=window.confirm(`${title}\n\n${message}\n\nСгенерировать изображение?`);
-    trace(operation,'fallback.selected','completed',{choice:accepted?'generate':'cancel'});
-    return Promise.resolve(accepted);
+    return blob;
   }
 
   function addImage(blob,prefix){
@@ -135,7 +127,7 @@ import{recordRuntimeDiagnostic}from'/runtime-diagnostics.js';
     assertCurrentRequest(operation);
     trace(operation,'generation.started','started',{textLength:postText.length});
     if(status){status.textContent='Gemini создаёт изображение по тексту публикации…';status.className=''}
-    const {blob}=await requestImage('/api/miniapp/ai/image',{text:postText},operation);
+    const blob=await request('/api/miniapp/ai/image',{text:postText},operation,'blob');
     assertCurrentRequest(operation);
     addImage(blob,'gemini');
     assertCurrentRequest(operation);
@@ -143,44 +135,88 @@ import{recordRuntimeDiagnostic}from'/runtime-diagnostics.js';
     trace(operation,'generation.completed','success');
   }
 
-  async function searchImage(postText,options,operation){
+  function validSearchResult(value){
+    if(!value||typeof value!=='object')return false;
+    try{
+      const imageUrl=new URL(value.imageUrl),thumbnailUrl=new URL(value.thumbnailUrl||value.imageUrl),sourceUrl=new URL(value.sourceUrl);
+      return imageUrl.protocol==='https:'&&thumbnailUrl.protocol==='https:'&&sourceUrl.protocol==='https:'&&typeof value.importToken==='string'&&Boolean(value.importToken);
+    }catch{return false}
+  }
+
+  function setSearchButtonsDisabled(disabled){searchResults.querySelectorAll('button').forEach(button=>{button.disabled=disabled})}
+
+  async function selectSearchResult(result){
+    const webApp=window.Telegram?.WebApp;
+    if((window.CosmoComposerImages?.getFiles?.().length||0)>=10){
+      if(status){status.textContent='Уже добавлено 10 изображений. Удалите одно, чтобы добавить новое.';status.className='error'}
+      return;
+    }
+    const operation=beginRequest();
+    generateButton.disabled=true;
+    generateButton.textContent='Добавляем…';
+    setSearchButtonsDisabled(true);
+    if(status){status.textContent='Добавляю выбранное изображение…';status.className=''}
+    trace(operation,'search.selection.started','started',{sourceHost:sourceHost(result.sourceUrl)});
+    try{
+      const blob=await request('/api/miniapp/ai/image/search',{imageUrl:result.imageUrl,importToken:result.importToken},operation,'blob');
+      assertCurrentRequest(operation);
+      addImage(blob,'web');
+      assertCurrentRequest(operation);
+      clearSearchResults();
+      if(status){status.textContent='Фото добавлено к публикации.';status.className='success'}
+      trace(operation,'search.selection.completed','success',{sourceHost:sourceHost(result.sourceUrl)});
+      webApp?.HapticFeedback?.notificationOccurred('success');
+    }catch(error){
+      if(isExpectedCancellation(error,operation)){trace(operation,'search.selection.completed','cancelled',{},error);return}
+      trace(operation,'search.selection.completed','failed',{errorCode:error?.code||''},error);
+      if(status){status.textContent=error instanceof Error?error.message:'Не удалось добавить выбранное изображение.';status.className='error'}
+      webApp?.HapticFeedback?.notificationOccurred('error');
+      setSearchButtonsDisabled(false);
+    }finally{
+      if(activeRequest===operation){activeRequest=null;generateButton.disabled=false;syncButtonLabel()}
+    }
+  }
+
+  function renderSearchResults(rawImages){
+    const images=Array.isArray(rawImages)?rawImages.filter(validSearchResult).slice(0,8):[];
+    if(!images.length)return false;
+    const head=document.createElement('div');head.className='composer-image-search-head';
+    const title=document.createElement('strong');title.textContent='Выберите фото';
+    const close=document.createElement('button');close.type='button';close.className='composer-image-search-close';close.setAttribute('aria-label','Закрыть результаты поиска');close.textContent='×';close.addEventListener('click',clearSearchResults);
+    head.append(title,close);
+    const grid=document.createElement('div');grid.className='composer-image-search-grid';
+    images.forEach((result,index)=>{
+      const button=document.createElement('button');button.type='button';button.className='composer-image-search-item';button.setAttribute('aria-label',`Выбрать изображение ${index+1}`);
+      const image=document.createElement('img');image.loading='lazy';image.alt=result.caption||`Фото ${index+1}`;image.src=result.thumbnailUrl||result.imageUrl;
+      if(result.thumbnailUrl&&result.thumbnailUrl!==result.imageUrl)image.addEventListener('error',()=>{if(image.src!==result.imageUrl)image.src=result.imageUrl},{once:true});
+      const meta=document.createElement('span');meta.textContent=sourceHost(result.sourceUrl)||'Источник';
+      button.append(image,meta);button.addEventListener('click',()=>void selectSearchResult(result));grid.append(button);
+    });
+    searchResults.replaceChildren(head,grid);searchResults.hidden=false;
+    return true;
+  }
+
+  async function searchImages(postText,options,operation){
     assertCurrentRequest(operation);
     if(!options.searchProfile||!options.sourcePolicy)throw new Error('Не настроен профиль поиска изображения.');
+    clearSearchResults();
     trace(operation,'search.started','started',{textLength:postText.length,internetSearch:true,searchProfile:options.searchProfile,sourcePolicy:options.sourcePolicy});
-    if(status){status.textContent=options.sourcePolicy==='official'?'Ищу официальное изображение…':'Ищу изображение в интернете…';status.className=''}
-    const {blob,source}=await requestImage('/api/miniapp/ai/image/search',{
-      text:postText,
-      searchProfile:options.searchProfile,
-      sourcePolicy:options.sourcePolicy,
-    },operation);
+    if(status){status.textContent=options.sourcePolicy==='official'?'Ищу официальные изображения…':'Ищу изображения в интернете…';status.className=''}
+    const result=await request('/api/miniapp/ai/image/search',{text:postText,searchProfile:options.searchProfile,sourcePolicy:options.sourcePolicy},operation,'json');
     assertCurrentRequest(operation);
-    addImage(blob,'official');
-    assertCurrentRequest(operation);
-    if(status){
-      let sourceHost='';
-      try{sourceHost=source?new URL(source).hostname.replace(/^www\./,''):''}catch{}
-      status.textContent=sourceHost?`Официальное фото найдено на ${sourceHost} и добавлено к публикации.`:'Официальное фото найдено и добавлено к публикации.';
-      status.className='success';
-      trace(operation,'search.completed','success',{sourceHost});
+    if(!renderSearchResults(result?.images)){
+      const error=new Error('Подходящие изображения не найдены.');error.code='AI_IMAGE_SEARCH_NOT_FOUND';throw error;
     }
+    if(status){status.textContent='Выберите фотографию из найденных вариантов.';status.className='success'}
+    trace(operation,'search.completed','success',{resultCount:Array.isArray(result?.images)?result.images.length:0});
   }
 
   generateButton.addEventListener('click',async()=>{
     const postText=currentPostText();
-    if(!postText){
-      if(status){status.textContent='Сначала введите текст публикации.';status.className='error'}
-      focusComposer();
-      return;
-    }
+    if(!postText){if(status){status.textContent='Сначала введите текст публикации.';status.className='error'}focusComposer();return}
     const webApp=window.Telegram?.WebApp;
-    if(!webApp?.initData){
-      if(status){status.textContent='Откройте Mini App внутри Telegram.';status.className='error'}
-      return;
-    }
-    if((window.CosmoComposerImages?.getFiles?.().length||0)>=10){
-      if(status){status.textContent='Уже добавлено 10 изображений. Удалите одно, чтобы сгенерировать новое.';status.className='error'}
-      return;
-    }
+    if(!webApp?.initData){if(status){status.textContent='Откройте Mini App внутри Telegram.';status.className='error'}return}
+    if((window.CosmoComposerImages?.getFiles?.().length||0)>=10){if(status){status.textContent='Уже добавлено 10 изображений. Удалите одно, чтобы добавить новое.';status.className='error'}return}
 
     const options=currentImageOptions();
     const operation=beginRequest();
@@ -188,25 +224,8 @@ import{recordRuntimeDiagnostic}from'/runtime-diagnostics.js';
     generateButton.disabled=true;
     generateButton.textContent=options.internetSearch===true?'Ищем…':'Генерируем…';
     try{
-      if(options.internetSearch===true){
-        try{
-          await searchImage(postText,options,operation);
-        }catch(error){
-          assertCurrentRequest(operation);
-          if(error?.code!=='AI_IMAGE_SEARCH_NOT_FOUND')throw error;
-          trace(operation,'search.not_found','not_found',{errorCode:error.code});
-          if(!await confirmGeneratedFallback(webApp,operation)){
-            assertCurrentRequest(operation);
-            if(status){status.textContent='Поиск изображения отменён.';status.className=''}
-            trace(operation,'image.completed','cancelled',{reason:'fallback_cancelled'});
-            return;
-          }
-          assertCurrentRequest(operation);
-          await generateImage(postText,operation);
-        }
-      }else{
-        await generateImage(postText,operation);
-      }
+      if(options.internetSearch===true)await searchImages(postText,options,operation);
+      else await generateImage(postText,operation);
       assertCurrentRequest(operation);
       trace(operation,'image.completed','success');
       webApp.HapticFeedback?.notificationOccurred('success');
@@ -216,12 +235,7 @@ import{recordRuntimeDiagnostic}from'/runtime-diagnostics.js';
       if(status){status.textContent=error instanceof Error?error.message:'Не удалось получить изображение.';status.className='error'}
       webApp.HapticFeedback?.notificationOccurred('error');
     }finally{
-      if(activeRequest===operation){
-        activeRequest=null;
-        generateButton.disabled=false;
-        syncButtonLabel();
-        trace(operation,'image.ui_restored','completed',{buttonLabel:generateButton.textContent,statusText:status?.textContent||'',statusClass:status?.className||''});
-      }
+      if(activeRequest===operation){activeRequest=null;generateButton.disabled=false;syncButtonLabel();trace(operation,'image.ui_restored','completed',{buttonLabel:generateButton.textContent,statusText:status?.textContent||'',statusClass:status?.className||''})}
     }
   });
 })();
