@@ -29,10 +29,12 @@ describe('OpenAI image web search contract',()=>{
     }]);
   });
 
-  it('extracts, normalizes and deduplicates image_result entries',()=>{
+  it('extracts, normalizes and deduplicates image_result entries without requiring source metadata',()=>{
     const payload={output:[{type:'web_search_call',results:[
       {type:'image_result',image_url:'https://brand.example/product.jpg',thumbnail_url:'https://thumb.example/product.jpg',source_website_url:'https://brand.example/product',caption:'Product'},
       {type:'image_result',image_url:'https://brand.example/product.jpg',thumbnail_url:'https://thumb.example/duplicate.jpg',source_website_url:'https://brand.example/product',caption:'Duplicate'},
+      {type:'image_result',image_url:'https://brand.example/no-source.jpg',caption:'No source metadata'},
+      {type:'image_result',image_url:'https://brand.example/unsafe-source.jpg',source_website_url:'http://unsafe.example/product',caption:'Unsafe source metadata'},
       {type:'search_result',url:'https://brand.example/text'},
       {type:'image_result',image_url:'http://unsafe.example/product.jpg',source_website_url:'https://brand.example/product'},
     ]}]};
@@ -41,6 +43,16 @@ describe('OpenAI image web search contract',()=>{
       thumbnailUrl:'https://thumb.example/product.jpg',
       sourceUrl:'https://brand.example/product',
       caption:'Product',
+    },{
+      imageUrl:'https://brand.example/no-source.jpg',
+      thumbnailUrl:'https://brand.example/no-source.jpg',
+      sourceUrl:'https://brand.example/no-source.jpg',
+      caption:'No source metadata',
+    },{
+      imageUrl:'https://brand.example/unsafe-source.jpg',
+      thumbnailUrl:'https://brand.example/unsafe-source.jpg',
+      sourceUrl:'https://brand.example/unsafe-source.jpg',
+      caption:'Unsafe source metadata',
     }]);
   });
 
