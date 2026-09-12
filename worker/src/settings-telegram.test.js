@@ -19,7 +19,7 @@ function markup(){return `<div id="settings-screen">
 function mount(account,{prepareManagedBot=vi.fn(async()=>true),openPreview=vi.fn(),connectTelegramGroup=vi.fn(async()=>true),connectVk=vi.fn(async()=>true)}={}){
   document.head.innerHTML=`<style>${styles}</style>`;
   document.body.innerHTML=markup();
-  let state={status:'ready',account};const listeners=new Set();
+  let state={status:'ready',account};const listeners=new Set(),telegramEvents=new Map();
   const controller={
     subscribe:vi.fn(listener=>{listeners.add(listener);listener(state);return()=>listeners.delete(listener)}),
     refresh:vi.fn(async()=>state.account),
@@ -29,11 +29,12 @@ function mount(account,{prepareManagedBot=vi.fn(async()=>true),openPreview=vi.fn
   window.CosmoOnboardingControllerInstance=controller;
   window.CosmoTelegramGateway={create:()=>({showAlert:vi.fn()})};
   window.CosmoRouter={openOnboarding:vi.fn()};
+  window.Telegram={WebApp:{onEvent:vi.fn((name,handler)=>telegramEvents.set(name,handler))}};
   window.eval(source);
-  return {controller,prepareManagedBot,openPreview,connectTelegramGroup,connectVk,setAccount(account){state={...state,account};for(const listener of listeners)listener(state)}};
+  return {controller,prepareManagedBot,openPreview,connectTelegramGroup,connectVk,fireTelegramEvent(name){telegramEvents.get(name)?.()},setAccount(account){state={...state,account};for(const listener of listeners)listener(state)}};
 }
 
-beforeEach(()=>{document.head.innerHTML='';document.body.innerHTML='';vi.clearAllMocks()});
+beforeEach(()=>{document.head.innerHTML='';document.body.innerHTML='';delete window.Telegram;vi.clearAllMocks()});
 
 const botButton=()=>document.querySelector('#edit-personal-bot');
 const groupButton=()=>document.querySelector('#edit-tg-group');
@@ -118,5 +119,16 @@ describe('VK Settings capability UI',()=>{
     vkButton().click();vkButton().click();
     expect(connectVk).toHaveBeenCalledOnce();expect(vkButton().disabled).toBe(true);
     release(true);await Promise.resolve();
+  });
+
+  it('refreshes and re-enables VK selection when Telegram reports activation',async()=>{
+    const mounted=mount({managedBot:null,previewReady:false,vkGroup:{connected:false}});
+    mounted.controller.refresh.mockClear();
+    vkButton().click();
+    await vi.waitFor(()=>expect(mounted.connectVk).toHaveBeenCalledOnce());
+    expect(vkButton().disabled).toBe(true);
+    mounted.fireTelegramEvent('activated');
+    await vi.waitFor(()=>expect(vkButton().disabled).toBe(false));
+    expect(mounted.controller.refresh).toHaveBeenCalledOnce();
   });
 });
