@@ -1,5 +1,5 @@
 (()=>{
-const $=selector=>document.querySelector(selector),settings=$('#settings-screen'),controller=window.CosmoOnboardingControllerInstance;
+const $=selector=>document.querySelector(selector),settings=$('#settings-screen'),controller=window.CosmoOnboardingControllerInstance,tg=window.Telegram?.WebApp;
 if(!settings||!controller)return;
 function addAction(value,id,label){const item=value?.closest('.settings-item'),row=item?.querySelector('.settings-row'),dot=row?.querySelector('.status-dot');let button=$('#'+id);if(row&&!button){button=document.createElement('button');button.id=id;button.className='settings-action-button';button.type='button';button.setAttribute('aria-label',label)}if(row&&button&&dot&&button.nextElementSibling!==dot)row.insertBefore(button,dot);return{item,row,button,dot,status:row?.querySelector('.settings-copy span')}}
 const botValue=$('#settings-bot-value'),previewValue=$('#settings-preview-value'),groupValue=$('#settings-tg-group-value'),vkValue=$('#settings-vk-group-value');
@@ -32,5 +32,5 @@ groupUi.button?.addEventListener('click',()=>act(()=>controller.connectTelegramG
 let vkSelectionPending=false,vkRefreshPromise=null;
 function refreshVkReturn(){if(!vkSelectionPending||vkRefreshPromise||document.visibilityState==='hidden')return;vkRefreshPromise=controller.refresh().catch(error=>window.CosmoTelegramGateway.create().showAlert(error instanceof Error?error.message:'Не удалось обновить группу ВКонтакте.')).finally(()=>{vkSelectionPending=false;vkRefreshPromise=null;if(vkUi.button)vkUi.button.disabled=false})}
 vkUi.button?.addEventListener('click',async()=>{if(vkSelectionPending)return;vkSelectionPending=true;vkUi.button.disabled=true;try{await controller.connectVk()}catch(error){vkSelectionPending=false;vkUi.button.disabled=false;window.CosmoTelegramGateway.create().showAlert(error instanceof Error?error.message:'Не удалось открыть выбор группы ВКонтакте.')}});
-document.addEventListener('visibilitychange',refreshVkReturn);window.addEventListener('focus',refreshVkReturn);
+tg?.onEvent?.('activated',refreshVkReturn);document.addEventListener('visibilitychange',refreshVkReturn);window.addEventListener('focus',refreshVkReturn);
 })();
