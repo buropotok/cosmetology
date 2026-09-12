@@ -60,11 +60,21 @@ function nestedLegacyHtml(block:PostBlock):string{
   if(block.type==='details'){const title=block.title?.length?renderInline(block.title):'Подробнее';return `<b>${title}</b>\n${block.blocks.map(nestedLegacyHtml).join('\n')}`;}
   return '';
 }
+function joinPreviewSegments(groups:TelegramSegment[][]):TelegramSegment[]{const result:TelegramSegment[]=[];groups.forEach((group,index)=>{if(index)result.push({text:'\n',marks:[]});result.push(...group)});return result}
+function previewListSegments(type:'bullet_list'|'ordered_list',items:Array<TextRun[]|PostListItem>,depth=0):TelegramSegment[]{return joinPreviewSegments(items.map((raw,index)=>{const item=normalizeItem(raw),prefix=type==='ordered_list'?`${index+1}. `:'• ',result:TelegramSegment[]=[{text:'  '.repeat(depth)+prefix,marks:[]},...segments(item.content)],nested=nestedList(item,type);if(nested?.items.length)result.push({text:'\n',marks:[]},...previewListSegments(nested.type,nested.items,depth+1));return result}))}
+function nestedPreviewSegments(block:PostBlock):TelegramSegment[]{
+  if(block.type==='paragraph')return segments(block.content);
+  if(block.type==='heading')return segments(block.content,true);
+  if(block.type==='bullet_list'||block.type==='ordered_list')return previewListSegments(block.type,block.items);
+  if(block.type==='quote')return block.content?segments(block.content):joinPreviewSegments((block.blocks??[]).map(nestedPreviewSegments));
+  if(block.type==='details'){const title=block.title?.length?segments(block.title,true):[{text:'Подробнее',marks:[{type:'bold'} as InlineMark]}];return [...title,{text:'\n',marks:[]},...joinPreviewSegments(block.blocks.map(nestedPreviewSegments))];}
+  return [];
+}
 function flattenList(type:'bullet_list'|'ordered_list',items:Array<TextRun[]|PostListItem>,blocks:TelegramBlock[],depth=0){items.forEach((raw,index)=>{const item=normalizeItem(raw),prefix=type==='bullet_list'?'• ':`${index+1}. `;blocks.push({kind:'list_item',source:type,prefix:(depth?'  '.repeat(depth):'')+prefix,segments:segments(item.content)});const nested=nestedList(item,type);if(nested?.items.length)flattenList(nested.type,nested.items,blocks,depth+1)})}
 function appendLegacyBlock(block:PostBlock,blocks:TelegramBlock[]){
   if(block.type==='bullet_list'||block.type==='ordered_list'){flattenList(block.type,block.items,blocks);return;}
-  if(block.type==='details'){const titleRuns=block.title?.length?block.title:[{text:'Подробнее'}];blocks.push({kind:'expandable_quote',source:block.type,segments:[],innerHtml:block.blocks.map(nestedLegacyHtml).join('\n'),title:segments(titleRuns)});return;}
-  if(block.type==='quote'){if(block.blocks){blocks.push({kind:'quote',source:block.type,segments:[],innerHtml:block.blocks.map(nestedLegacyHtml).join('\n')});return;}blocks.push({kind:'quote',source:block.type,segments:segments(block.content??[])});return;}
+  if(block.type==='details'){const titleRuns=block.title?.length?block.title:[{text:'Подробнее'}];blocks.push({kind:'expandable_quote',source:block.type,segments:joinPreviewSegments(block.blocks.map(nestedPreviewSegments)),innerHtml:block.blocks.map(nestedLegacyHtml).join('\n'),title:segments(titleRuns)});return;}
+  if(block.type==='quote'){if(block.blocks){blocks.push({kind:'quote',source:block.type,segments:joinPreviewSegments(block.blocks.map(nestedPreviewSegments)),innerHtml:block.blocks.map(nestedLegacyHtml).join('\n')});return;}blocks.push({kind:'quote',source:block.type,segments:segments(block.content??[])});return;}
   if(block.type==='paragraph'||block.type==='heading'){blocks.push({kind:'text',source:block.type,segments:segments(block.content,block.type==='heading')});}
 }
 
