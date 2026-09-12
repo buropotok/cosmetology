@@ -57,10 +57,11 @@ test('failed draft load becomes retryable error state',async()=>{
   assert.equal(store.getState().hasDraft,false);
 });
 
-test('draft loading UI is an on-demand session restore dialog independent from Home settings controls',()=>{
+test('draft loading UI is an on-demand cancellable session restore dialog independent from Home settings controls',()=>{
   assert.match(overlaySource,/Восстанавливаем сессию…/);
   assert.match(overlaySource,/Нет сохранённых сессий!/);
-  assert.match(overlaySource,/function showLoading\(\)/);
+  assert.match(overlaySource,/function showLoading\(onCancel\)/);
+  assert.match(overlaySource,/cancelHandler=typeof onCancel==='function'\?onCancel:null/);
   assert.match(overlaySource,/function showEmpty\(\)/);
   assert.match(overlaySource,/function hide\(\)/);
   assert.match(overlaySource,/overlay\.hidden=true/);
