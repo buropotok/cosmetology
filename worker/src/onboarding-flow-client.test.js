@@ -3,40 +3,56 @@ import {readFileSync} from 'node:fs';
 
 const source=readFileSync(new URL('../../miniapp/onboarding-flow.js',import.meta.url),'utf8');
 
-describe('Onboarding flow client continuation',()=>{
+describe('Telegram capability guards',()=>{
   it('blocks the original guarded action synchronously before async capability checks',()=>{
     expect(source).toContain("event.preventDefault();event.stopImmediatePropagation();guard('telegram_preview')");
     expect(source).toContain("event.preventDefault();event.stopImmediatePropagation();guard('telegram_publish')");
   });
 
-  it('uses one-shot bypasses for resumed preview and publish',()=>{
+  it('uses one-shot bypasses only after a capability guard succeeds',()=>{
     expect(source).toContain('if(bypassPreview){bypassPreview=false;return}');
     expect(source).toContain('if(bypassPublish){bypassPublish=false;return}');
-    expect(source).toContain('bypassPublish=true;form.requestSubmit?.(submitter)');
+    expect(source).toContain("if(ready){bypassPreview=true;button.click()}");
+    expect(source).toContain("if(ready){bypassPublish=true;event.target.requestSubmit(document.querySelector('#publish'))}");
   });
 
-  it('does not reopen a bot or group step while an onboarding run is active',()=>{
-    expect(source).toContain("if(decision==='continue_bot'){if(window.CosmoOnboardingRouter?.active)return;");
-    expect(source).toContain("if(decision==='continue_group'){if(!window.CosmoOnboardingRouter?.active)await openStep('telegram_group');");
+  it('routes missing personal chat setup to Settings',()=>{
+    expect(source).toContain("title:'Настройте Личный чат'");
+    expect(source).toContain("primary:'В настройки',onPrimary:openSettings");
   });
 
-  it('renders a reconciliation decision modal only once while it is already visible',()=>{
-    expect(source).toContain('if(decision&&visibleFlowDecision===decision&&!root.hidden)return root');
-    expect(source).toContain("if(visibleFlowDecision==='show_publish_confirmation'&&!root.hidden)return root");
-    expect(source).toContain("decision:'show_publish_confirmation'");
+  it('activates an existing personal chat directly from the Preview guard',()=>{
+    expect(source).toContain("title:'Активируйте Личный чат'");
+    expect(source).toContain("primary:'Активировать',onPrimary:()=>activatePersonalChat(state)");
+    expect(source).toContain("window.CosmoTelegramGateway.create().openTelegramLink(`https://t.me/${username}`)");
   });
 
-  it('fully resets the reusable modal between publish cycles',()=>{
-    expect(source).toContain('function resetModal()');
+  it('requires only the configured group for Telegram publication',()=>{
+    expect(source).toContain("groupReady=!!state?.managedBot?.destination?.connected");
+    expect(source).toContain("if(action==='telegram_publish')");
+    expect(source).toContain('if(groupReady)return true');
+    expect(source).toContain("title:botReady?'Выберите группу для публикаций':'Настройте Telegram'");
+    expect(source).not.toMatch(/telegram_publish[^}]*previewReady/s);
+  });
+
+  it('uses factual AccountState and contains no persisted reconciliation workflow',()=>{
+    expect(source).toContain('window.CosmoAccountState');
+    expect(source).toContain('store.refresh()');
+    for(const obsolete of [
+      '/api/miniapp/onboarding-intent',
+      '/api/miniapp/onboarding-flow',
+      "decision==='continue_bot'",
+      "decision==='continue_group'",
+      'visibleFlowDecision',
+      'confirmationInFlight',
+      'reconciling'
+    ]) expect(source).not.toContain(obsolete);
+  });
+
+  it('fully resets the reusable guard modal between actions',()=>{
+    expect(source).toContain('function closeModal()');
     expect(source).toContain('ok.disabled=false;ok.onclick=null');
     expect(source).toContain('no.disabled=false;no.onclick=null');
     expect(source).toContain('ok.textContent=primary;ok.disabled=false;no.disabled=false;root.hidden=false');
-  });
-
-  it('suppresses reconciliation while publish confirmation is being completed',()=>{
-    expect(source).toContain('confirmationInFlight=true;resetModal()');
-    expect(source).toContain('if(confirmationInFlight)return;');
-    expect(source).toContain('if(reconciling||confirmationInFlight||!tg?.initData)return');
-    expect(source).toContain('finally{confirmationInFlight=false}');
   });
 });
