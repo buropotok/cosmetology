@@ -214,10 +214,20 @@ import{recordRuntimeDiagnostic}from'/runtime-diagnostics.js';
 
   generateButton.addEventListener('click',async()=>{
     const postText=currentPostText();
-    if(!postText){if(status){status.textContent='Сначала введите текст публикации.';status.className='error'}focusComposer();return}
+    if(!postText){
+      if(status){status.textContent='Сначала введите текст публикации.';status.className='error'}
+      focusComposer();
+      return;
+    }
     const webApp=window.Telegram?.WebApp;
-    if(!webApp?.initData){if(status){status.textContent='Откройте Mini App внутри Telegram.';status.className='error'}return}
-    if((window.CosmoComposerImages?.getFiles?.().length||0)>=10){if(status){status.textContent='Уже добавлено 10 изображений. Удалите одно, чтобы добавить новое.';status.className='error'}return}
+    if(!webApp?.initData){
+      if(status){status.textContent='Откройте Mini App внутри Telegram.';status.className='error'}
+      return;
+    }
+    if((window.CosmoComposerImages?.getFiles?.().length||0)>=10){
+      if(status){status.textContent='Уже добавлено 10 изображений. Удалите одно, чтобы добавить новое.';status.className='error'}
+      return;
+    }
 
     const options=currentImageOptions();
     const operation=beginRequest();
@@ -236,7 +246,12 @@ import{recordRuntimeDiagnostic}from'/runtime-diagnostics.js';
       if(status){status.textContent=error instanceof Error?error.message:'Не удалось получить изображение.';status.className='error'}
       webApp.HapticFeedback?.notificationOccurred('error');
     }finally{
-      if(activeRequest===operation){activeRequest=null;generateButton.disabled=false;syncButtonLabel();trace(operation,'image.ui_restored','completed',{buttonLabel:generateButton.textContent,statusText:status?.textContent||'',statusClass:status?.className||''})}
+      if(activeRequest===operation){
+        activeRequest=null;
+        generateButton.disabled=false;
+        syncButtonLabel();
+        trace(operation,'image.ui_restored','completed',{buttonLabel:generateButton.textContent,statusText:status?.textContent||'',statusClass:status?.className||''});
+      }
     }
   });
 })();
