@@ -44,12 +44,15 @@ test('internetSearch renders OpenAI web image results and imports only the user-
   assert.doesNotMatch(imageGeneration,/Разбор препарата/);
 });
 
-test('image requests are aborted and stale completions cannot mutate a new draft',()=>{
+test('image requests are aborted and stale completions cannot mutate a restored or new draft',()=>{
   assert.match(imageGeneration,/new AbortController\(\)/);
   assert.match(imageGeneration,/signal:operation\.controller\.signal/);
   assert.match(imageGeneration,/function assertCurrentRequest\(operation\)/);
   assert.match(imageGeneration,/assertCurrentRequest\(operation\);\s*addImage\(blob,'web'\)/);
   assert.match(imageGeneration,/assertCurrentRequest\(operation\);\s*addImage\(blob,'gemini'\)/);
+  assert.match(imageGeneration,/function resetImageAcquisition\(\)\{cancelActiveRequest\(\{clearResults:true\}\);syncButtonLabel\(\)\}/);
+  assert.match(imageGeneration,/imageOptions'[\s\S]*resetImageAcquisition\(\)/);
+  assert.match(imageGeneration,/cosmo-composer-restore',resetImageAcquisition/);
   assert.match(imageGeneration,/cosmo-new-post'[\s\S]*cancelActiveRequest\(\{clearResults:true\}\)/);
   assert.match(imageGeneration,/cosmo-publish-mode'[\s\S]*mode!=='compose'[\s\S]*cancelActiveRequest\(\{clearResults:true\}\)/);
   assert.match(imageGeneration,/pagehide'[\s\S]*cancelActiveRequest\(\{clearResults:true\}\)/);
