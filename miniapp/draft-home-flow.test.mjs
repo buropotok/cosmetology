@@ -21,13 +21,16 @@ test('startup and New Post readiness never GET the server draft',()=>{
   assert.match(store,/loadStatus='ready'/);
 });
 
-test('New Post uses only live local state before destructive confirmation',()=>{
+test('New Post always requires explicit destructive confirmation before inspecting local draft state',()=>{
   const start=navigation.indexOf('async function openNewPost()');
   const end=navigation.indexOf('let resumeInFlight=false',start);
   const flow=navigation.slice(start,end);
-  assert.match(flow,/draft\.whenReady\?await draft\.whenReady\(\):draft\.getState\?\.\(\)/);
+  assert.match(flow,/if\(!\(await confirmDraftReplacement\(\)\)\)return/);
+  assert.doesNotMatch(flow,/state\.hasDraft&&!\(await confirmDraftReplacement\(\)\)/);
+  const confirm=flow.indexOf('await confirmDraftReplacement()');
+  const stateRead=flow.indexOf('draft.whenReady?await draft.whenReady():draft.getState?.()');
+  assert.ok(confirm>=0&&stateRead>confirm,'confirmation must happen before local draft state is inspected');
   assert.doesNotMatch(flow,/draft\.load\(/);
-  assert.match(flow,/if\(state\.hasDraft&&!\(await confirmDraftReplacement\(\)\)\)return/);
 });
 
 test('New Post does not wait for server draft deletion before entering the menu',()=>{
@@ -41,11 +44,11 @@ test('New Post does not wait for server draft deletion before entering the menu'
   assert.match(committed,/navigation\.reset\(\[STATES\.HOME,STATES\.MENU\]\)/);
 });
 
-test('existing live draft requires explicit destructive confirmation and cancel commits nothing',()=>{
+test('New Post warning offers Cancel and Continue and cancel commits nothing',()=>{
   assert.match(navigation,/message:'Ваш черновик будет удален!'/);
   assert.match(navigation,/id:'cancel',type:'cancel',text:'Отмена'/);
   assert.match(navigation,/id:'continue',type:'destructive',text:'Продолжить'/);
-  const cancelGuard=navigation.indexOf("if(state.hasDraft&&!(await confirmDraftReplacement()))return;");
+  const cancelGuard=navigation.indexOf("if(!(await confirmDraftReplacement()))return;");
   const commit=navigation.indexOf('await commitNewPost(draft);',cancelGuard);
   assert.ok(cancelGuard>=0&&commit>cancelGuard);
 });
@@ -56,11 +59,23 @@ test('first Continue is the explicit server restore boundary and opens the menu'
   const end=navigation.indexOf("home.querySelector('#flow-new')",start);
   assert.ok(start>=0&&end>start,'resumeDraft should exist before Home handlers');
   const resume=navigation.slice(start,end);
-  assert.match(resume,/overlay\?\.showLoading\?\.\(\)/);
+  assert.match(resume,/overlay\?\.showLoading\?\.\(cancelRestore\)/);
   assert.match(resume,/restored=await draft\.load\(\)/);
   assert.match(resume,/navigation\.reset\(\[STATES\.HOME,STATES\.MENU\]\)/);
   assert.doesNotMatch(resume,/state\.screen/);
   assert.doesNotMatch(resume,/STATES\.(AI|PUBLISH|BEFORE_AFTER)/);
+});
+
+test('restore overlay exposes Cancel and cancellation aborts restore and returns Home',()=>{
+  assert.match(overlay,/cosmo-draft-load-action[^>]*>Отмена<\/button>/);
+  assert.match(overlay,/function showLoading\(onCancel\)/);
+  assert.match(overlay,/cancelHandler=typeof onCancel==='function'\?onCancel:null/);
+  const start=navigation.indexOf('async function resumeDraft()');
+  const end=navigation.indexOf("home.querySelector('#flow-new')",start);
+  const resume=navigation.slice(start,end);
+  assert.match(resume,/draft\.cancelRestore\?\.\(\)/);
+  assert.match(resume,/navigation\.reset\(\[STATES\.HOME\]\)/);
+  assert.match(resume,/if\(cancelled\)return/);
 });
 
 test('restored live session makes later Continue network-free',()=>{
@@ -77,7 +92,7 @@ test('New Post creates a live empty frontend session without waiting for persist
 
 test('missing saved session is acknowledged and Continue is hidden for this frontend session',()=>{
   assert.match(overlay,/Нет сохранённых сессий!/);
-  assert.match(overlay,/>Продолжить<\/button>/);
+  assert.match(overlay,/>Отмена<\/button>/);
   const start=navigation.indexOf('async function resumeDraft()');
   const end=navigation.indexOf("home.querySelector('#flow-new')",start);
   const resume=navigation.slice(start,end);
@@ -96,6 +111,6 @@ test('draft load errors hide restore modal and do not navigate',()=>{
   const start=navigation.indexOf('async function resumeDraft()');
   const end=navigation.indexOf("home.querySelector('#flow-new')",start);
   const resume=navigation.slice(start,end);
-  assert.match(resume,/catch\{overlay\?\.hide\?\.\(\);await showDraftLoadError\(\);return\}/);
+  assert.match(resume,/catch\{if\(cancelled\)return;overlay\?\.hide\?\.\(\);await showDraftLoadError\(\);return\}/);
   assert.match(navigation,/message:'Не удалось проверить сохранённый черновик\. Попробуйте ещё раз\.'/);
 });
