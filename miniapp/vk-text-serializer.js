@@ -1,20 +1,29 @@
 const DETAILS_EMOJI=['🌸','🍀','🌿'];
 const INDENT='    ';
 
+function runText(run){
+  const text=String(run?.text??'');
+  if(!text)return'';
+  const marks=Array.isArray(run?.marks)?run.marks:[];
+  const spoiler=marks.some(mark=>mark?.type==='spoiler');
+  const link=marks.find(mark=>mark?.type==='link'&&typeof mark.href==='string'&&mark.href.trim());
+  let value=spoiler?`🙈 ${text}`:text;
+  if(link){
+    const href=link.href.trim();
+    if(href&&href!==text.trim())value=`${value} — ${href}`;
+  }
+  return value;
+}
+
 function runsText(runs){
-  return (Array.isArray(runs)?runs:[]).map(run=>String(run?.text??'')).join('');
+  return (Array.isArray(runs)?runs:[]).map(runText).join('');
 }
 
 function normalizeInline(value){
   return String(value??'').replace(/\r\n?/g,'\n').replace(/[ \t]+\n/g,'\n').trim();
 }
 
-function indentLines(text,depth){
-  const prefix=INDENT.repeat(Math.max(0,depth));
-  return String(text).split('\n').map(line=>line?prefix+line:line).join('\n');
-}
-
-function serializeList(block,depth,detailsEmoji){
+function serializeList(block,depth=0){
   const ordered=block?.type==='ordered_list';
   const items=Array.isArray(block?.items)?block.items:[];
   const lines=[];
@@ -29,7 +38,7 @@ function serializeList(block,depth,detailsEmoji){
       const nested=Array.isArray(item.children)
         ?{type:block.type,items:item.children}
         :item.children;
-      const nestedText=serializeList(nested,depth+1,detailsEmoji);
+      const nestedText=serializeList(nested,depth+1);
       if(nestedText)lines.push(nestedText);
     }
   });
@@ -48,7 +57,7 @@ function serializeDetails(block,index){
   const title=normalizeInline(runsText(block?.title))||'Подробнее';
   const lines=[`${emoji} ${title}`];
   const body=Array.isArray(block?.blocks)
-    ?serializeBlocks(block.blocks,{detailsEmoji:emoji,detailsDepth:1,compact:true})
+    ?serializeBlocks(block.blocks,{compact:true})
     :normalizeInline(runsText(block?.content));
   if(body){
     for(const line of body.split('\n')){
@@ -67,7 +76,7 @@ function serializeBlock(block,index,context={}){
     return text?`${text.toUpperCase()} 👋`:'';
   }
   if(block.type==='quote')return serializeQuote(block);
-  if(block.type==='bullet_list'||block.type==='ordered_list')return serializeList(block,context.detailsDepth||0,context.detailsEmoji);
+  if(block.type==='bullet_list'||block.type==='ordered_list')return serializeList(block);
   if(block.type==='details')return serializeDetails(block,index);
   return'';
 }
