@@ -12,3 +12,7 @@ export function translatedActiveIndex(active,from,to){
   if(to<=active&&active<from)return active+1;
   return active;
 }
+
+export function ownsDragPointer(dragState,pointerId){
+  return Boolean(dragState)&&dragState.pointerId===pointerId;
+}
