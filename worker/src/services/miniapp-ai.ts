@@ -1,5 +1,3 @@
-import { createGoogleGenerativeAI } from '@ai-sdk/google';
-import { generateText } from 'ai';
 import discoverySchema from '../schemas/discovery_schema.json';
 import { isPostDocument } from '../../../shared/post-document';
 import { parsePostMarkdown } from '../../../shared/post-markdown';
@@ -7,8 +5,14 @@ import { AppError, type Env } from '../types';
 import { resolveMiniAppAiUser, setAiGenerationStatus, type AiGenerationKind } from './ai-generation-status';
 import { sanitizePostDocumentLinks } from './link-validator';
 
-const DEFAULT_MODEL = 'gemini-2.5-flash';
+const DEFAULT_MODEL = 'gpt-5.6-luna';
 const MAX_MESSAGE_LENGTH = 12000;
+const OPENAI_RESPONSES_URL = 'https://api.openai.com/v1/responses';
+
+type OpenAIResponse = {
+  output?: Array<{ type?: unknown; content?: Array<{ type?: unknown; text?: unknown }> }>;
+  error?: { message?: unknown };
+};
 
 const POST_MARKDOWN_SYSTEM_PROMPT = `Ты преобразуешь уже подготовленную публикацию для косметологического кабинета в компактный PostMarkdown.
 
@@ -56,6 +60,37 @@ function serializeAiError(error: unknown): unknown {
   return error;
 }
 
+function extractOpenAIText(payload: OpenAIResponse) {
+  const chunks: string[] = [];
+  for (const item of payload.output || []) {
+    if (item?.type !== 'message' || !Array.isArray(item.content)) continue;
+    for (const content of item.content) {
+      if (content?.type === 'output_text' && typeof content.text === 'string') chunks.push(content.text);
+    }
+  }
+  return chunks.join('').trim();
+}
+
+async function callOpenAI(apiKey: string, model: string, input: string, signal: AbortSignal, options: { webSearch?: boolean; instructions?: string } = {}) {
+  const request: Record<string, unknown> = { model, reasoning: { effort: 'low' }, input };
+  if (options.webSearch) request.tools = [{ type: 'web_search' }];
+  if (options.instructions) request.instructions = options.instructions;
+  const response = await fetch(OPENAI_RESPONSES_URL, {
+    method: 'POST', signal,
+    headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
+    body: JSON.stringify(request),
+  });
+  const payload = await response.json().catch(() => null) as OpenAIResponse | null;
+  if (!response.ok) {
+    const message = typeof payload?.error?.message === 'string' ? payload.error.message : `OpenAI HTTP ${response.status}`;
+    throw new Error(message);
+  }
+  if (!payload) throw new Error('OpenAI returned invalid JSON');
+  const text = extractOpenAIText(payload);
+  if (!text) throw new Error('OpenAI returned an empty response');
+  return text;
+}
+
 function parseDiscovery(text: string) {
   const cleaned = text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
   const value = JSON.parse(cleaned) as { schemaVersion?: unknown; ideas?: unknown };
@@ -88,53 +123,35 @@ export async function generateMiniAppAiReply(req: Request, env: Env) {
   const mode = body?.mode === 'discovery' ? 'discovery' : 'text';
   if (!message) throw new AppError('AI_MESSAGE_REQUIRED', 'Введите сообщение для AI', 400);
   if (message.length > MAX_MESSAGE_LENGTH) throw new AppError('AI_MESSAGE_TOO_LONG', `Сообщение не должно превышать ${MAX_MESSAGE_LENGTH} символов`, 400);
-  if (!env.GEMINI_API_KEY) throw new AppError('AI_NOT_CONFIGURED', 'AI пока не настроен', 503);
+  if (!env.OPENAI_API_KEY) throw new AppError('AI_NOT_CONFIGURED', 'AI пока не настроен', 503);
 
   const kind = generationKind(message);
   await setAiGenerationStatus(env, userId, kind, 'queued');
   const model = env.AI_TEXT_MODEL?.trim() || DEFAULT_MODEL;
-  const google = createGoogleGenerativeAI({ apiKey: env.GEMINI_API_KEY });
   const prompt = mode === 'discovery' ? `${message}\n\nВерни только JSON, строго соответствующий этой JSON Schema. Не используй Markdown или code fences. id вариантов должны идти строго idea_1 ... idea_5.\n\n${JSON.stringify(discoverySchema)}` : message;
 
   try {
     await setAiGenerationStatus(env, userId, kind, 'running');
     if (mode === 'discovery') {
-      const result = await generateText({ model: google(model), tools: { google_search: google.tools.googleSearch({}) }, abortSignal: req.signal, prompt });
-      const text = result.text.trim();
-      if (!text) throw new Error('Gemini returned an empty response');
+      const text = await callOpenAI(env.OPENAI_API_KEY, model, prompt, req.signal, { webSearch: true });
       if (req.signal.aborted) throw new Error('AI request aborted');
       await setAiGenerationStatus(env, userId, kind, 'succeeded');
       return { discovery: parseDiscovery(text) };
     }
 
-    const grounded = await generateText({
-      model: google(model),
-      tools: { google_search: google.tools.googleSearch({}) },
-      abortSignal: req.signal,
-      prompt,
-    });
-    const groundedText = grounded.text.trim();
-    if (!groundedText) throw new Error('Gemini returned an empty grounded response');
+    const groundedText = await callOpenAI(env.OPENAI_API_KEY, model, prompt, req.signal, { webSearch: true });
     if (req.signal.aborted) throw new Error('AI request aborted');
-
-    const formatted = await generateText({
-      model: google(model),
-      system: POST_MARKDOWN_SYSTEM_PROMPT,
-      abortSignal: req.signal,
-      prompt: `Преобразуй следующую готовую публикацию в PostMarkdown, сохранив её содержание и сократив при необходимости до 200 слов максимум:\n\n${groundedText}`,
-    });
-    const markdown = formatted.text.trim();
-    if (!markdown) throw new Error('Gemini returned an empty PostMarkdown response');
+    const markdown = await callOpenAI(env.OPENAI_API_KEY, model, `Преобразуй следующую готовую публикацию в PostMarkdown, сохранив её содержание и сократив при необходимости до 200 слов максимум:\n\n${groundedText}`, req.signal, { instructions: POST_MARKDOWN_SYSTEM_PROMPT });
     if (req.signal.aborted) throw new Error('AI request aborted');
     const document = await sanitizePostDocumentLinks(parsePostMarkdown(markdown));
-    if (!isPostDocument(document)) throw new Error('Gemini returned invalid PostMarkdown');
+    if (!isPostDocument(document)) throw new Error('OpenAI returned invalid PostMarkdown');
     await setAiGenerationStatus(env, userId, kind, 'succeeded');
     return { text: JSON.stringify(document, null, 2) };
   } catch (error) {
     const cancelled = req.signal.aborted;
     await setAiGenerationStatus(env, userId, kind, 'failed', cancelled ? 'AI_GENERATION_CANCELLED' : 'AI_GENERATION_FAILED').catch(statusError => console.error('Failed to persist AI generation failure', statusError));
     if (cancelled) return { cancelled: true };
-    console.error('Mini App AI generation failed', { provider: 'google', model, mode, error: serializeAiError(error) });
+    console.error('Mini App AI generation failed', { provider: 'openai', model, mode, error: serializeAiError(error) });
     throw new AppError('AI_GENERATION_FAILED', 'Не удалось получить ответ AI. Попробуйте ещё раз.', 502);
   }
 }
