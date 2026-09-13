@@ -17,3 +17,9 @@ test('drag destination lookup is scoped to the owned preview strip',()=>{
   assert.match(source,/document\.elementFromPoint\?\.\(x,y\)/);
   assert.match(source,/!target\|\|!previews\.contains\(target\)/);
 });
+
+test('file order has a DataTransfer-independent fallback and releases it before trusted input changes',()=>{
+  assert.match(source,/Object\.defineProperty\(input,'files',\{configurable:true,get:\(\)=>files\}\)/);
+  assert.match(source,/if\(event\.isTrusted\)clearInputFilesShadow\(\)/);
+  assert.match(source,/return shadowInputFiles\(\)/);
+});
