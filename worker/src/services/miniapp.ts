@@ -1,6 +1,6 @@
 import { AppError, type Env } from '../types';
 import { publishTelegramWithToken, sendTelegramReturnToAppWithToken, type TelegramPhotoLayout } from './telegram';
-import { validateTelegramMiniAppInitData } from './telegram-miniapp-auth';
+import { requireTelegramMiniAppSession } from './telegram-miniapp-auth';
 import { resolveOrCreateTelegramIdentity } from './telegram-identity';
 import { getManagedBotStateForUser } from './managed-bot-onboarding';
 import { decryptManagedBotToken } from './managed-bot-crypto';
@@ -9,7 +9,7 @@ export const MINIAPP_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
 export const MINIAPP_IMAGE_MAX_COUNT = 10;
 export const MINIAPP_TEXT_MAX_LENGTH = 32768;
 function initDataFrom(request: Request) { return request.headers.get('authorization')?.match(/^tma\s+(.+)$/i)?.[1] ?? ''; }
-async function miniAppAccount(request: Request, env: Env) { const validated = await validateTelegramMiniAppInitData(initDataFrom(request), env.TELEGRAM_BOT_TOKEN); const telegramUserId = String(validated.user.id); const account = await resolveOrCreateTelegramIdentity(env, telegramUserId); return { validated, telegramUserId, account }; }
+async function miniAppAccount(request: Request, env: Env) { const validated = await requireTelegramMiniAppSession(request, env); const telegramUserId = String(validated.user.id); const account = await resolveOrCreateTelegramIdentity(env, telegramUserId); return { validated, telegramUserId, account }; }
 async function getVkGroup(env: Env, userId: string) { return env.DB.prepare('SELECT group_id AS groupId, group_url AS groupUrl, screen_name AS screenName, group_name AS groupName FROM user_vk_group WHERE user_id=?').bind(userId).first<{ groupId: number; groupUrl: string; screenName: string | null; groupName: string | null }>(); }
 async function getPreviewReady(env:Env,userId:string,managedBotId:string|null){if(!managedBotId)return false;const row=await env.DB.prepare(`SELECT 1 AS ready FROM telegram_managed_bot_private_chats WHERE user_id=? AND telegram_bot_id=? AND status='active' LIMIT 1`).bind(userId,managedBotId).first<{ready:number}>();return row?.ready===1}
 async function getOnboardingSkips(env:Env,userId:string){const result=await env.DB.prepare('SELECT step FROM user_onboarding_skip WHERE user_id=?').bind(userId).all<{step:string}>();return (result.results||[]).map(row=>row.step)}

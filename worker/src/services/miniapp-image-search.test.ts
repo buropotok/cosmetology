@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('./telegram-miniapp-auth',()=>({
   validateTelegramMiniAppInitData:vi.fn(async()=>({user:{id:1}})),
+  requireTelegramMiniAppSession:vi.fn(async()=>({user:{id:1}})),
 }));
 
 import {

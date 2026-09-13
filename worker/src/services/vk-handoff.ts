@@ -1,5 +1,5 @@
 import { AppError, type Env } from '../types';
-import { validateTelegramMiniAppInitData } from './telegram-miniapp-auth';
+import { requireTelegramMiniAppSession } from './telegram-miniapp-auth';
 import { resolveOrCreateTelegramIdentity } from './telegram-identity';
 import { replicateVkArtifactToYandex } from './yandex-vk-replica';
 
@@ -13,7 +13,7 @@ function initDataFrom(request: Request) {
   return request.headers.get('authorization')?.match(/^tma\s+(.+)$/i)?.[1] ?? '';
 }
 async function userIdFromMiniApp(request: Request, env: Env) {
-  const validated = await validateTelegramMiniAppInitData(initDataFrom(request), env.TELEGRAM_BOT_TOKEN);
+  const validated = await requireTelegramMiniAppSession(request, env);
   const account = await resolveOrCreateTelegramIdentity(env, String(validated.user.id));
   return account.userId;
 }

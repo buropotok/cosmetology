@@ -1,5 +1,5 @@
 import {AppError,type Env} from '../types';
-import {validateTelegramMiniAppInitData} from './telegram-miniapp-auth';
+import {requireTelegramMiniAppSession} from './telegram-miniapp-auth';
 
 const MAX_PAYLOAD_BYTES=256*1024;
 const MAX_EVENTS=200;
@@ -92,7 +92,7 @@ export async function storeRuntimeDiagnosticSnapshot(env:Env,snapshot:RuntimeDia
 
 export async function saveRuntimeDiagnostics(request:Request,env:Env){
   const initData=request.headers.get('authorization')?.match(/^tma\s+(.+)$/i)?.[1]??'';
-  await validateTelegramMiniAppInitData(initData,env.TELEGRAM_BOT_TOKEN);
+  await requireTelegramMiniAppSession(request,env);
   const raw=await request.text();
   if(new TextEncoder().encode(raw).byteLength>MAX_PAYLOAD_BYTES)throw new AppError('RUNTIME_DIAGNOSTIC_TOO_LARGE','Runtime diagnostic payload слишком большой',413);
   let parsed:unknown;try{parsed=JSON.parse(raw)}catch{throw new AppError('INVALID_JSON','Некорректный JSON',400)}

@@ -1,5 +1,5 @@
 import { AppError, type Env } from '../types';
-import { validateTelegramMiniAppInitData } from './telegram-miniapp-auth';
+import { requireTelegramMiniAppSession } from './telegram-miniapp-auth';
 
 const DEFAULT_IMAGE_MODEL = 'gpt-image-2';
 const MAX_POST_LENGTH = 12000;
@@ -62,10 +62,6 @@ const ILLUSTRATION_PROMPT = `Создай выразительное худож�
 - изображение должно хорошо работать в ленте VK и Telegram;
 - создай само изображение, а не описание изображения.`;
 
-function getMiniAppInitData(req: Request) {
-  return req.headers.get('authorization')?.match(/^tma\s+(.+)$/i)?.[1] ?? '';
-}
-
 function decodeBase64(value: string) {
   const binary = atob(value);
   const bytes = new Uint8Array(binary.length);
@@ -74,7 +70,7 @@ function decodeBase64(value: string) {
 }
 
 export async function generateMiniAppImage(req: Request, env: Env) {
-  await validateTelegramMiniAppInitData(getMiniAppInitData(req), env.TELEGRAM_BOT_TOKEN);
+  await requireTelegramMiniAppSession(req, env);
   const body = await req.json().catch(() => null) as { text?: unknown } | null;
   const text = typeof body?.text === 'string' ? body.text.trim() : '';
   if (!text) throw new AppError('AI_IMAGE_TEXT_REQUIRED', 'Введите текст публикации', 400);

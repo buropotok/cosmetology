@@ -1,5 +1,5 @@
 import { AppError, type Env } from '../types';
-import { validateTelegramMiniAppInitData } from './telegram-miniapp-auth';
+import { requireTelegramMiniAppSession } from './telegram-miniapp-auth';
 import { resolveOrCreateTelegramIdentity } from './telegram-identity';
 import { MINIAPP_IMAGE_MAX_BYTES } from './miniapp';
 
@@ -10,7 +10,7 @@ function initDataFrom(request: Request) {
 }
 
 async function accountFor(request: Request, env: Env) {
-  const validated = await validateTelegramMiniAppInitData(initDataFrom(request), env.TELEGRAM_BOT_TOKEN);
+  const validated = await requireTelegramMiniAppSession(request, env);
   return resolveOrCreateTelegramIdentity(env, String(validated.user.id));
 }
 

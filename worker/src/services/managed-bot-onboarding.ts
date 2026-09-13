@@ -1,5 +1,5 @@
 import { AppError, type Env } from '../types';
-import { validateTelegramMiniAppInitData } from './telegram-miniapp-auth';
+import { requireTelegramMiniAppSession } from './telegram-miniapp-auth';
 import { resolveOrCreateTelegramIdentity } from './telegram-identity';
 import { setTelegramWebhookWithToken, sendTelegramReturnToAppWithToken } from './telegram';
 
@@ -11,7 +11,7 @@ function randomOpaque(byteLength: number) { return base64Url(crypto.getRandomVal
 async function sha256(value: string) { const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value)); return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join(''); }
 function safeEqual(left: string, right: string) { if (left.length !== right.length) return false; let difference = 0; for (let index = 0; index < left.length; index += 1) difference |= left.charCodeAt(index) ^ right.charCodeAt(index); return difference === 0; }
 function initDataFrom(request: Request) { return request.headers.get('authorization')?.match(/^tma\s+(.+)$/i)?.[1] ?? ''; }
-async function authenticatedAccount(request: Request, env: Env) { const validated = await validateTelegramMiniAppInitData(initDataFrom(request), env.TELEGRAM_BOT_TOKEN); const account = await resolveOrCreateTelegramIdentity(env, String(validated.user.id)); return { validated, account }; }
+async function authenticatedAccount(request: Request, env: Env) { const validated = await requireTelegramMiniAppSession(request, env); const account = await resolveOrCreateTelegramIdentity(env, String(validated.user.id)); return { validated, account }; }
 
 type WebhookRow = { webhook_id: string; status: string };
 export async function configureManagedBotWebhook(env: Env, managedBotId: string, token: string, setWebhook = setTelegramWebhookWithToken) {
