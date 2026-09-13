@@ -1,7 +1,7 @@
 (()=>{
 const input=document.querySelector('#image'),previews=document.querySelector('#previews'),removeAll=document.querySelector('#remove-image'),status=document.querySelector('#status');
 if(!input||!previews)return;
-let files=Array.from(input.files||[]).slice(0,10),internalChange=false,wideCheckGeneration=0,telegramLayout='slideshow';
+let files=Array.from(input.files||[]).slice(0,10),internalChange=false,wideCheckGeneration=0,telegramLayout='slideshow',dragState=null;
 const VK_MAX_ASPECT=16/9;
 
 const telegramLayoutRow=document.createElement('div');
@@ -94,10 +94,19 @@ function replaceAt(index,file){
  return true;
 }
 
+function moveFile(from,to){
+ if(!Number.isInteger(from)||!Number.isInteger(to)||from<0||to<0||from>=files.length||to>=files.length||from===to)return false;
+ const [file]=files.splice(from,1);
+ files.splice(to,0,file);
+ notifyChange();
+ return true;
+}
+
 window.CosmoComposerImages={
  addFiles,
  replaceFiles(incoming){files=Array.from(incoming||[]).slice(0,10);notifyChange()},
  replaceAt,
+ moveFile,
  getFiles(){return files.slice()},
  getTelegramLayout(){return telegramLayout},
  setTelegramLayout
@@ -112,6 +121,45 @@ input.addEventListener('change',event=>{
 
 removeAll?.addEventListener('click',()=>{files=[];notifyChange()});
 
+function clearDropTarget(){
+ previews.querySelectorAll('.composer-thumb.is-drop-target').forEach(node=>{node.classList.remove('is-drop-target');node.style.outline=''})
+}
+function finishDrag(event){
+ if(!dragState||event.pointerId!==dragState.pointerId)return;
+ const {handle,from,to}=dragState;
+ dragState=null;
+ clearDropTarget();
+ try{handle.releasePointerCapture?.(event.pointerId)}catch{}
+ if(from!==to)moveFile(from,to);
+}
+function startDrag(event,wrap,handle){
+ if(files.length<2||event.button>0)return;
+ const wraps=[...previews.querySelectorAll('.composer-thumb')];
+ const from=wraps.indexOf(wrap);
+ if(from<0||from>=files.length)return;
+ event.preventDefault();
+ dragState={pointerId:event.pointerId,from,to:from,handle};
+ handle.setPointerCapture?.(event.pointerId);
+ wrap.style.opacity='.65';
+ const onEnd=endEvent=>{wrap.style.opacity='';handle.removeEventListener('pointerup',onEnd);handle.removeEventListener('pointercancel',onEnd);finishDrag(endEvent)};
+ handle.addEventListener('pointerup',onEnd);
+ handle.addEventListener('pointercancel',onEnd);
+}
+function moveDrag(event){
+ if(!dragState||event.pointerId!==dragState.pointerId)return;
+ event.preventDefault();
+ const target=docElementFromPoint(event.clientX,event.clientY)?.closest?.('.composer-thumb');
+ if(!target||!previews.contains(target))return;
+ const wraps=[...previews.querySelectorAll('.composer-thumb')];
+ const to=wraps.indexOf(target);
+ if(to<0||to>=files.length)return;
+ dragState.to=to;
+ clearDropTarget();
+ target.classList.add('is-drop-target');
+ target.style.outline='2px solid #2481cc';
+}
+function docElementFromPoint(x,y){return document.elementFromPoint?.(x,y)||null}
+
 function decorate(){
  const images=[...previews.querySelectorAll('img')];
  images.forEach(img=>{
@@ -121,6 +169,15 @@ function decorate(){
   wrap.style.cssText='position:relative;display:block;flex:0 0 62px;width:62px;height:62px;overflow:visible;cursor:pointer';
   img.parentNode.insertBefore(wrap,img);
   wrap.append(img);
+  const handle=document.createElement('button');
+  handle.type='button';
+  handle.className='composer-image-reorder';
+  handle.setAttribute('aria-label','Переместить изображение');
+  handle.textContent='≡';
+  handle.style.cssText='position:absolute;left:-5px;top:-5px;width:26px;height:26px;border:0;border-radius:50%;background:rgba(28,28,30,.88);color:#fff;font-size:20px;line-height:24px;padding:0;z-index:3;box-shadow:0 1px 4px rgba(0,0,0,.35);cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none';
+  handle.addEventListener('pointerdown',event=>startDrag(event,wrap,handle));
+  handle.addEventListener('pointermove',moveDrag);
+  wrap.append(handle);
   const del=document.createElement('button');
   del.type='button';
   del.className='composer-image-delete';
