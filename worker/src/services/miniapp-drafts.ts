@@ -35,28 +35,6 @@ function parseImageOptions(value: string) {
   return { internetSearch:true,searchProfile,sourcePolicy };
 }
 
-type RegistrationRetry={key:string;fileName:string|null;contentType:string|null};
-function registrationError(error:unknown){return (error instanceof Error?error.message:String(error)).slice(0,500);}
-async function queueDraftMediaRegistration(env:Env,userId:string,key:string,image:File,error:unknown){
-  await env.DB.prepare(`INSERT INTO draft_media_registration_retries(user_id,r2_key,file_name,content_type,attempts,last_error,created_at,updated_at) VALUES(?,?,?,?,1,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP) ON CONFLICT(user_id,r2_key) DO UPDATE SET attempts=attempts+1,last_error=excluded.last_error,updated_at=CURRENT_TIMESTAMP`).bind(userId,key,image.name||null,image.type||null,registrationError(error)).run();
-}
-export async function retryDraftMediaRegistrations(env:Env,userId:string){
-  const pending=await env.DB.prepare('SELECT r2_key AS key,file_name AS fileName,content_type AS contentType FROM draft_media_registration_retries WHERE user_id=? ORDER BY created_at LIMIT 10').bind(userId).all<RegistrationRetry>();
-  for(const retry of pending.results||[]){
-    try{
-      const object=await env.IMAGES.get(retry.key);if(!object)throw new Error('Draft media source is missing');
-      const bytes=await object.arrayBuffer();const image=new File([bytes],retry.fileName||'image',{type:retry.contentType||object.httpMetadata?.contentType||'application/octet-stream'});
-      await storePermanentMediaAsset(env,userId,image,'draft');
-      await env.DB.prepare('DELETE FROM draft_media_registration_retries WHERE user_id=? AND r2_key=?').bind(userId,retry.key).run();
-      const current=await env.DB.prepare('SELECT 1 FROM miniapp_draft_images WHERE user_id=? AND r2_key=? LIMIT 1').bind(userId,retry.key).first();
-      if(!current)await env.IMAGES.delete(retry.key);
-    }catch(error){
-      console.error('Permanent media registration retry failed',error);
-      await env.DB.prepare('UPDATE draft_media_registration_retries SET attempts=attempts+1,last_error=?,updated_at=CURRENT_TIMESTAMP WHERE user_id=? AND r2_key=?').bind(registrationError(error),userId,retry.key).run().catch(()=>null);
-    }
-  }
-}
-
 async function draftForAccount(env: Env, account: Awaited<ReturnType<typeof accountFor>>) {
   const draft = await env.DB.prepare('SELECT text_content AS text, platform, active_photo_index AS activePhotoIndex, screen, ai_state AS aiStateJson, before_after_state AS beforeAfterStateJson, image_options AS imageOptionsJson, updated_at AS updatedAt FROM miniapp_drafts WHERE user_id=?').bind(account.userId).first<{text:string;platform:string;activePhotoIndex:number;screen:string;aiStateJson:string;beforeAfterStateJson:string;imageOptionsJson:string;updatedAt:string}>();
   if (!draft) return { draft: null };
@@ -100,7 +78,6 @@ export async function saveMiniAppDraft(request: Request, env: Env) {
   const imageOptionsJson = JSON.stringify(parseImageOptions(rawImageOptions));
   const imagesChanged = form.get('imagesChanged') === '1';
   await env.DB.prepare(`INSERT INTO miniapp_drafts(user_id,text_content,platform,active_photo_index,screen,ai_state,before_after_state,image_options,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP) ON CONFLICT(user_id) DO UPDATE SET text_content=excluded.text_content,platform=excluded.platform,active_photo_index=excluded.active_photo_index,screen=excluded.screen,ai_state=excluded.ai_state,before_after_state=excluded.before_after_state,image_options=excluded.image_options,updated_at=CURRENT_TIMESTAMP`).bind(account.userId,text,platform,activePhotoIndex,screen,aiStateJson,beforeAfterStateJson,imageOptionsJson).run();
-  await retryDraftMediaRegistrations(env,account.userId).catch(error=>console.error('Draft media retry processing failed',error));
   if (imagesChanged) {
     const rawImages = form.getAll('images');
     if (rawImages.some(item => !(item instanceof File))) throw new AppError('INVALID_IMAGE','Некорректное изображение',400);
@@ -112,16 +89,14 @@ export async function saveMiniAppDraft(request: Request, env: Env) {
     }
     const old = await env.DB.prepare('SELECT r2_key AS key FROM miniapp_draft_images WHERE user_id=?').bind(account.userId).all<{key:string}>();
     await env.DB.prepare('DELETE FROM miniapp_draft_images WHERE user_id=?').bind(account.userId).run();
-    const pending=await env.DB.prepare('SELECT r2_key AS key FROM draft_media_registration_retries WHERE user_id=?').bind(account.userId).all<{key:string}>().catch(()=>({results:[]}));
-    const retained=new Set((pending.results||[]).map(row=>row.key));
-    await Promise.all((old.results || []).filter(row=>!retained.has(row.key)).map(row => env.IMAGES.delete(row.key)));
+    await Promise.all((old.results || []).map(row => env.IMAGES.delete(row.key)));
     for (let i=0;i<images.length;i++) {
       const image=images[i];
       const key=`drafts/${account.userId}/${crypto.randomUUID()}`;
       await env.IMAGES.put(key,image.stream(),{httpMetadata:{contentType:image.type}});
       await env.DB.prepare('INSERT INTO miniapp_draft_images(user_id,position,r2_key,file_name,content_type,size_bytes) VALUES(?,?,?,?,?,?)').bind(account.userId,i,key,image.name||null,image.type||null,image.size).run();
       try { await storePermanentMediaAsset(env,account.userId,image,'draft'); }
-      catch (error) { console.error('Permanent media registration failed',error);await queueDraftMediaRegistration(env,account.userId,key,image,error).catch(queueError=>console.error('Permanent media retry could not be queued',queueError)); }
+      catch (error) { console.error('Permanent media registration failed',error); }
     }
   }
   const saved = await draftForAccount(env, account);
