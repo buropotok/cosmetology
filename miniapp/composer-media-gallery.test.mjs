@@ -17,8 +17,8 @@ test('gallery uses permanent media API, authenticated image requests and Compose
  assert.match(gallery,/\/api\/miniapp\/media/);
  assert.match(gallery,/Authorization:`tma \$\{initData\}`/);
  assert.match(gallery,/Пока в вашей галерее нет иллюстраций\./);
- assert.match(gallery,/cosmo-gallery-collapse[^']*'>Свернуть/);
- assert.match(gallery,/cosmo-gallery-add[^']*hidden>Добавить/);
+ assert.match(gallery,/cosmo-gallery-collapse[^>]*>Свернуть/);
+ assert.match(gallery,/cosmo-gallery-add[^>]*hidden>Добавить/);
  assert.match(gallery,/fetchResponse\(asset\.originalUrl\)/);
  assert.match(bridge,/CosmoComposerImages\?\.addFiles/);
 });
