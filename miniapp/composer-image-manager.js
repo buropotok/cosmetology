@@ -3,7 +3,7 @@ import {moveItem,translatedActiveIndex} from './composer-image-order.js';
 (()=>{
 const input=document.querySelector('#image'),previews=document.querySelector('#previews'),removeAll=document.querySelector('#remove-image'),status=document.querySelector('#status');
 if(!input||!previews)return;
-let files=Array.from(input.files||[]).slice(0,10),internalChange=false,wideCheckGeneration=0,telegramLayout='slideshow',dragState=null;
+let files=Array.from(input.files||[]).slice(0,10),internalChange=false,wideCheckGeneration=0,telegramLayout='slideshow',dragState=null,inputFilesShadowed=false;
 const VK_MAX_ASPECT=16/9;
 const telegramLayoutRow=document.createElement('div');telegramLayoutRow.className='composer-telegram-photo-layout';telegramLayoutRow.hidden=true;telegramLayoutRow.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:10px;padding:11px 12px 1px;border-top:1px solid #e5e5ea;color:#6e6e73;font-size:14px;line-height:1.2';
 const telegramLayoutLabel=document.createElement('span');telegramLayoutLabel.textContent='Отображение фото в Telegram:';
@@ -12,7 +12,9 @@ function updateTelegramLayoutVisibility(){telegramLayoutRow.hidden=files.length<
 function renderTelegramLayout(){const isCollage=telegramLayout==='collage';telegramLayoutButton.textContent=isCollage?'Коллаж':'Карусель';telegramLayoutButton.setAttribute('aria-label',`Отображение фото в Telegram: ${isCollage?'Коллаж':'Карусель'}. Нажмите, чтобы выбрать ${isCollage?'карусель':'коллаж'}.`)}
 function setTelegramLayout(value){telegramLayout=value==='collage'?'collage':'slideshow';renderTelegramLayout()}
 telegramLayoutButton.addEventListener('click',()=>setTelegramLayout(telegramLayout==='slideshow'?'collage':'slideshow'));
-function syncInput(){if(typeof DataTransfer==='undefined')return false;try{const dt=new DataTransfer();files.forEach(file=>dt.items.add(file));input.files=dt.files;return true}catch{return false}}
+function shadowInputFiles(){try{Object.defineProperty(input,'files',{configurable:true,get:()=>files});inputFilesShadowed=true;return true}catch{return false}}
+function clearInputFilesShadow(){if(!inputFilesShadowed)return;try{delete input.files}catch{}inputFilesShadowed=false}
+function syncInput(){clearInputFilesShadow();if(typeof DataTransfer!=='undefined'){try{const dt=new DataTransfer();files.forEach(file=>dt.items.add(file));input.files=dt.files;return true}catch{}}return shadowInputFiles()}
 function notifyChange(){updateTelegramLayoutVisibility();void updateVkAspectWarning();syncInput();internalChange=true;try{input.dispatchEvent(new Event('change',{bubbles:true}))}finally{internalChange=false}}
 function showLimit(){if(!status)return;status.textContent='Можно выбрать не больше 10 фотографий. Будут использованы первые 10.';status.className='error'}
 function readImageSize(file){return new Promise(resolve=>{const url=URL.createObjectURL(file),img=new Image();const done=value=>{URL.revokeObjectURL(url);resolve(value)};img.onload=()=>done({width:img.naturalWidth,height:img.naturalHeight});img.onerror=()=>done(null);img.src=url})}
@@ -22,6 +24,7 @@ function addFiles(incoming){const next=Array.from(incoming||[]),total=files.leng
 function replaceAt(index,file){if(!Number.isInteger(index)||index<0||index>=files.length||!(file instanceof File))return false;files[index]=file;notifyChange();return true}
 function moveFile(from,to){const next=moveItem(files,from,to);if(!next)return false;const state=window.CosmoComposerState,active=state?.getSnapshot?.().activePhotoIndex;files=next;if(Number.isInteger(active))state?.setActivePhotoIndex?.(translatedActiveIndex(active,from,to));notifyChange();return true}
 window.CosmoComposerImages={addFiles,replaceFiles(incoming){files=Array.from(incoming||[]).slice(0,10);notifyChange()},replaceAt,moveFile,getFiles(){return files.slice()},getTelegramLayout(){return telegramLayout},setTelegramLayout};
+input.addEventListener('change',event=>{if(event.isTrusted)clearInputFilesShadow()},true);
 input.addEventListener('change',event=>{if(internalChange)return;const incoming=Array.from(input.files||[]).slice(0,10);if(event.isTrusted)addFiles(incoming);else{files=incoming;internalChange=true;try{input.dispatchEvent(new Event('change',{bubbles:true}))}finally{internalChange=false}updateTelegramLayoutVisibility();void updateVkAspectWarning()}});
 removeAll?.addEventListener('click',()=>{files=[];notifyChange()});
 function clearDropTarget(){previews.querySelectorAll('.composer-thumb.is-drop-target').forEach(node=>{node.classList.remove('is-drop-target');node.style.outline=''})}
