@@ -1,7 +1,8 @@
-import { AppError } from '../types';
+import { AppError, type Env } from '../types';
 
 const encoder = new TextEncoder();
 export const MINIAPP_INIT_DATA_MAX_AGE_SECONDS = 10 * 60;
+export const MINIAPP_SESSION_TTL_SECONDS = 10 * 60;
 
 export interface TelegramMiniAppUser {
   id: number;
@@ -39,7 +40,7 @@ function parseUser(value: string | null): TelegramMiniAppUser {
 }
 
 /** Implements https://core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app. */
-export async function validateTelegramMiniAppInitData(initData: string, botToken: string, nowSeconds = Math.floor(Date.now() / 1000), maxAgeSeconds = MINIAPP_INIT_DATA_MAX_AGE_SECONDS) {
+async function validateSignature(initData: string, botToken: string) {
   if (!initData) throw new AppError('MINIAPP_AUTH_REQUIRED', 'Откройте приложение внутри Telegram', 401);
   if (!botToken) throw new AppError('MINIAPP_NOT_CONFIGURED', 'Telegram-бот не настроен', 500);
   const params = new URLSearchParams(initData);
@@ -54,8 +55,53 @@ export async function validateTelegramMiniAppInitData(initData: string, botToken
   const calculatedHash = await hmac(secretKey, dataCheckString);
   if (!timingSafeEqual(suppliedHash, calculatedHash)) throw new AppError('MINIAPP_AUTH_INVALID', 'Не удалось подтвердить запуск из Telegram', 401);
   const authDate = Number(params.get('auth_date'));
+  return { user: parseUser(params.get('user')), authDate };
+}
+
+export async function validateTelegramMiniAppInitData(initData: string, botToken: string, nowSeconds = Math.floor(Date.now() / 1000), maxAgeSeconds = MINIAPP_INIT_DATA_MAX_AGE_SECONDS) {
+  const validated = await validateSignature(initData, botToken);
+  const authDate = validated.authDate;
   if (!Number.isSafeInteger(authDate) || authDate > nowSeconds + 60 || nowSeconds - authDate > maxAgeSeconds) {
     throw new AppError('MINIAPP_AUTH_EXPIRED', 'Сессия Telegram устарела. Откройте приложение заново', 401);
   }
-  return { user: parseUser(params.get('user')), authDate };
+  return validated;
+}
+
+function initDataFrom(request: Request) { return request.headers.get('authorization')?.match(/^tma\s+(.+)$/i)?.[1] ?? ''; }
+
+async function verifiedAccount(request: Request, env: Env) {
+  const validated = await validateSignature(initDataFrom(request), env.TELEGRAM_BOT_TOKEN);
+  return validated;
+}
+
+export async function bootstrapTelegramMiniAppSession(request: Request, env: Env) {
+  const validated = await validateTelegramMiniAppInitData(initDataFrom(request), env.TELEGRAM_BOT_TOKEN);
+  const telegramUserId = String(validated.user.id);
+  const initialExpiry = validated.authDate + MINIAPP_SESSION_TTL_SECONDS;
+  await env.DB.prepare(`INSERT INTO miniapp_sessions(telegram_user_id,expires_at,created_at,updated_at) VALUES(?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP) ON CONFLICT(telegram_user_id) DO UPDATE SET expires_at=MAX(expires_at,excluded.expires_at),updated_at=CURRENT_TIMESTAMP`).bind(telegramUserId, initialExpiry).run();
+  return validated;
+}
+
+export async function requireTelegramMiniAppSession(request: Request, env: Env) {
+  const authenticated = await verifiedAccount(request, env);
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  if (!Number.isSafeInteger(authenticated.authDate) || authenticated.authDate > nowSeconds + 60) throw new AppError('MINIAPP_AUTH_EXPIRED', 'Сессия Telegram устарела. Откройте приложение заново', 401);
+  if (nowSeconds - authenticated.authDate <= MINIAPP_INIT_DATA_MAX_AGE_SECONDS) return authenticated;
+  return requireStoredSession(authenticated, env, nowSeconds);
+}
+
+async function requireStoredSession(authenticated: Awaited<ReturnType<typeof verifiedAccount>>, env: Env, nowSeconds = Math.floor(Date.now() / 1000)) {
+  const session = await env.DB.prepare('SELECT expires_at AS expiresAt FROM miniapp_sessions WHERE telegram_user_id=?').bind(String(authenticated.user.id)).first<{expiresAt:number}>();
+  if (!session || Number(session.expiresAt) <= nowSeconds) throw new AppError('MINIAPP_AUTH_EXPIRED', 'Сессия Telegram устарела. Откройте приложение заново', 401);
+  return authenticated;
+}
+
+export async function checkTelegramMiniAppSession(request: Request, env: Env) {
+  const authenticated = await verifiedAccount(request, env);
+  return requireStoredSession(authenticated, env);
+}
+
+export async function extendTelegramMiniAppSessionAfterDraftSave(env: Env, userId: string) {
+  const result = await env.DB.prepare(`INSERT INTO miniapp_sessions(telegram_user_id,expires_at,created_at,updated_at) SELECT telegram_user_id,unixepoch()+?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP FROM telegram_identities WHERE user_id=? ON CONFLICT(telegram_user_id) DO UPDATE SET expires_at=MAX(expires_at,excluded.expires_at),updated_at=CURRENT_TIMESTAMP`).bind(MINIAPP_SESSION_TTL_SECONDS, userId).run();
+  if (!result.meta.changes) throw new AppError('MINIAPP_AUTH_EXPIRED', 'Сессия Telegram устарела. Откройте приложение заново', 401);
 }

@@ -1,5 +1,5 @@
 import { AppError, type Env } from '../types';
-import { validateTelegramMiniAppInitData } from './telegram-miniapp-auth';
+import { requireTelegramMiniAppSession } from './telegram-miniapp-auth';
 import { resolveOrCreateTelegramIdentity } from './telegram-identity';
 import { replicateVkArtifactToYandex } from './yandex-vk-replica';
 
@@ -12,7 +12,7 @@ async function hashToken(token:string){const digest=await crypto.subtle.digest('
 function assertToken(token:string){if(!/^[A-Za-z0-9_-]{40,64}$/.test(token))throw new AppError('INVALID_HANDOFF','Некорректная ссылка подключения',400);}
 
 export async function createVkOnboardingHandoff(request:Request,env:Env){
-  const validated=await validateTelegramMiniAppInitData(initDataFrom(request),env.TELEGRAM_BOT_TOKEN);
+  const validated=await requireTelegramMiniAppSession(request,env);
   const account=await resolveOrCreateTelegramIdentity(env,String(validated.user.id));
   const random=new Uint8Array(32);crypto.getRandomValues(random);const token=bytesToToken(random),tokenHash=await hashToken(token),expiresAt=new Date(Date.now()+TTL_SECONDS*1000).toISOString();
   await env.DB.prepare('INSERT INTO vk_onboarding_handoffs(token_hash,user_id,expires_at) VALUES(?,?,?)').bind(tokenHash,account.userId,expiresAt).run();

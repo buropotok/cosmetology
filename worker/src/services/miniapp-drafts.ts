@@ -1,5 +1,5 @@
 import { AppError, type Env } from '../types';
-import { validateTelegramMiniAppInitData } from './telegram-miniapp-auth';
+import { extendTelegramMiniAppSessionAfterDraftSave, requireTelegramMiniAppSession } from './telegram-miniapp-auth';
 import { resolveOrCreateTelegramIdentity } from './telegram-identity';
 import { MINIAPP_IMAGE_MAX_BYTES, MINIAPP_IMAGE_MAX_COUNT, MINIAPP_TEXT_MAX_LENGTH } from './miniapp';
 
@@ -7,10 +7,9 @@ const DOWNLOAD_TTL_SECONDS = 5 * 60;
 const AI_STATE_MAX_LENGTH = 100_000;
 const BEFORE_AFTER_STATE_MAX_LENGTH = 50_000;
 const IMAGE_OPTIONS_MAX_LENGTH = 1_000;
-function initDataFrom(request: Request) { return request.headers.get('authorization')?.match(/^tma\s+(.+)$/i)?.[1] ?? ''; }
 async function accountFor(request: Request, env: Env) {
-  const validated = await validateTelegramMiniAppInitData(initDataFrom(request), env.TELEGRAM_BOT_TOKEN);
-  return resolveOrCreateTelegramIdentity(env, String(validated.user.id));
+  const validated=await requireTelegramMiniAppSession(request,env);
+  return resolveOrCreateTelegramIdentity(env,String(validated.user.id));
 }
 function bytesToToken(bytes: Uint8Array) { let binary=''; for(const byte of bytes) binary+=String.fromCharCode(byte); return btoa(binary).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/g,''); }
 async function downloadSignature(env: Env, key: string, expires: number) {
@@ -35,8 +34,7 @@ function parseImageOptions(value: string) {
   return { internetSearch:true,searchProfile,sourcePolicy };
 }
 
-export async function getMiniAppDraft(request: Request, env: Env) {
-  const account = await accountFor(request, env);
+async function draftForAccount(env: Env, account: Awaited<ReturnType<typeof accountFor>>) {
   const draft = await env.DB.prepare('SELECT text_content AS text, platform, active_photo_index AS activePhotoIndex, screen, ai_state AS aiStateJson, before_after_state AS beforeAfterStateJson, image_options AS imageOptionsJson, updated_at AS updatedAt FROM miniapp_drafts WHERE user_id=?').bind(account.userId).first<{text:string;platform:string;activePhotoIndex:number;screen:string;aiStateJson:string;beforeAfterStateJson:string;imageOptionsJson:string;updatedAt:string}>();
   if (!draft) return { draft: null };
   const { aiStateJson, beforeAfterStateJson, imageOptionsJson, ...rest } = draft;
@@ -51,6 +49,10 @@ export async function getMiniAppDraft(request: Request, env: Env) {
   if(ba?.beforeId&&ba.beforeKey)beforeAfterImages.push({role:'before',assetId:ba.beforeId,key:ba.beforeKey,fileName:ba.beforeFileName,contentType:ba.beforeContentType,size:Number(ba.beforeSize||0),url:await signedDownloadUrl(env,ba.beforeKey)});
   if(ba?.afterId&&ba.afterKey)beforeAfterImages.push({role:'after',assetId:ba.afterId,key:ba.afterKey,fileName:ba.afterFileName,contentType:ba.afterContentType,size:Number(ba.afterSize||0),url:await signedDownloadUrl(env,ba.afterKey)});
   return { draft: { ...rest, aiState, beforeAfterState, imageOptions, images: mapped, beforeAfterImages } };
+}
+
+export async function getMiniAppDraft(request: Request, env: Env) {
+  return draftForAccount(env, await accountFor(request, env));
 }
 
 export async function saveMiniAppDraft(request: Request, env: Env) {
@@ -94,7 +96,9 @@ export async function saveMiniAppDraft(request: Request, env: Env) {
       await env.DB.prepare('INSERT INTO miniapp_draft_images(user_id,position,r2_key,file_name,content_type,size_bytes) VALUES(?,?,?,?,?,?)').bind(account.userId,i,key,image.name||null,image.type||null,image.size).run();
     }
   }
-  return getMiniAppDraft(request, env);
+  const saved = await draftForAccount(env, account);
+  await extendTelegramMiniAppSessionAfterDraftSave(env, account.userId);
+  return saved;
 }
 
 export async function getMiniAppDraftImage(request: Request, env: Env, key: string) {

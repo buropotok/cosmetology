@@ -1,6 +1,32 @@
 const webApp=window.Telegram?.WebApp;webApp?.ready();webApp?.expand();
 const form=document.querySelector('#publish-form'),imageInput=document.querySelector('#image'),previewWrap=document.querySelector('#preview-wrap'),previews=document.querySelector('#previews'),removeImage=document.querySelector('#remove-image'),publish=document.querySelector('#publish'),status=document.querySelector('#status'),publishVk=document.querySelector('#publish-vk');
 
+const SESSION_HEALTHCHECK_INTERVAL_MS=60_000;
+let sessionHealthcheckTimer=null,sessionHealthcheckPending=null,sessionBootstrapped=false,sessionExpired=false;
+function stopSessionHealthcheck(){if(sessionHealthcheckTimer!==null){clearTimeout(sessionHealthcheckTimer);sessionHealthcheckTimer=null}}
+function showSessionExpiredModal(){
+  if(document.querySelector('#session-expired-modal'))return;
+  const overlay=document.createElement('div');overlay.id='session-expired-modal';overlay.style.cssText='position:fixed;inset:0;z-index:30000;background:rgba(0,0,0,.45);display:grid;place-items:center;padding:20px';
+  const card=document.createElement('div');card.setAttribute('role','dialog');card.setAttribute('aria-modal','true');card.style.cssText='width:min(100%,420px);box-sizing:border-box;background:var(--tg-theme-bg-color,#fff);color:var(--tg-theme-text-color,#111);border-radius:18px;padding:20px;box-shadow:0 20px 60px rgba(0,0,0,.25)';
+  const title=document.createElement('strong');title.textContent='Сессия устарела';title.style.cssText='display:block;font-size:20px;margin-bottom:10px';
+  const message=document.createElement('p');message.textContent='Закройте и снова откройте приложение.\nВаши черновики сохранены.';message.style.cssText='white-space:pre-line;margin:0 0 18px;line-height:1.5';
+  const button=document.createElement('button');button.type='button';button.textContent='Понятно';button.style.cssText='width:100%;border:0;border-radius:12px;padding:13px 16px;background:var(--tg-theme-button-color,#2481cc);color:var(--tg-theme-button-text-color,#fff);font:600 16px system-ui';button.onclick=()=>overlay.remove();
+  card.append(title,message,button);overlay.append(card);document.body.append(overlay);
+}
+function scheduleSessionHealthcheck(){stopSessionHealthcheck();if(sessionExpired||document.visibilityState!=='visible')return;sessionHealthcheckTimer=setTimeout(()=>{sessionHealthcheckTimer=null;void checkSession()},SESSION_HEALTHCHECK_INTERVAL_MS)}
+async function checkSession(){
+  if(sessionExpired||document.visibilityState!=='visible')return;
+  if(sessionHealthcheckPending)return sessionHealthcheckPending;
+  sessionHealthcheckPending=(async()=>{try{
+    const response=await fetch('/api/miniapp/session',{method:sessionBootstrapped?'GET':'POST',headers:authHeaders(),cache:'no-store'}),result=await response.json().catch(()=>null);
+    if(response.ok)sessionBootstrapped=true;
+    else if(response.status===401&&result?.error?.code==='MINIAPP_AUTH_EXPIRED'){sessionExpired=true;stopSessionHealthcheck();showSessionExpiredModal()}
+  }catch(error){console.warn('Session healthcheck failed',error)}finally{sessionHealthcheckPending=null;if(!sessionExpired)scheduleSessionHealthcheck()}})();
+  return sessionHealthcheckPending;
+}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')stopSessionHealthcheck();else if(!sessionExpired)void checkSession()});
+if(document.visibilityState==='visible'&&webApp?.initData)void checkSession();
+
 function vkButton(label,primary=false){const button=document.createElement('button');button.type='button';button.textContent=label;button.style.cssText=`width:100%;padding:13px 16px;border-radius:12px;font:600 16px system-ui;border:${primary?'0':'1px solid rgba(128,128,128,.35)'};background:${primary?'var(--tg-theme-button-color,#2481cc)':'transparent'};color:${primary?'var(--tg-theme-button-text-color,#fff)':'var(--tg-theme-text-color,#111)'};margin-top:8px`;return button}
 async function vkIntent(path,body){const response=await fetch(path,{method:body===undefined?'GET':'POST',headers:{...authHeaders(),...(body===undefined?{}:{'content-type':'application/json'})},cache:'no-store',...(body===undefined?{}:{body:JSON.stringify(body)})}),result=await response.json().catch(()=>null);if(!response.ok)throw new Error(result?.error?.message||'Не удалось сохранить действие VK.');return result}
 const createVkPublishIntent=()=>vkIntent('/api/miniapp/onboarding-intent',{action:'publish_vk'}),completeVkPublishIntent=()=>vkIntent('/api/miniapp/onboarding-intent/complete',{}),cancelVkPublishIntent=()=>vkIntent('/api/miniapp/onboarding-intent/cancel',{});

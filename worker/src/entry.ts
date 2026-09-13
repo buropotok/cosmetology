@@ -8,7 +8,7 @@ import { getMiniAppNewsGenerationStatus } from './services/ai-generation-status'
 import { generateMiniAppImage } from './services/miniapp-image-generation';
 import { searchMiniAppImage } from './services/miniapp-image-search';
 import { saveRuntimeDiagnostics } from './services/runtime-diagnostics';
-import { validateTelegramMiniAppInitData } from './services/telegram-miniapp-auth';
+import { bootstrapTelegramMiniAppSession, checkTelegramMiniAppSession, requireTelegramMiniAppSession } from './services/telegram-miniapp-auth';
 import { resolveOrCreateTelegramIdentity } from './services/telegram-identity';
 import { decryptManagedBotToken } from './services/managed-bot-crypto';
 import { deleteTelegramMessageWithToken, getTelegramBotMeWithToken, sendTelegramVkBackupWithToken } from './services/telegram';
@@ -38,7 +38,7 @@ async function handleImageSearch(req:Request,env:Env){
 type VkBackupTarget={telegram_bot_id:string;telegram_chat_id:string;token_ciphertext:string;token_iv:string;token_key_version:number};
 async function prepareVkLink(req: Request, env: Env) {
   const initData = req.headers.get('authorization')?.match(/^tma\s+(.+)$/i)?.[1] ?? '';
-  const validated = await validateTelegramMiniAppInitData(initData, env.TELEGRAM_BOT_TOKEN);
+  const validated = await requireTelegramMiniAppSession(req, env);
   const account = await resolveOrCreateTelegramIdentity(env, String(validated.user.id));
   const group = await env.DB.prepare('SELECT group_id AS groupId FROM user_vk_group WHERE user_id=?').bind(account.userId).first<{ groupId: number }>();
   const groupId = Number(group?.groupId);
@@ -64,6 +64,8 @@ async function prepareVkLink(req: Request, env: Env) {
 export default { async fetch(req: Request, env: Env, ctx: ExecutionContext) {
   const url = new URL(req.url);
   try {
+    if (req.method === 'POST' && url.pathname === '/api/miniapp/session') { await bootstrapTelegramMiniAppSession(req,env); return json({ok:true}); }
+    if (req.method === 'GET' && url.pathname === '/api/miniapp/session') { await checkTelegramMiniAppSession(req,env); return json({ok:true}); }
     if (req.method === 'POST' && url.pathname === '/api/miniapp/runtime-diagnostics') return json(await saveRuntimeDiagnostics(req,env));
     if (req.method === 'POST' && url.pathname === '/api/miniapp/ai/chat') return json(await generateMiniAppAiReply(req, env));
     if (req.method === 'GET' && url.pathname === '/api/miniapp/news/status') return json(await getMiniAppNewsGenerationStatus(req, env));

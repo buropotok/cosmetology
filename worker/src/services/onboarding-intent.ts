@@ -1,5 +1,5 @@
 import {AppError,type Env} from '../types';
-import {validateTelegramMiniAppInitData} from './telegram-miniapp-auth';
+import {requireTelegramMiniAppSession} from './telegram-miniapp-auth';
 import {resolveOrCreateTelegramIdentity} from './telegram-identity';
 import {getManagedBotStateForUser} from './managed-bot-onboarding';
 
@@ -8,7 +8,7 @@ type WaitingFor='telegram_bot'|'telegram_preview'|'telegram_group'|'confirmation
 type IntentRow={user_id:string;action:Action;draft_ref:string|null;return_screen:string;waiting_for:WaitingFor;status:string;created_at:string;updated_at:string;expires_at:string};
 const TTL_SECONDS=24*60*60;
 function initDataFrom(request:Request){return request.headers.get('authorization')?.match(/^tma\s+(.+)$/i)?.[1]??''}
-async function account(request:Request,env:Env){const validated=await validateTelegramMiniAppInitData(initDataFrom(request),env.TELEGRAM_BOT_TOKEN);return resolveOrCreateTelegramIdentity(env,String(validated.user.id))}
+async function account(request:Request,env:Env){const validated=await requireTelegramMiniAppSession(request,env);return resolveOrCreateTelegramIdentity(env,String(validated.user.id))}
 async function previewReady(env:Env,userId:string){const value=await env.DB.prepare("SELECT 1 AS ready FROM telegram_managed_bot_private_chats pc JOIN telegram_managed_bots mb ON mb.telegram_bot_id=pc.telegram_bot_id AND mb.user_id=pc.user_id AND mb.status='active' WHERE pc.user_id=? AND pc.status='active' LIMIT 1").bind(userId).first<{ready:number}>();return value?.ready===1}
 async function event(env:Env,userId:string,action:Action,name:string,waitingFor?:WaitingFor){await env.DB.prepare('INSERT INTO user_onboarding_intent_event(user_id,action,event,waiting_for) VALUES(?,?,?,?)').bind(userId,action,name,waitingFor??null).run()}
 async function row(env:Env,userId:string){return env.DB.prepare("SELECT user_id,action,draft_ref,return_screen,waiting_for,status,created_at,updated_at,expires_at FROM user_onboarding_intent WHERE user_id=? AND status='pending' AND expires_at>CURRENT_TIMESTAMP").bind(userId).first<IntentRow>()}

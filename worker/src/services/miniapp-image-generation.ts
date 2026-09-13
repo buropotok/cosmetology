@@ -1,5 +1,5 @@
 import { AppError, type Env } from '../types';
-import { validateTelegramMiniAppInitData } from './telegram-miniapp-auth';
+import { requireTelegramMiniAppSession } from './telegram-miniapp-auth';
 
 const DEFAULT_IMAGE_MODEL = 'gemini-3.1-flash-image';
 const MAX_POST_LENGTH = 12000;
@@ -74,7 +74,7 @@ function decodeBase64(value: string) {
 }
 
 export async function generateMiniAppImage(req: Request, env: Env) {
-  await validateTelegramMiniAppInitData(getMiniAppInitData(req), env.TELEGRAM_BOT_TOKEN);
+  await requireTelegramMiniAppSession(req, env);
   const body = await req.json().catch(() => null) as { text?: unknown } | null;
   const text = typeof body?.text === 'string' ? body.text.trim() : '';
   if (!text) throw new AppError('AI_IMAGE_TEXT_REQUIRED', 'Введите текст публикации', 400);

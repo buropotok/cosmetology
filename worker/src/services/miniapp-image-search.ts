@@ -1,6 +1,6 @@
 import { AppError, type Env } from '../types';
 import { MINIAPP_IMAGE_MAX_BYTES } from './miniapp';
-import { validateTelegramMiniAppInitData } from './telegram-miniapp-auth';
+import { requireTelegramMiniAppSession } from './telegram-miniapp-auth';
 import { buildImageSearchPrompt } from './image-search-profiles';
 
 const SEARCH_MODEL = 'gpt-5.6-luna';
@@ -350,7 +350,7 @@ function imageExtension(contentType: string) {
 }
 
 export async function searchMiniAppImage(req: Request, env: Env) {
-  await validateTelegramMiniAppInitData(getMiniAppInitData(req), env.TELEGRAM_BOT_TOKEN);
+  await requireTelegramMiniAppSession(req, env);
   const body = await req.json().catch(() => null) as {
     text?: unknown;
     searchProfile?: unknown;
