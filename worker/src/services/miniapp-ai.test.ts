@@ -68,8 +68,9 @@ describe('Mini App OpenAI text generation', () => {
   it('uses OpenAI Responses with web_search for discovery and preserves the discovery contract', async () => {
     const fetchMock = vi.fn().mockResolvedValue(openAiText(discovery));
     globalThis.fetch = fetchMock as typeof fetch;
+    const env = makeEnv();
 
-    const result = await generateMiniAppAiReply(makeRequest({ message: 'Найди темы', mode: 'discovery' }), makeEnv());
+    const result = await generateMiniAppAiReply(makeRequest({ message: 'Найди темы', mode: 'discovery' }), env);
 
     expect(result).toEqual({ discovery: JSON.parse(discovery) });
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -78,6 +79,7 @@ describe('Mini App OpenAI text generation', () => {
     const body = JSON.parse(String(init.body));
     expect(body.model).toBe('gpt-5.6-luna');
     expect(body.tools).toEqual([{ type: 'web_search' }]);
+    expect(mocks.setAiGenerationStatus).toHaveBeenLastCalledWith(env, 'user-1', 'general', 'succeeded');
   });
 
   it('uses web_search only for grounding, then formats with the PostMarkdown system prompt', async () => {
@@ -85,8 +87,9 @@ describe('Mini App OpenAI text generation', () => {
       .mockResolvedValueOnce(openAiText('Подготовленная публикация без ссылок.'))
       .mockResolvedValueOnce(openAiText('# Заголовок\n\nКороткий текст публикации.'));
     globalThis.fetch = fetchMock as typeof fetch;
+    const env = makeEnv();
 
-    const result = await generateMiniAppAiReply(makeRequest({ message: 'Подготовь публикацию' }), makeEnv());
+    const result = await generateMiniAppAiReply(makeRequest({ message: 'Подготовь публикацию' }), env);
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
     const firstBody = JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body));
@@ -100,7 +103,7 @@ describe('Mini App OpenAI text generation', () => {
     if (!('text' in result)) throw new Error('Expected text result');
     const document = JSON.parse(result.text);
     expect(isPostDocument(document)).toBe(true);
-    expect(mocks.setAiGenerationStatus).toHaveBeenLastCalledWith(makeEnv().DB, expect.anything());
+    expect(mocks.setAiGenerationStatus).toHaveBeenLastCalledWith(env, 'user-1', 'general', 'succeeded');
   });
 
   it('maps OpenAI HTTP failures to AI_GENERATION_FAILED and persists failed status', async () => {
