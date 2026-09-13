@@ -1,3 +1,5 @@
+import {serializePostDocumentForVk} from './vk-text-serializer.js';
+
 const webApp=window.Telegram?.WebApp;webApp?.ready();webApp?.expand();
 const form=document.querySelector('#publish-form'),imageInput=document.querySelector('#image'),previewWrap=document.querySelector('#preview-wrap'),previews=document.querySelector('#previews'),removeImage=document.querySelector('#remove-image'),publish=document.querySelector('#publish'),status=document.querySelector('#status'),publishVk=document.querySelector('#publish-vk');
 
@@ -10,7 +12,9 @@ async function prepareVkLink(delivery){const response=await fetch('/api/miniapp/
 async function publishVkExistingFlow(){
   publishVk.disabled=true;
   try{
-    const plainText=currentPlainText();if(plainText.trim()){await navigator.clipboard.writeText(plainText);vkDiag('vk-text-copied',{textLength:plainText.length})}
+    const postDocument=window.CosmoRichEditor?.toPostDocument?.();
+    const vkText=postDocument?serializePostDocumentForVk(postDocument):currentPlainText();
+    if(vkText.trim()){await navigator.clipboard.writeText(vkText);vkDiag('vk-text-copied',{textLength:vkText.length,serialized:!!postDocument})}
     if(typeof webApp?.downloadFile!=='function')throw new Error('Telegram downloadFile недоступен.');
     const response=await fetch('/api/miniapp/draft',{headers:authHeaders(),cache:'no-store'}),result=await response.json().catch(()=>null);
     if(!response.ok)throw new Error(result?.error?.message||'Не удалось получить изображения.');
