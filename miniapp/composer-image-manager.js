@@ -3,6 +3,9 @@ import {insertionSide,moveItem} from './composer-image-reorder.js';
 (()=>{
 const input=document.querySelector('#image'),previews=document.querySelector('#previews'),removeAll=document.querySelector('#remove-image'),status=document.querySelector('#status');
 if(!input||!previews)return;
+// The delete badge intentionally extends beyond a thumbnail; reserve scrollport space so it is not clipped.
+previews.style.paddingTop='7px';
+previews.style.paddingInline='7px';
 let files=Array.from(input.files||[]).slice(0,10),internalChange=false,wideCheckGeneration=0,telegramLayout='slideshow',dragState=null;
 const VK_MAX_ASPECT=16/9;
 
@@ -241,7 +244,7 @@ function decorate(){
   del.className='composer-image-delete';
   del.setAttribute('aria-label','Удалить изображение');
   del.textContent='×';
-  del.style.cssText='position:absolute;right:-5px;top:-5px;width:24px;height:24px;border:0;border-radius:50%;background:#e5484d;color:#fff;font-size:20px;line-height:22px;padding:0;z-index:3;box-shadow:0 1px 4px rgba(0,0,0,.35)';
+  del.style.cssText='position:absolute;right:-5px;top:-5px;width:24px;height:24px;border:0;border-radius:50%;background:#e5484d;color:#fff;font-size:20px;line-height:22px;padding:0;z-index:20;box-shadow:0 1px 4px rgba(0,0,0,.35)';
   del.addEventListener('pointerdown',event=>event.stopPropagation());
   del.addEventListener('click',event=>{
    event.preventDefault();
