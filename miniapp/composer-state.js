@@ -58,7 +58,8 @@ function create({
     reset(){
       pendingEditorContent=null;
       getRichEditor()?.clear?.();
-      getImageManager()?.replaceFiles?.([]);platform='telegram';imageOptions=DEFAULT_IMAGE_OPTIONS;activePhotoIndex=0;imageSignature='';version++;
+      const imageManager=getImageManager();
+      imageManager?.replaceFiles?.([]);imageManager?.setTelegramLayout?.('slideshow');platform='telegram';imageOptions=DEFAULT_IMAGE_OPTIONS;activePhotoIndex=0;imageSignature='';version++;
       window.dispatchEvent(new CustomEvent('cosmo-composer-restore',{detail:getSnapshot()}));
     },
     dispose(){unsubscribeRichEditor();window.removeEventListener('cosmo-rich-ready',onRichReady);imageInput.removeEventListener('change',onImages);listeners.clear()},
