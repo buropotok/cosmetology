@@ -48,8 +48,12 @@ export async function storePermanentMediaAsset(env:Env,userId:string,image:File,
   }
 }
 
-export async function listPermanentMediaAssets(env:Env,userId:string,limit=100){
-  const safe=Math.max(1,Math.min(100,Math.floor(limit)||100));
-  const rows=await env.DB.prepare('SELECT id,r2_key AS key,thumbnail_id AS thumbnailId,file_name AS fileName,content_type AS contentType,size_bytes AS size,source_type AS sourceType,content_hash AS contentHash,created_at AS createdAt FROM media_assets WHERE user_id=? ORDER BY created_at DESC,id DESC LIMIT ?').bind(userId,safe).all<MediaAsset>();
+export type MediaAssetCursor={createdAt:string;id:string};
+
+export async function listPermanentMediaAssets(env:Env,userId:string,limit:number,cursor?:MediaAssetCursor){
+  const sql=`SELECT id,r2_key AS key,thumbnail_id AS thumbnailId,file_name AS fileName,content_type AS contentType,size_bytes AS size,source_type AS sourceType,content_hash AS contentHash,created_at AS createdAt FROM media_assets WHERE user_id=?${cursor?' AND (created_at<? OR (created_at=? AND id<?))':''} ORDER BY created_at DESC,id DESC LIMIT ?`;
+  const statement=env.DB.prepare(sql);
+  const bound=cursor?statement.bind(userId,cursor.createdAt,cursor.createdAt,cursor.id,limit):statement.bind(userId,limit);
+  const rows=await bound.all<MediaAsset>();
   return rows.results||[];
 }
