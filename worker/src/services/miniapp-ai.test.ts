@@ -1,37 +1,129 @@
-import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { AppError, type Env } from '../types';
+import { isPostDocument } from '../../../shared/post-document';
 
-const source = readFileSync(new URL('./miniapp-ai.ts', import.meta.url), 'utf8');
+const mocks = vi.hoisted(() => ({
+  resolveMiniAppAiUser: vi.fn(),
+  setAiGenerationStatus: vi.fn(),
+}));
 
-describe('Mini App AI PostMarkdown generation', () => {
-  it('keeps the original discovery flow', () => {
-    expect(source).toContain("const prompt = mode === 'discovery' ? `${message}");
-    expect(source).toContain('return { discovery: parseDiscovery(text) }');
-    expect(source).not.toContain('GROUNDING_REQUIREMENTS');
-    expect(source).not.toContain("toolChoice: 'required'");
+vi.mock('./ai-generation-status', () => ({
+  resolveMiniAppAiUser: mocks.resolveMiniAppAiUser,
+  setAiGenerationStatus: mocks.setAiGenerationStatus,
+}));
+
+import { generateMiniAppAiReply } from './miniapp-ai';
+
+const originalFetch = globalThis.fetch;
+
+function makeEnv(overrides: Partial<Env> = {}): Env {
+  return {
+    OPENAI_API_KEY: 'test-openai-key',
+    AI_TEXT_MODEL: undefined,
+    ...overrides,
+  } as Env;
+}
+
+function makeRequest(body: Record<string, unknown>, signal?: AbortSignal) {
+  return new Request('https://example.test/api/miniapp/ai/chat', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+    signal,
+  });
+}
+
+function openAiText(text: string) {
+  return new Response(JSON.stringify({
+    output: [{ type: 'message', content: [{ type: 'output_text', text }] }],
+  }), { status: 200, headers: { 'content-type': 'application/json' } });
+}
+
+const discovery = JSON.stringify({
+  schemaVersion: 1,
+  ideas: Array.from({ length: 5 }, (_, index) => ({
+    id: `idea_${index + 1}`,
+    title: `Идея ${index + 1}`,
+    text: `Текст ${index + 1}`,
+  })),
+});
+
+beforeEach(() => {
+  vi.restoreAllMocks();
+  globalThis.fetch = originalFetch;
+  mocks.resolveMiniAppAiUser.mockReset().mockResolvedValue({ userId: 'user-1' });
+  mocks.setAiGenerationStatus.mockReset().mockResolvedValue(undefined);
+});
+
+describe('Mini App OpenAI text generation', () => {
+  it('fails before provider calls when OPENAI_API_KEY is missing', async () => {
+    const fetchMock = vi.fn();
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    await expect(generateMiniAppAiReply(makeRequest({ message: 'Тест' }), makeEnv({ OPENAI_API_KEY: '' })))
+      .rejects.toMatchObject<AppError>({ code: 'AI_NOT_CONFIGURED', status: 503 });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('keeps Google Search grounding separate from PostMarkdown formatting', () => {
-    const groundedStart = source.indexOf('const grounded = await generateText({');
-    const formattedStart = source.indexOf('const formatted = await generateText({');
-    expect(groundedStart).toBeGreaterThanOrEqual(0);
-    expect(formattedStart).toBeGreaterThan(groundedStart);
-    const groundedCall = source.slice(groundedStart, formattedStart);
-    const formattedCall = source.slice(formattedStart, source.indexOf('const markdown = formatted.text.trim()', formattedStart));
-    expect(groundedCall).toContain("tools: { google_search: google.tools.googleSearch({}) }");
-    expect(formattedCall).not.toContain('google_search');
+  it('uses OpenAI Responses with web_search for discovery and preserves the discovery contract', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(openAiText(discovery));
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    const result = await generateMiniAppAiReply(makeRequest({ message: 'Найди темы', mode: 'discovery' }), makeEnv());
+
+    expect(result).toEqual({ discovery: JSON.parse(discovery) });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://api.openai.com/v1/responses');
+    const body = JSON.parse(String(init.body));
+    expect(body.model).toBe('gpt-5.6-luna');
+    expect(body.tools).toEqual([{ type: 'web_search' }]);
   });
 
-  it('does not teach Gemini placeholder URLs', () => {
-    expect(source).not.toMatch(/https?:\/\/(?:www\.)?example\.(?:com|org|net)/i);
-    expect(source).toContain('[текст](URL)');
-    expect(source).toContain('[[Название кнопки]](URL)');
+  it('uses web_search only for grounding, then formats with the PostMarkdown system prompt', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(openAiText('Подготовленная публикация без ссылок.'))
+      .mockResolvedValueOnce(openAiText('# Заголовок\n\nКороткий текст публикации.'));
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    const result = await generateMiniAppAiReply(makeRequest({ message: 'Подготовь публикацию' }), makeEnv());
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const firstBody = JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body));
+    const secondBody = JSON.parse(String((fetchMock.mock.calls[1][1] as RequestInit).body));
+    expect(firstBody.tools).toEqual([{ type: 'web_search' }]);
+    expect(secondBody.tools).toBeUndefined();
+    expect(secondBody.instructions).toContain('Ты преобразуешь уже подготовленную публикацию');
+    expect(secondBody.input).toContain('Подготовленная публикация без ссылок.');
+
+    expect('text' in result).toBe(true);
+    if (!('text' in result)) throw new Error('Expected text result');
+    const document = JSON.parse(result.text);
+    expect(isPostDocument(document)).toBe(true);
+    expect(mocks.setAiGenerationStatus).toHaveBeenLastCalledWith(makeEnv().DB, expect.anything());
   });
 
-  it('validates model-authored links without changing the generation prompt flow', () => {
-    expect(source).toContain("import { sanitizePostDocumentLinks } from './link-validator'");
-    expect(source).toContain('const document = await sanitizePostDocumentLinks(parsePostMarkdown(markdown))');
-    expect(source).toContain('isPostDocument(document)');
-    expect(source).toContain('JSON.stringify(document, null, 2)');
+  it('maps OpenAI HTTP failures to AI_GENERATION_FAILED and persists failed status', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: { message: 'denied' } }), {
+      status: 403,
+      headers: { 'content-type': 'application/json' },
+    }));
+    globalThis.fetch = fetchMock as typeof fetch;
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    await expect(generateMiniAppAiReply(makeRequest({ message: 'Тест' }), makeEnv()))
+      .rejects.toMatchObject<AppError>({ code: 'AI_GENERATION_FAILED', status: 502 });
+    expect(mocks.setAiGenerationStatus).toHaveBeenCalledWith(expect.anything(), 'user-1', 'general', 'failed', 'AI_GENERATION_FAILED');
+  });
+
+  it.each([
+    ['empty output', JSON.stringify({ output: [] })],
+    ['malformed JSON', 'not-json'],
+  ])('turns %s into a controlled generation failure', async (_name, payload) => {
+    globalThis.fetch = vi.fn().mockResolvedValue(new Response(payload, { status: 200 })) as typeof fetch;
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    await expect(generateMiniAppAiReply(makeRequest({ message: 'Тест' }), makeEnv()))
+      .rejects.toMatchObject<AppError>({ code: 'AI_GENERATION_FAILED', status: 502 });
   });
 });
