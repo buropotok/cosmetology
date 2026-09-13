@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 
-const source = readFileSync(resolve(process.cwd(), 'src/services/miniapp-image-generation.ts'), 'utf8');
+const source = readFileSync(new URL('./miniapp-image-generation.ts', import.meta.url), 'utf8');
 
 describe('Mini App image generation provider contract', () => {
   it('uses the OpenAI image generation endpoint and server-side API key', () => {
@@ -22,8 +21,8 @@ describe('Mini App image generation provider contract', () => {
   });
 
   it('keeps local failure handling for provider errors and empty image results', () => {
-    expect(source).toContain("AI_IMAGE_GENERATION_FAILED");
-    expect(source).toContain("AI_IMAGE_EMPTY");
-    expect(source).toContain("AI_NOT_CONFIGURED");
+    expect(source).toContain('AI_IMAGE_GENERATION_FAILED');
+    expect(source).toContain('AI_IMAGE_EMPTY');
+    expect(source).toContain('AI_NOT_CONFIGURED');
   });
 });
