@@ -13,6 +13,7 @@ const STYLE_TEXT=`
 .composer-editor.is-keyboard-layout .composer-editor-controls{order:2;flex:0 0 auto;margin:6px 0 0;padding:2px 0 0;background:#fff}
 .composer-editor.is-keyboard-layout .composer-editor-footer{display:none!important}
 .composer-editor.is-keyboard-layout .composer-tool-menu .composer-tool-panel{top:auto!important;bottom:calc(100% + 6px)!important}
+.composer-editor-fullscreen-hint{position:absolute;left:50%;top:max(10px,env(safe-area-inset-top,0px));z-index:3;max-width:calc(100% - 32px);box-sizing:border-box;padding:8px 12px;border-radius:999px;background:rgba(28,28,30,.88);color:#fff;font-size:13px;line-height:1.25;text-align:center;transform:translateX(-50%);pointer-events:none}
 @media(max-width:360px){.composer-editor-controls{gap:6px}.composer-editor-controls .composer-clear{padding:6px 8px;font-size:11px}.composer-editor-controls .composer-toolbar{max-width:calc(100% - 76px)}}
 `;
 
@@ -79,8 +80,22 @@ export function initComposerEditorKeyboardLayout({
   const platform=String(win.Telegram?.WebApp?.platform||'');
   const coarsePointer=typeof win.matchMedia==='function'&&win.matchMedia('(pointer: coarse)').matches;
   const mobile=isMobileEditorEnvironment({platform,coarsePointer});
-  let active=false,pullStart=null;
+  let active=false,pullStart=null,hintTimer=null;
 
+  const hideHint=()=>{
+    if(hintTimer!==null)win.clearTimeout(hintTimer);
+    hintTimer=null;
+    root.querySelector('.composer-editor-fullscreen-hint')?.remove();
+  };
+  const showHint=()=>{
+    hideHint();
+    const hint=doc.createElement('div');
+    hint.className='composer-editor-fullscreen-hint';
+    hint.setAttribute('role','status');
+    hint.textContent='Смахните вверх, чтобы выйти из режима редактирования текста';
+    root.append(hint);
+    hintTimer=win.setTimeout(hideHint,2800);
+  };
   const updateViewport=()=>{
     if(!active)return;
     const frame=computeVisualViewportInsets({innerHeight:win.innerHeight,viewport});
@@ -88,14 +103,16 @@ export function initComposerEditorKeyboardLayout({
     root.style.setProperty('--composer-editor-vv-bottom',`${frame.bottom}px`);
   };
   const activate=()=>{
-    if(!mobile)return;
+    if(!mobile||active)return;
     active=true;
     root.classList.add('is-keyboard-layout');
     updateViewport();
+    showHint();
   };
   const deactivate=()=>{
     active=false;
     pullStart=null;
+    hideHint();
     root.classList.remove('is-keyboard-layout');
     root.style.removeProperty('--composer-editor-vv-top');
     root.style.removeProperty('--composer-editor-vv-bottom');
