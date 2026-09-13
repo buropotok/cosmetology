@@ -1,12 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
+import {moveItem} from './composer-image-order.js';
 
 const source=await readFile(new URL('./composer-image-manager.js',import.meta.url),'utf8');
 
-test('drag destination is resolved only inside the owned preview strip',()=>{
- assert.match(source,/elementFromPoint\?\.\(x,y\)/);
- assert.match(source,/!target\|\|!previews\.contains\(target\)/);
- assert.match(source,/dragState\.to=to/);
- assert.match(source,/if\(from!==to\)moveFile\(from,to\)/);
+test('cancelled drag has a distinct non-committing path',()=>{
+  assert.match(source,/onUp=endEvent=>\{cleanup\(\);endDrag\(endEvent,true\)\}/);
+  assert.match(source,/onCancel=endEvent=>\{cleanup\(\);endDrag\(endEvent,false\)\}/);
+  const files=['first','second','third'];
+  assert.deepEqual(files,['first','second','third']);
+  assert.deepEqual(moveItem(files,0,2),['second','third','first']);
+});
+
+test('drag destination lookup is scoped to the owned preview strip',()=>{
+  assert.match(source,/document\.elementFromPoint\?\.\(x,y\)/);
+  assert.match(source,/!target\|\|!previews\.contains\(target\)/);
 });
