@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { AppError, type Env } from '../types';
+import { type Env } from '../types';
 import { isPostDocument } from '../../../shared/post-document';
 
 const mocks = vi.hoisted(() => ({
@@ -61,7 +61,7 @@ describe('Mini App OpenAI text generation', () => {
     globalThis.fetch = fetchMock as typeof fetch;
 
     await expect(generateMiniAppAiReply(makeRequest({ message: 'Тест' }), makeEnv({ OPENAI_API_KEY: '' })))
-      .rejects.toMatchObject<AppError>({ code: 'AI_NOT_CONFIGURED', status: 503 });
+      .rejects.toMatchObject({ code: 'AI_NOT_CONFIGURED', status: 503 });
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -99,8 +99,7 @@ describe('Mini App OpenAI text generation', () => {
     expect(secondBody.instructions).toContain('Ты преобразуешь уже подготовленную публикацию');
     expect(secondBody.input).toContain('Подготовленная публикация без ссылок.');
 
-    expect('text' in result).toBe(true);
-    if (!('text' in result)) throw new Error('Expected text result');
+    if (!('text' in result) || typeof result.text !== 'string') throw new Error('Expected text result');
     const document = JSON.parse(result.text);
     expect(isPostDocument(document)).toBe(true);
     expect(mocks.setAiGenerationStatus).toHaveBeenLastCalledWith(env, 'user-1', 'general', 'succeeded');
@@ -115,7 +114,7 @@ describe('Mini App OpenAI text generation', () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
     await expect(generateMiniAppAiReply(makeRequest({ message: 'Тест' }), makeEnv()))
-      .rejects.toMatchObject<AppError>({ code: 'AI_GENERATION_FAILED', status: 502 });
+      .rejects.toMatchObject({ code: 'AI_GENERATION_FAILED', status: 502 });
     expect(mocks.setAiGenerationStatus).toHaveBeenCalledWith(expect.anything(), 'user-1', 'general', 'failed', 'AI_GENERATION_FAILED');
   });
 
@@ -127,6 +126,6 @@ describe('Mini App OpenAI text generation', () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
     await expect(generateMiniAppAiReply(makeRequest({ message: 'Тест' }), makeEnv()))
-      .rejects.toMatchObject<AppError>({ code: 'AI_GENERATION_FAILED', status: 502 });
+      .rejects.toMatchObject({ code: 'AI_GENERATION_FAILED', status: 502 });
   });
 });
