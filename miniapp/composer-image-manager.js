@@ -25,7 +25,8 @@ function renderTelegramLayout(){
  telegramLayoutButton.textContent=isCollage?'Коллаж':'Карусель';
  telegramLayoutButton.setAttribute('aria-label',`Отображение фото в Telegram: ${isCollage?'Коллаж':'Карусель'}. Нажмите, чтобы выбрать ${isCollage?'карусель':'коллаж'}.`);
 }
-telegramLayoutButton.addEventListener('click',()=>{telegramLayout=telegramLayout==='slideshow'?'collage':'slideshow';renderTelegramLayout()});
+function setTelegramLayout(value){telegramLayout=value==='collage'?'collage':'slideshow';renderTelegramLayout()}
+telegramLayoutButton.addEventListener('click',()=>setTelegramLayout(telegramLayout==='slideshow'?'collage':'slideshow'));
 
 function syncInput(){
  if(typeof DataTransfer==='undefined')return false;
@@ -98,7 +99,8 @@ window.CosmoComposerImages={
  replaceFiles(incoming){files=Array.from(incoming||[]).slice(0,10);notifyChange()},
  replaceAt,
  getFiles(){return files.slice()},
- getTelegramLayout(){return telegramLayout}
+ getTelegramLayout(){return telegramLayout},
+ setTelegramLayout
 };
 
 input.addEventListener('change',event=>{
