@@ -1,3 +1,5 @@
+import {moveItem,translatedActiveIndex} from './composer-image-order.js';
+
 (()=>{
 const input=document.querySelector('#image'),previews=document.querySelector('#previews'),removeAll=document.querySelector('#remove-image'),status=document.querySelector('#status');
 if(!input||!previews)return;
@@ -18,8 +20,7 @@ function formatIndexes(indexes){if(indexes.length===1)return `Изображен
 async function updateVkAspectWarning(){const generation=++wideCheckGeneration,current=files.slice(),sizes=await Promise.all(current.map(readImageSize));if(generation!==wideCheckGeneration)return;const wide=[];sizes.forEach((size,index)=>{if(size?.height>0&&size.width/size.height>VK_MAX_ASPECT+0.001)wide.push(index+1)});let warning=document.querySelector('#vk-aspect-warning');if(!wide.length){warning?.remove();return}if(!warning){warning=document.createElement('p');warning.id='vk-aspect-warning';warning.setAttribute('role','status');warning.style.cssText='margin:8px 0 0;padding:10px 12px;border-radius:10px;background:rgba(255,149,0,.14);color:#b35a00;font-size:14px;line-height:1.35';previews.parentElement?.append(warning)}warning.textContent=`${formatIndexes(wide)} шире 16:9. ВКонтакте обрежет ${wide.length===1?'его':'их'} по краям.`}
 function addFiles(incoming){const next=Array.from(incoming||[]),total=files.length+next.length;files=[...files,...next].slice(0,10);notifyChange();if(total>10)showLimit()}
 function replaceAt(index,file){if(!Number.isInteger(index)||index<0||index>=files.length||!(file instanceof File))return false;files[index]=file;notifyChange();return true}
-function translatedActiveIndex(active,from,to){if(active===from)return to;if(from<active&&active<=to)return active-1;if(to<=active&&active<from)return active+1;return active}
-function moveFile(from,to){if(!Number.isInteger(from)||!Number.isInteger(to)||from<0||to<0||from>=files.length||to>=files.length||from===to)return false;const state=window.CosmoComposerState,active=state?.getSnapshot?.().activePhotoIndex,[file]=files.splice(from,1);files.splice(to,0,file);if(Number.isInteger(active))state?.setActivePhotoIndex?.(translatedActiveIndex(active,from,to));notifyChange();return true}
+function moveFile(from,to){const next=moveItem(files,from,to);if(!next)return false;const state=window.CosmoComposerState,active=state?.getSnapshot?.().activePhotoIndex;files=next;if(Number.isInteger(active))state?.setActivePhotoIndex?.(translatedActiveIndex(active,from,to));notifyChange();return true}
 window.CosmoComposerImages={addFiles,replaceFiles(incoming){files=Array.from(incoming||[]).slice(0,10);notifyChange()},replaceAt,moveFile,getFiles(){return files.slice()},getTelegramLayout(){return telegramLayout},setTelegramLayout};
 input.addEventListener('change',event=>{if(internalChange)return;const incoming=Array.from(input.files||[]).slice(0,10);if(event.isTrusted)addFiles(incoming);else{files=incoming;internalChange=true;try{input.dispatchEvent(new Event('change',{bubbles:true}))}finally{internalChange=false}updateTelegramLayoutVisibility();void updateVkAspectWarning()}});
 removeAll?.addEventListener('click',()=>{files=[];notifyChange()});
