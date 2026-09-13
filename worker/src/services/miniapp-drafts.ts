@@ -2,6 +2,7 @@ import { AppError, type Env } from '../types';
 import { extendTelegramMiniAppSessionAfterDraftSave, requireTelegramMiniAppSession } from './telegram-miniapp-auth';
 import { resolveOrCreateTelegramIdentity } from './telegram-identity';
 import { MINIAPP_IMAGE_MAX_BYTES, MINIAPP_IMAGE_MAX_COUNT, MINIAPP_TEXT_MAX_LENGTH } from './miniapp';
+import { storePermanentMediaAsset } from './media-assets';
 
 const DOWNLOAD_TTL_SECONDS = 5 * 60;
 const AI_STATE_MAX_LENGTH = 100_000;
@@ -94,6 +95,8 @@ export async function saveMiniAppDraft(request: Request, env: Env) {
       const key=`drafts/${account.userId}/${crypto.randomUUID()}`;
       await env.IMAGES.put(key,image.stream(),{httpMetadata:{contentType:image.type}});
       await env.DB.prepare('INSERT INTO miniapp_draft_images(user_id,position,r2_key,file_name,content_type,size_bytes) VALUES(?,?,?,?,?,?)').bind(account.userId,i,key,image.name||null,image.type||null,image.size).run();
+      try { await storePermanentMediaAsset(env,account.userId,image,'draft'); }
+      catch (error) { console.error('Permanent media registration failed',error); }
     }
   }
   const saved = await draftForAccount(env, account);

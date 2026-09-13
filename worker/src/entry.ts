@@ -8,6 +8,7 @@ import { getMiniAppNewsGenerationStatus } from './services/ai-generation-status'
 import { generateMiniAppImage } from './services/miniapp-image-generation';
 import { searchMiniAppImage } from './services/miniapp-image-search';
 import { saveRuntimeDiagnostics } from './services/runtime-diagnostics';
+import { getMediaGallery, getMediaOriginal, getMediaThumbnail } from './services/media-gallery';
 import { bootstrapTelegramMiniAppSession, checkTelegramMiniAppSession, requireTelegramMiniAppSession } from './services/telegram-miniapp-auth';
 import { resolveOrCreateTelegramIdentity } from './services/telegram-identity';
 import { decryptManagedBotToken } from './services/managed-bot-crypto';
@@ -72,6 +73,9 @@ export default { async fetch(req: Request, env: Env, ctx: ExecutionContext) {
     if (req.method === 'POST' && url.pathname === '/api/miniapp/ai/image') return generateMiniAppImage(req, env);
     if (req.method === 'POST' && url.pathname === '/api/miniapp/ai/image/search') return handleImageSearch(req, env);
     if (req.method === 'POST' && url.pathname === '/api/miniapp/vk-link') return json(await prepareVkLink(req,env));
+    if(req.method==='GET'&&url.pathname==='/api/miniapp/media')return json(await getMediaGallery(req,env));
+    if(req.method==='GET'&&url.pathname.startsWith('/api/miniapp/media/original/'))return getMediaOriginal(req,env,decodeURIComponent(url.pathname.slice('/api/miniapp/media/original/'.length)));
+    if(req.method==='GET'&&url.pathname.startsWith('/api/miniapp/media/thumbnail/'))return getMediaThumbnail(req,env,decodeURIComponent(url.pathname.slice('/api/miniapp/media/thumbnail/'.length)));
     if (req.method === 'GET' && url.pathname === '/api/miniapp/draft') return json(await getMiniAppDraft(req,env));
     if (req.method === 'POST' && url.pathname === '/api/miniapp/draft') return json(await saveMiniAppDraft(req,env));
     if (req.method === 'POST' && url.pathname === '/api/miniapp/before-after/asset') return json(await saveBeforeAfterAsset(req,env),201);
