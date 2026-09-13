@@ -8,15 +8,17 @@ const source=name=>readFileSync(resolve(root,'miniapp',name),'utf8');
 beforeAll(()=>window.eval(source('composer-actions.js')));
 
 const response=(ok=true,result={ok:true})=>({ok,json:async()=>result});
-function setup({ok=true}={}){
+function setup({ok=true,telegramLayout='slideshow'}={}){
   const order=[],flush=vi.fn(async reason=>{order.push(`flush:${reason}`)}),fetchImpl=vi.fn(async url=>{order.push(`fetch:${url}`);return response(ok)}),onTelegramPublished=vi.fn(async()=>{order.push('telegram-success')});
-  const actions=window.CosmoComposerActionsFactory.create({getDraftStore:()=>({flush}),fetchImpl,onTelegramPublished});
+  const actions=window.CosmoComposerActionsFactory.create({getDraftStore:()=>({flush}),getTelegramLayout:()=>telegramLayout,fetchImpl,onTelegramPublished});
   return {actions,order,flush,fetchImpl,onTelegramPublished};
 }
 
 describe('explicit composer actions',()=>{
   it('flushes before Preview request',async()=>{const {actions,order}=setup();await actions.preview({method:'POST'});expect(order).toEqual(['flush:preview','fetch:/api/miniapp/preview'])});
   it('flushes before Telegram Publish request',async()=>{const {actions,order}=setup();await actions.publishTelegram({method:'POST'});expect(order.slice(0,2)).toEqual(['flush:telegram-publish','fetch:/api/miniapp/publish'])});
+  it('passes collage layout to Telegram requests',async()=>{const {actions}=setup({telegramLayout:'collage'});const body=new FormData();await actions.publishTelegram({method:'POST',body});expect(body.get('telegram_layout')).toBe('collage')});
+  it('defaults unknown Telegram layout to slideshow',async()=>{const {actions}=setup({telegramLayout:'unknown'});const body=new FormData();await actions.publishTelegram({method:'POST',body});expect(body.get('telegram_layout')).toBe('slideshow')});
   it('flushes before the VK operation',async()=>{const {actions,order}=setup();await actions.publishVk(async()=>order.push('vk-operation'));expect(order).toEqual(['flush:vk-publish','vk-operation'])});
   it('runs Telegram post-success behavior explicitly',async()=>{const {actions,onTelegramPublished,order}=setup();await actions.publishTelegram({method:'POST'});expect(onTelegramPublished).toHaveBeenCalledOnce();expect(order).toEqual(['flush:telegram-publish','fetch:/api/miniapp/publish','telegram-success'])});
   it('does not run success cleanup after failed Publish',async()=>{const {actions,onTelegramPublished}=setup({ok:false});await actions.publishTelegram({method:'POST'});expect(onTelegramPublished).not.toHaveBeenCalled()});
