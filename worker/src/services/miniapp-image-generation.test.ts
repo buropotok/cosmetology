@@ -8,7 +8,7 @@ describe('Mini App image generation provider contract', () => {
   it('uses the OpenAI image generation endpoint and server-side API key', () => {
     expect(source).toContain("const DEFAULT_IMAGE_MODEL = 'gpt-image-2'");
     expect(source).toContain("fetch('https://api.openai.com/v1/images/generations'");
-    expect(source).toContain('Bearer ${env.OPENAI_API_KEY}');
+    expect(source).toContain('env.OPENAI_API_KEY');
     expect(source).not.toContain('GEMINI_API_KEY');
     expect(source).not.toContain('generativelanguage.googleapis.com');
   });
@@ -19,5 +19,11 @@ describe('Mini App image generation provider contract', () => {
     expect(source).toContain('n: 1');
     expect(source).toContain("result?.data?.[0]?.b64_json");
     expect(source).toContain("'content-type': 'image/png'");
+  });
+
+  it('keeps local failure handling for provider errors and empty image results', () => {
+    expect(source).toContain("AI_IMAGE_GENERATION_FAILED");
+    expect(source).toContain("AI_IMAGE_EMPTY");
+    expect(source).toContain("AI_NOT_CONFIGURED");
   });
 });
