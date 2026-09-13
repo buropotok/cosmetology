@@ -1,13 +1,19 @@
 const DETAILS_EMOJI=['🌸','🍀','🌿'];
 const INDENT='    ';
 
+function decorateSpoiler(text){
+  const match=String(text).match(/^(\s*)(.*?)(\s*)$/s);
+  if(!match||!match[2])return text;
+  return `${match[1]}🙈 ${match[2]}${match[3]}`;
+}
+
 function runText(run){
   const text=String(run?.text??'');
   if(!text)return'';
   const marks=Array.isArray(run?.marks)?run.marks:[];
   const spoiler=marks.some(mark=>mark?.type==='spoiler');
   const link=marks.find(mark=>mark?.type==='link'&&typeof mark.href==='string'&&mark.href.trim());
-  let value=spoiler?`🙈 ${text}`:text;
+  let value=spoiler?decorateSpoiler(text):text;
   if(link){
     const href=link.href.trim();
     if(href&&href!==text.trim())value=`${value} — ${href}`;
