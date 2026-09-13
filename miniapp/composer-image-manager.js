@@ -152,7 +152,7 @@ function resetDraggedCard(state){
 }
 
 function dragTargetIndex(state){
- const slots=[...previews.children].filter(node=>node===state.placeholder||node.classList?.contains('composer-thumb'));
+ const slots=[...previews.children].filter(node=>node!==state.wrap&&(node===state.placeholder||node.classList?.contains('composer-thumb')));
  return slots.indexOf(state.placeholder);
 }
 
@@ -175,23 +175,18 @@ function moveDrag(event){
  const state=dragState;
  if(!state||event.pointerId!==state.pointerId)return;
  event.preventDefault();
- state.moved=true;
  state.wrap.style.left=`${event.clientX-state.grabX}px`;
  state.wrap.style.top=`${event.clientY-state.grabY}px`;
  const candidates=thumbNodes().filter(node=>node!==state.wrap);
  let placed=false;
  for(const candidate of candidates){
-  const side=insertionSide(event.clientX,candidate.getBoundingClientRect());
-  if(side==='before'){
+  if(insertionSide(event.clientX,candidate.getBoundingClientRect())==='before'){
    previews.insertBefore(state.placeholder,candidate);
    placed=true;
    break;
   }
  }
- if(!placed){
-  const last=candidates[candidates.length-1];
-  if(last)previews.insertBefore(state.placeholder,last.nextSibling===state.wrap?state.wrap:last.nextSibling);
- }
+ if(!placed)previews.append(state.placeholder);
 }
 
 function startDrag(event,wrap){
@@ -204,7 +199,7 @@ function startDrag(event,wrap){
  placeholder.className='composer-thumb-placeholder';
  placeholder.style.cssText=`display:block;flex:0 0 ${rect.width}px;width:${rect.width}px;height:${rect.height}px`;
  previews.insertBefore(placeholder,wrap);
- dragState={pointerId:event.pointerId,from,wrap,placeholder,grabX:event.clientX-rect.left,grabY:event.clientY-rect.top,moved:false};
+ dragState={pointerId:event.pointerId,from,wrap,placeholder,grabX:event.clientX-rect.left,grabY:event.clientY-rect.top};
  wrap.setPointerCapture?.(event.pointerId);
  wrap.classList.add('is-dragging');
  wrap.style.position='fixed';
