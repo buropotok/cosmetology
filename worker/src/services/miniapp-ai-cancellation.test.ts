@@ -23,13 +23,17 @@ describe('Mini App AI request cancellation', () => {
     mocks.resolveMiniAppAiUser.mockResolvedValue({ userId: 'user-1' });
     mocks.setAiGenerationStatus.mockResolvedValue(undefined);
     const controller = new AbortController();
-    let forwardedSignal: AbortSignal | null = null;
+    let fetchSignalWasForwarded = false;
+    let fetchSignalWasAborted = false;
     const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
-      forwardedSignal = init?.signal instanceof AbortSignal ? init.signal : null;
-      expect(forwardedSignal).not.toBeNull();
-      expect(forwardedSignal?.aborted).toBe(false);
+      const signal = init?.signal;
+      expect(signal).toBeDefined();
+      if (!signal) throw new Error('Expected request signal');
+      fetchSignalWasForwarded = true;
+      expect(signal.aborted).toBe(false);
       controller.abort();
-      expect(forwardedSignal?.aborted).toBe(true);
+      fetchSignalWasAborted = signal.aborted;
+      expect(fetchSignalWasAborted).toBe(true);
       throw new DOMException('Aborted', 'AbortError');
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -41,18 +45,21 @@ describe('Mini App AI request cancellation', () => {
       signal: controller.signal,
     });
 
-    await expect(generateMiniAppAiReply(request, makeEnv())).resolves.toEqual({ cancelled: true });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(forwardedSignal).not.toBeNull();
-    expect(forwardedSignal?.aborted).toBe(true);
-    expect(mocks.setAiGenerationStatus).toHaveBeenCalledWith(
-      expect.anything(),
-      'user-1',
-      'general',
-      'failed',
-      'AI_GENERATION_CANCELLED',
-    );
-    vi.unstubAllGlobals();
+    try {
+      await expect(generateMiniAppAiReply(request, makeEnv())).resolves.toEqual({ cancelled: true });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(fetchSignalWasForwarded).toBe(true);
+      expect(fetchSignalWasAborted).toBe(true);
+      expect(mocks.setAiGenerationStatus).toHaveBeenCalledWith(
+        expect.anything(),
+        'user-1',
+        'general',
+        'failed',
+        'AI_GENERATION_CANCELLED',
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('enables Cloudflare incoming request cancellation', () => {
