@@ -13,8 +13,8 @@ const STYLE_TEXT=`
 .composer-editor.is-keyboard-layout .composer-editor-controls{order:2;flex:0 0 auto;margin:6px 0 0;padding:2px 0 0;background:#fff}
 .composer-editor.is-keyboard-layout .composer-editor-footer{display:none!important}
 .composer-editor.is-keyboard-layout .composer-tool-menu .composer-tool-panel{top:auto!important;bottom:calc(100% + 6px)!important}
-.composer-editor-fullscreen-hint{position:absolute;left:50%;top:max(10px,env(safe-area-inset-top,0px));z-index:3;max-width:calc(100% - 32px);box-sizing:border-box;padding:8px 12px;border-radius:999px;background:rgba(28,28,30,.88);color:#fff;font-size:13px;line-height:1.25;text-align:center;transform:translateX(-50%);pointer-events:none}
-@media(max-width:360px){.composer-editor-controls{gap:6px}.composer-editor-controls .composer-clear{padding:6px 8px;font-size:11px}.composer-editor-controls .composer-toolbar{max-width:calc(100% - 76px)}}
+.composer-editor-fullscreen-hint{position:absolute;left:24px;right:24px;top:max(10px,env(safe-area-inset-top,0px));z-index:3;box-sizing:border-box;padding:14px 24px;border-radius:22px;background:rgba(28,28,30,.88);color:#fff;font-size:26px;line-height:1.2;text-align:center;pointer-events:none}
+@media(max-width:360px){.composer-editor-controls{gap:6px}.composer-editor-controls .composer-clear{padding:6px 8px;font-size:11px}.composer-editor-controls .composer-toolbar{max-width:calc(100% - 76px)}.composer-editor-fullscreen-hint{left:18px;right:18px;padding-left:20px;padding-right:20px}}
 `;
 
 function acquireStyles(doc){
