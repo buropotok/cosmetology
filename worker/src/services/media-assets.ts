@@ -21,11 +21,17 @@ export async function storePermanentMediaAsset(env:Env,userId:string,image:File,
   if(existing)return {asset:existing,created:false};
   const id=crypto.randomUUID(),key=`draft_storage/${userId}/${id}`;
   await env.IMAGES.put(key,bytes,{httpMetadata:{contentType:image.type}});
+  let inserted=false;
   try{
-    await env.DB.prepare('INSERT OR IGNORE INTO media_assets(id,user_id,r2_key,source_type,file_name,content_type,size_bytes,content_hash,thumbnail_id) VALUES(?,?,?,?,?,?,?,?,NULL)').bind(id,userId,key,sourceType,image.name||null,image.type||null,image.size,hash).run();
-    const asset=await env.DB.prepare(SELECT_BY_HASH).bind(userId,hash).first<MediaAsset>();
-    if(!asset)throw new AppError('MEDIA_STORE_FAILED','Не удалось сохранить изображение',500);
-    if(asset.id!==id){await env.IMAGES.delete(key);return {asset,created:false};}
+    const result=await env.DB.prepare('INSERT OR IGNORE INTO media_assets(id,user_id,r2_key,source_type,file_name,content_type,size_bytes,content_hash,thumbnail_id) VALUES(?,?,?,?,?,?,?,?,NULL)').bind(id,userId,key,sourceType,image.name||null,image.type||null,image.size,hash).run();
+    inserted=Number(result.meta?.changes||0)>0;
+    if(!inserted){
+      const winner=await env.DB.prepare(SELECT_BY_HASH).bind(userId,hash).first<MediaAsset>();
+      await env.IMAGES.delete(key);
+      if(!winner)throw new AppError('MEDIA_STORE_FAILED','Не удалось сохранить изображение',500);
+      return {asset:winner,created:false};
+    }
+    const asset:MediaAsset={id,key,thumbnailId:null,fileName:image.name||null,contentType:image.type||null,size:image.size,sourceType,contentHash:hash,createdAt:new Date().toISOString()};
     const thumbnailId=crypto.randomUUID();
     try{
       await createMediaThumbnail(env,new File([bytes],image.name,{type:image.type}),userId,thumbnailId);
@@ -36,7 +42,10 @@ export async function storePermanentMediaAsset(env:Env,userId:string,image:File,
       console.error('media thumbnail generation failed',{assetId:id,error:error instanceof Error?error.message:String(error)});
     }
     return {asset,created:true};
-  }catch(error){await env.IMAGES.delete(key);throw error;}
+  }catch(error){
+    if(!inserted)await env.IMAGES.delete(key);
+    throw error;
+  }
 }
 
 export async function listPermanentMediaAssets(env:Env,userId:string,limit=100){
