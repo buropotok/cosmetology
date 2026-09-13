@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {insertionSide,moveItem,translatedActiveIndex} from './composer-image-reorder.js';
+import {JSDOM} from 'jsdom';
+import {insertionSide,moveChildInPlace,moveItem,moveItemInPlace,translatedActiveIndex} from './composer-image-reorder.js';
 
 test('moveItem reorders without mutating the source array',()=>{
  const source=['a','b','c','d'];
@@ -34,4 +35,18 @@ test('pointer crossing the card midpoint selects before or after placement',()=>
 test('insertionSide rejects unusable geometry',()=>{
  assert.equal(insertionSide(Number.NaN,{left:0,width:62}),null);
  assert.equal(insertionSide(10,null),null);
+});
+
+test('reorder consumers retain preview URL and photo-stage node identities',()=>{
+ const urls=[{id:'a'},{id:'b'},{id:'c'}];
+ const originalUrls=urls.slice();
+ assert.equal(moveItemInPlace(urls,0,2),true);
+ assert.deepEqual(urls,[originalUrls[1],originalUrls[2],originalUrls[0]]);
+
+ const document=new JSDOM('<div><img id="a"><img id="b"><img id="c"></div>').window.document;
+ const track=document.querySelector('div');
+ const originalNodes=Array.from(track.children);
+ assert.equal(moveChildInPlace(track,0,2),true);
+ assert.deepEqual(Array.from(track.children),[originalNodes[1],originalNodes[2],originalNodes[0]]);
+ assert.equal(track.children[2],originalNodes[0]);
 });
