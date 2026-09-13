@@ -1,5 +1,5 @@
 import { AppError, type Env } from '../types';
-import { publishTelegramWithToken, sendTelegramReturnToAppWithToken } from './telegram';
+import { publishTelegramWithToken, sendTelegramReturnToAppWithToken, type TelegramPhotoLayout } from './telegram';
 import { validateTelegramMiniAppInitData } from './telegram-miniapp-auth';
 import { resolveOrCreateTelegramIdentity } from './telegram-identity';
 import { getManagedBotStateForUser } from './managed-bot-onboarding';
@@ -7,7 +7,7 @@ import { decryptManagedBotToken } from './managed-bot-crypto';
 
 export const MINIAPP_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
 export const MINIAPP_IMAGE_MAX_COUNT = 10;
-export const MINIAPP_TEXT_MAX_LENGTH = 4096;
+export const MINIAPP_TEXT_MAX_LENGTH = 32768;
 function initDataFrom(request: Request) { return request.headers.get('authorization')?.match(/^tma\s+(.+)$/i)?.[1] ?? ''; }
 async function miniAppAccount(request: Request, env: Env) { const validated = await validateTelegramMiniAppInitData(initDataFrom(request), env.TELEGRAM_BOT_TOKEN); const telegramUserId = String(validated.user.id); const account = await resolveOrCreateTelegramIdentity(env, telegramUserId); return { validated, telegramUserId, account }; }
 async function getVkGroup(env: Env, userId: string) { return env.DB.prepare('SELECT group_id AS groupId, group_url AS groupUrl, screen_name AS screenName, group_name AS groupName FROM user_vk_group WHERE user_id=?').bind(userId).first<{ groupId: number; groupUrl: string; screenName: string | null; groupName: string | null }>(); }
@@ -27,6 +27,7 @@ async function readMiniAppPublication(request: Request) {
   if (!(request.headers.get('content-type') ?? '').toLowerCase().startsWith('multipart/form-data')) throw new AppError('INVALID_CONTENT_TYPE', 'Ожидается multipart/form-data', 415);
   const form = await request.formData().catch(() => { throw new AppError('INVALID_FORM_DATA', 'Не удалось прочитать форму публикации', 400); });
   const rawText = form.get('text'); const text = typeof rawText === 'string' ? rawText.trim() : '';
+  const rawLayout=form.get('telegram_layout'); const telegramLayout:TelegramPhotoLayout=rawLayout==='collage'?'collage':'slideshow';
   const rawImages = form.getAll('images'); const legacy = form.get('image'); if (legacy !== null) rawImages.push(legacy);
   if (rawImages.some(item => !(item instanceof File))) throw new AppError('INVALID_IMAGE', 'Некорректное изображение', 400);
   const images = (rawImages as File[]).filter(file => file.size > 0);
@@ -34,18 +35,18 @@ async function readMiniAppPublication(request: Request) {
   if (text.length > MINIAPP_TEXT_MAX_LENGTH) throw new AppError('INVALID_TEXT', `Текст должен быть короче ${MINIAPP_TEXT_MAX_LENGTH + 1} символов`, 400);
   if (!text && !images.length) throw new AppError('EMPTY_PUBLICATION', 'Добавьте текст или изображение', 400);
   for (const image of images) { if (!image.type.toLowerCase().startsWith('image/')) throw new AppError('INVALID_IMAGE_TYPE', 'Можно выбрать только изображения', 400); if (image.size > MINIAPP_IMAGE_MAX_BYTES) throw new AppError('IMAGE_TOO_LARGE', 'Каждое изображение должно быть не больше 10 МБ', 400); }
-  return { text, images };
+  return { text, images, telegramLayout };
 }
 export async function publishFromMiniApp(request: Request, env: Env) {
   const { account } = await miniAppAccount(request, env); const target = await getManagedPublicationTarget(env, account.userId); if (!target) throw new AppError('MANAGED_TELEGRAM_NOT_CONNECTED', 'Настройте Личный чат и выберите группу для публикаций', 409);
-  const { text, images } = await readMiniAppPublication(request);
+  const { text, images, telegramLayout } = await readMiniAppPublication(request);
   const token = await decryptManagedBotToken(target.telegram_bot_id, { ciphertext: target.token_ciphertext, iv: target.token_iv, keyVersion: target.token_key_version }, env);
-  return { ok: true, publication: await publishTelegramWithToken(token, text, images, target.telegram_chat_id) };
+  return { ok: true, publication: await publishTelegramWithToken(token, text, images, target.telegram_chat_id,telegramLayout) };
 }
 export async function previewFromMiniApp(request: Request, env: Env) {
   const { account } = await miniAppAccount(request, env); const target = await getManagedPreviewTarget(env, account.userId); if (!target) throw new AppError('MANAGED_TELEGRAM_PREVIEW_NOT_READY', 'Откройте Личный чат и нажмите «Запустить / Start».', 409);
-  const { text, images } = await readMiniAppPublication(request);
+  const { text, images, telegramLayout } = await readMiniAppPublication(request);
   const token = await decryptManagedBotToken(target.telegram_bot_id, { ciphertext: target.token_ciphertext, iv: target.token_iv, keyVersion: target.token_key_version }, env);
-  try { const publication = await publishTelegramWithToken(token, text, images, target.telegram_chat_id); await sendTelegramReturnToAppWithToken(token,target.telegram_chat_id,env.MINIAPP_URL); return { ok: true, publication }; }
+  try { const publication = await publishTelegramWithToken(token, text, images, target.telegram_chat_id,telegramLayout); await sendTelegramReturnToAppWithToken(token,target.telegram_chat_id,env.MINIAPP_URL); return { ok: true, publication }; }
   catch (error) { if (error instanceof AppError) throw error; throw new AppError('TELEGRAM_PREVIEW_FAILED', 'Не удалось отправить предпросмотр. Откройте Личный чат и нажмите «Запустить / Start».', 409); }
 }
