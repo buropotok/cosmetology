@@ -24,7 +24,11 @@ describe('structured Telegram publishing',()=>{
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(fetch.mock.calls[0][0]).toBe('https://api.telegram.org/bottoken/sendRichMessage');
     const body=fetch.mock.calls[0][1].body as FormData;
-    expect(body.get('photo0')).toBe(image);
+    const uploaded=body.get('photo0') as File;
+    expect(uploaded).toBeInstanceOf(File);
+    expect(uploaded.name).toBe(image.name);
+    expect(uploaded.type).toBe(image.type);
+    expect(uploaded.size).toBe(image.size);
     expect(JSON.parse(body.get('rich_message') as string)).toEqual({
       html:`<img src="tg://photo?id=photo0"/>${rich().richMessageHtml}`,
       media:[{id:'photo0',media:{type:'photo',media:'attach://photo0'}}],
