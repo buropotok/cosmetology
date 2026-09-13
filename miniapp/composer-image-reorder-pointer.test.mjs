@@ -5,9 +5,9 @@ import {moveItem} from './composer-image-order.js';
 
 const source=await readFile(new URL('./composer-image-manager.js',import.meta.url),'utf8');
 
-test('cancelled drag has a distinct non-committing path',()=>{
-  assert.match(source,/onUp=endEvent=>\{cleanup\(\);endDrag\(endEvent,true\)\}/);
-  assert.match(source,/onCancel=endEvent=>\{cleanup\(\);endDrag\(endEvent,false\)\}/);
+test('cancelled drag has a distinct non-committing path and foreign pointer endings are ignored before cleanup',()=>{
+  assert.match(source,/onUp=endEvent=>\{if\(!dragState\|\|endEvent\.pointerId!==dragState\.pointerId\)return;cleanup\(\);endDrag\(endEvent,true\)\}/);
+  assert.match(source,/onCancel=endEvent=>\{if\(!dragState\|\|endEvent\.pointerId!==dragState\.pointerId\)return;cleanup\(\);endDrag\(endEvent,false\)\}/);
   const files=['first','second','third'];
   assert.deepEqual(files,['first','second','third']);
   assert.deepEqual(moveItem(files,0,2),['second','third','first']);
