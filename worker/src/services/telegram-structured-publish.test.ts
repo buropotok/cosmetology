@@ -5,7 +5,7 @@ import type {Env} from '../types';
 const env={TELEGRAM_BOT_TOKEN:'token'} as Env;
 afterEach(()=>{vi.unstubAllGlobals();vi.restoreAllMocks()});
 function ok(id=11){return new Response(JSON.stringify({ok:true,result:{message_id:id}}),{status:200})}
-function rich(){return {plainText:'A',html:'A',blocks:[],richMessageHtml:'<details><summary>X</summary><p>A</p></details>'}}
+function rich(){return {plainText:'A',html:'A',blocks:[],richMessageHtml:'<details><summary>X</summary><p>A</p></details>',richMessageBlocks:[{type:'details',summary:'X',blocks:[{type:'paragraph',text:'A'}]}]}}
 const telegramFetch=(reply:()=>Response)=>vi.fn(async(_url:string,_init:RequestInit)=>reply());
 
 describe('structured Telegram publishing',()=>{
@@ -18,7 +18,7 @@ describe('structured Telegram publishing',()=>{
     expect(result.delivery_mode).toBe('rich_message');
   });
 
-  it('embeds one uploaded photo in the same Rich Message',async()=>{
+  it('embeds one uploaded photo as a direct block in the same Rich Message',async()=>{
     const fetch=telegramFetch(()=>ok(20));vi.stubGlobal('fetch',fetch);
     const image=new File(['photo'],'post.jpg',{type:'image/jpeg'});
     const result=await publishTelegram(env,rich(),image,'@channel');
@@ -30,31 +30,38 @@ describe('structured Telegram publishing',()=>{
     expect(uploaded.name).toBe(image.name);
     expect(uploaded.type).toBe(image.type);
     expect(uploaded.size).toBe(image.size);
-    expect(JSON.parse(body.get('rich_message') as string)).toEqual({
-      html:`<img src="tg://photo?id=photo0"/>${rich().richMessageHtml}`,
-      media:[{id:'photo0',media:{type:'photo',media:'attach://photo0'}}],
-    });
+    expect(JSON.parse(body.get('rich_message') as string)).toEqual({blocks:[
+      {type:'photo',photo:{type:'photo',media:'attach://photo0'}},
+      ...rich().richMessageBlocks,
+    ]});
     expect(result.delivery_mode).toBe('rich_message_photo');
   });
 
-  it('embeds multiple photos as a slideshow by default',async()=>{
+  it('embeds multiple photos as a direct slideshow block by default',async()=>{
     const fetch=telegramFetch(()=>ok(30));vi.stubGlobal('fetch',fetch);
     const images=[new File(['a'],'a.jpg',{type:'image/jpeg'}),new File(['b'],'b.jpg',{type:'image/jpeg'})];
     const result=await publishTelegram(env,rich(),images,'@channel');
     const payload=JSON.parse(((fetch.mock.calls[0][1].body as FormData).get('rich_message')) as string);
-    expect(payload.html).toContain('<tg-slideshow>');
-    expect(payload.html).toContain('tg://photo?id=photo0');
-    expect(payload.html).toContain('tg://photo?id=photo1');
+    expect(payload).toEqual({blocks:[
+      {type:'slideshow',blocks:[
+        {type:'photo',photo:{type:'photo',media:'attach://photo0'}},
+        {type:'photo',photo:{type:'photo',media:'attach://photo1'}},
+      ]},
+      ...rich().richMessageBlocks,
+    ]});
     expect(result.delivery_mode).toBe('rich_message_slideshow');
   });
 
-  it('embeds multiple photos as a collage when selected',async()=>{
+  it('embeds multiple photos as a direct collage block when selected',async()=>{
     const fetch=telegramFetch(()=>ok(40));vi.stubGlobal('fetch',fetch);
     const images=[new File(['a'],'a.jpg',{type:'image/jpeg'}),new File(['b'],'b.jpg',{type:'image/jpeg'})];
     const result=await publishTelegram(env,rich(),images,'@channel','collage');
     const payload=JSON.parse(((fetch.mock.calls[0][1].body as FormData).get('rich_message')) as string);
-    expect(payload.html).toContain('<tg-collage>');
-    expect(payload.html).not.toContain('<tg-slideshow>');
+    expect(payload.blocks[0]).toEqual({type:'collage',blocks:[
+      {type:'photo',photo:{type:'photo',media:'attach://photo0'}},
+      {type:'photo',photo:{type:'photo',media:'attach://photo1'}},
+    ]});
+    expect(payload.html).toBeUndefined();
     expect(result.delivery_mode).toBe('rich_message_collage');
   });
 
