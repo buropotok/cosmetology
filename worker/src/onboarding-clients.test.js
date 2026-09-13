@@ -36,8 +36,8 @@ describe('OnboardingController',()=>{
   });
 
   it('keeps external return state until resume refreshes the account',async()=>{
-    const api={accountState:null,getAccountState:vi.fn(async()=>({vkGroup:{connected:true}}))};
-    const vkSelection={open:vi.fn(async()=>({vkUrl:'https://vk.com/app'}))};const controller=window.CosmoOnboardingController.create({api,telegram:{},vkSelection});
+    const api={accountState:null,getAccountState:vi.fn(async()=>({vkGroup:{connected:true}})),createVkHandoff:vi.fn(async()=>({vkUrl:'https://vk.com/app'}))};
+    const telegram={notifySelection:vi.fn(),openExternalLink:vi.fn()};const controller=window.CosmoOnboardingController.create({api,telegram});
     await controller.connectVk();expect(controller.getState().status).toBe('waiting_external_return');await controller.resume();expect(controller.getState().status).toBe('ready');expect(api.getAccountState).toHaveBeenCalledOnce();
   });
 
