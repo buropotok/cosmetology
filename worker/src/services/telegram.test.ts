@@ -5,17 +5,31 @@ import type {Env} from '../types';
 const env={TELEGRAM_BOT_TOKEN:'token'} as Env;
 afterEach(()=>{vi.unstubAllGlobals();vi.restoreAllMocks()});
 describe('Telegram rich-text publishing',()=>{
-  it('sends renderer HTML with parse_mode and a real expandable blockquote',async()=>{
+  it('sends renderer HTML inside one Rich Message',async()=>{
     const fetch=vi.fn(async(_url:string,init:RequestInit)=>new Response(JSON.stringify({ok:true,result:{message_id:7}}),{status:200}));vi.stubGlobal('fetch',fetch);
-    await publishTelegram(env,{plainText:'Подробнее',html:'<blockquote expandable><tg-spoiler>Подробнее</tg-spoiler></blockquote>',blocks:[]},undefined,'@channel');
+    const html='<blockquote expandable><tg-spoiler>Подробнее</tg-spoiler></blockquote>';
+    const result=await publishTelegram(env,{plainText:'Подробнее',html,blocks:[]},undefined,'@channel');
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch.mock.calls[0][0]).toBe('https://api.telegram.org/bottoken/sendRichMessage');
     const body=fetch.mock.calls[0][1].body as FormData;
-    expect(body.get('parse_mode')).toBe('HTML');
-    expect(body.get('text')).toBe('<blockquote expandable><tg-spoiler>Подробнее</tg-spoiler></blockquote>');
+    expect(JSON.parse(body.get('rich_message') as string)).toEqual({html});
+    expect(body.get('parse_mode')).toBeNull();
+    expect(body.get('text')).toBeNull();
+    expect(result.delivery_mode).toBe('rich_message');
   });
-  it('uses the shared plan to split an over-limit photo caption',async()=>{
+  it('keeps text over the former caption limit inside the same Rich Message as its photo',async()=>{
     const fetch=vi.fn(async(_url:string,init:RequestInit)=>new Response(JSON.stringify({ok:true,result:{message_id:8}}),{status:200}));vi.stubGlobal('fetch',fetch);
-    const result=await publishTelegram(env,{plainText:'x'.repeat(1025),html:'x'.repeat(1025),blocks:[]},new File(['photo'],'post.jpg',{type:'image/jpeg'}),'@channel');
-    expect(fetch).toHaveBeenCalledTimes(2);expect((fetch.mock.calls[0][1] as RequestInit).body instanceof FormData).toBe(true);expect(((fetch.mock.calls[0][1] as RequestInit).body as FormData).get('caption')).toBeNull();expect(((fetch.mock.calls[1][1] as RequestInit).body as FormData).get('text')).toBe('x'.repeat(1025));expect(result.delivery_mode).toBe('photo_then_text');
+    const text='x'.repeat(1025);
+    const result=await publishTelegram(env,{plainText:text,html:text,blocks:[]},new File(['photo'],'post.jpg',{type:'image/jpeg'}),'@channel');
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch.mock.calls[0][0]).toBe('https://api.telegram.org/bottoken/sendRichMessage');
+    const body=fetch.mock.calls[0][1].body as FormData;
+    const payload=JSON.parse(body.get('rich_message') as string);
+    expect(payload.html).toBe(`<img src="tg://photo?id=photo0"/>${text}`);
+    expect(payload.media).toEqual([{id:'photo0',media:{type:'photo',media:'attach://photo0'}}]);
+    expect(body.get('caption')).toBeNull();
+    expect(body.get('text')).toBeNull();
+    expect(result.delivery_mode).toBe('rich_message_photo');
   });
   it('sends document buttons as an inline keyboard',async()=>{const fetch=vi.fn(async(_url:string,init:RequestInit)=>new Response(JSON.stringify({ok:true,result:{message_id:9}}),{status:200}));vi.stubGlobal('fetch',fetch);await publishTelegram(env,{plainText:'Текст',html:'Текст',blocks:[],buttons:[{text:'Открыть',url:'https://example.com/'}]},undefined,'@channel');expect(JSON.parse((fetch.mock.calls[0][1].body as FormData).get('reply_markup') as string)).toEqual({inline_keyboard:[[{text:'Открыть',url:'https://example.com/'}]]})});
 });
