@@ -1,4 +1,4 @@
-import {insertionSide,moveItem,translatedActiveIndex} from './composer-image-reorder.js';
+import {insertionSide,moveItem} from './composer-image-reorder.js';
 
 (()=>{
 const input=document.querySelector('#image'),previews=document.querySelector('#previews'),removeAll=document.querySelector('#remove-image'),status=document.querySelector('#status');
@@ -30,11 +30,11 @@ function renderTelegramLayout(){
 function setTelegramLayout(value){telegramLayout=value==='collage'?'collage':'slideshow';renderTelegramLayout()}
 telegramLayoutButton.addEventListener('click',()=>setTelegramLayout(telegramLayout==='slideshow'?'collage':'slideshow'));
 
-function syncInput(){
+function syncInput(nextFiles=files){
  if(typeof DataTransfer==='undefined')return false;
  try{
   const dt=new DataTransfer();
-  files.forEach(file=>dt.items.add(file));
+  nextFiles.forEach(file=>dt.items.add(file));
   input.files=dt.files;
   return true;
  }catch{return false}
@@ -102,17 +102,12 @@ function replaceAt(index,file){
 function moveFile(from,to){
  const next=moveItem(files,from,to);
  if(!next)return false;
- const previous=files;
- const state=window.CosmoComposerState;
- const active=state?.getSnapshot?.().activePhotoIndex;
- const nextActive=Number.isInteger(active)?translatedActiveIndex(active,from,to):null;
+ if(!syncInput(next))return false;
  files=next;
- if(nextActive!==null)state?.setActivePhotoIndex?.(nextActive);
- if(!notifyChange()){
-  files=previous;
-  if(Number.isInteger(active))state?.setActivePhotoIndex?.(active);
-  return false;
- }
+ updateTelegramLayoutVisibility();
+ void updateVkAspectWarning();
+ // Contract: emitted once after files/input commit; consumers reorder existing UI by identity.
+ window.dispatchEvent(new CustomEvent('cosmo-composer-images-reordered',{detail:Object.freeze({from,to})}));
  return true;
 }
 
@@ -174,6 +169,7 @@ function finishDrag(event,commit){
  }
  resetDraggedCard(state);
  try{state.wrap.releasePointerCapture?.(event.pointerId)}catch{}
+ if(commit&&!state.moved&&to===state.from){state.wrap.querySelector('img')?.click();return}
  if(commit&&to>=0&&to!==state.from&&!moveFile(state.from,to)){
   placeThumbAtIndex(state.wrap,state.from);
   if(status){status.textContent='Не удалось изменить порядок фотографий на этом устройстве.';status.className='error'}
@@ -184,6 +180,7 @@ function moveDrag(event){
  const state=dragState;
  if(!state||event.pointerId!==state.pointerId)return;
  event.preventDefault();
+ if(Math.abs(event.clientX-state.startX)>4||Math.abs(event.clientY-state.startY)>4)state.moved=true;
  state.wrap.style.left=`${event.clientX-state.grabX}px`;
  state.wrap.style.top=`${event.clientY-state.grabY}px`;
  const candidates=thumbNodes().filter(node=>node!==state.wrap);
@@ -208,7 +205,7 @@ function startDrag(event,wrap){
  placeholder.className='composer-thumb-placeholder';
  placeholder.style.cssText=`display:block;flex:0 0 ${rect.width}px;width:${rect.width}px;height:${rect.height}px`;
  previews.insertBefore(placeholder,wrap);
- dragState={pointerId:event.pointerId,from,wrap,placeholder,grabX:event.clientX-rect.left,grabY:event.clientY-rect.top};
+ dragState={pointerId:event.pointerId,from,wrap,placeholder,grabX:event.clientX-rect.left,grabY:event.clientY-rect.top,startX:event.clientX,startY:event.clientY,moved:false};
  wrap.setPointerCapture?.(event.pointerId);
  wrap.classList.add('is-dragging');
  wrap.style.position='fixed';
@@ -217,7 +214,7 @@ function startDrag(event,wrap){
  wrap.style.width=`${rect.width}px`;
  wrap.style.height=`${rect.height}px`;
  wrap.style.zIndex='10000';
- wrap.style.transform='scale(1.08)';
+ wrap.style.transform='scale(1.14)';
  wrap.style.boxShadow='0 14px 28px rgba(0,0,0,.32)';
  wrap.style.transition='none';
  wrap.style.pointerEvents='none';
@@ -230,6 +227,7 @@ function decorate(){
   const wrap=document.createElement('span');
   wrap.className='composer-thumb';
   wrap.style.cssText='position:relative;display:block;flex:0 0 62px;width:62px;height:62px;overflow:visible;cursor:pointer;touch-action:none;user-select:none;-webkit-user-select:none;transition:transform .16s ease';
+  wrap.style.setProperty('-webkit-touch-callout','none');
   img.parentNode.insertBefore(wrap,img);
   wrap.append(img);
   wrap.addEventListener('pointerdown',event=>startDrag(event,wrap));
@@ -237,12 +235,14 @@ function decorate(){
   wrap.addEventListener('pointerup',event=>finishDrag(event,true));
   wrap.addEventListener('pointercancel',event=>finishDrag(event,false));
   wrap.addEventListener('lostpointercapture',event=>finishDrag(event,false));
+  wrap.addEventListener('contextmenu',event=>event.preventDefault());
   const del=document.createElement('button');
   del.type='button';
   del.className='composer-image-delete';
   del.setAttribute('aria-label','Удалить изображение');
   del.textContent='×';
   del.style.cssText='position:absolute;right:-5px;top:-5px;width:24px;height:24px;border:0;border-radius:50%;background:#e5484d;color:#fff;font-size:20px;line-height:22px;padding:0;z-index:3;box-shadow:0 1px 4px rgba(0,0,0,.35)';
+  del.addEventListener('pointerdown',event=>event.stopPropagation());
   del.addEventListener('click',event=>{
    event.preventDefault();
    event.stopPropagation();
