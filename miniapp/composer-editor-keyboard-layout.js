@@ -12,7 +12,7 @@ const STYLE_TEXT=`
 .composer-editor.is-keyboard-layout .composer-editor-controls{order:2;flex:0 0 auto;margin:6px 0 0;padding:2px 0 0;background:#fff}
 .composer-editor.is-keyboard-layout .composer-editor-footer{display:none!important}
 .composer-editor.is-keyboard-layout .composer-tool-menu .composer-tool-panel{top:auto!important;bottom:calc(100% + 6px)!important}
-.composer-editor-fullscreen-hint{position:absolute;left:50%;top:10px;z-index:3;max-width:calc(100% - 32px);padding:8px 12px;border-radius:999px;background:#222;color:#fff;font-size:13px;text-align:center;transform:translateX(-50%);pointer-events:none}
+.composer-editor-fullscreen-hint{position:absolute;left:50%;top:max(10px,env(safe-area-inset-top,0px));z-index:3;max-width:calc(100% - 32px);padding:8px 12px;border-radius:999px;background:#222;color:#fff;font-size:13px;text-align:center;transform:translateX(-50%);pointer-events:none}
 @media(max-width:360px){.composer-editor-controls{gap:6px}.composer-editor-controls .composer-clear{padding:6px 8px;font-size:11px}.composer-editor-controls .composer-toolbar{max-width:calc(100% - 76px)}}
 `;
 function acquireStyles(doc){if(!styleNode||!styleNode.isConnected){styleNode=doc.createElement('style');styleNode.dataset.cosmoEditorKeyboardLayout='';styleNode.textContent=STYLE_TEXT;doc.head.append(styleNode)}styleUsers+=1;return()=>{styleUsers=Math.max(0,styleUsers-1);if(styleUsers===0&&styleNode){styleNode.remove();styleNode=null}}}
@@ -62,7 +62,7 @@ export function initComposerEditorKeyboardLayout({
   const mobile=isMobileEditorEnvironment({platform,coarsePointer});
   let active=false,pullStart=null,hintTimer=null;
   const hideHint=()=>{if(hintTimer!==null)win.clearTimeout(hintTimer);hintTimer=null;root.querySelector('.composer-editor-fullscreen-hint')?.remove()};
-  const showHint=()=>{hideHint();const hint=doc.createElement('div');hint.className='composer-editor-fullscreen-hint';hint.textContent='Смахните вверх, чтобы выйти из режима редактирования текста';root.append(hint);hintTimer=win.setTimeout(hideHint,2800)};
+  const showHint=()=>{hideHint();const hint=doc.createElement('div');hint.className='composer-editor-fullscreen-hint';hint.setAttribute('role','status');hint.textContent='Смахните вверх, чтобы выйти из режима редактирования текста';root.append(hint);hintTimer=win.setTimeout(hideHint,2800)};
   const updateViewport=()=>{
     if(!active)return;
     const frame=computeVisualViewportInsets({innerHeight:win.innerHeight,viewport});
