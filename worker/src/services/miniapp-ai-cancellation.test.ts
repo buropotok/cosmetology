@@ -19,13 +19,17 @@ function makeEnv(): Env {
 }
 
 describe('Mini App AI request cancellation', () => {
-  it('forwards the request signal to OpenAI and records cancellation', async () => {
+  it('forwards an abortable request signal to OpenAI and records cancellation', async () => {
     mocks.resolveMiniAppAiUser.mockResolvedValue({ userId: 'user-1' });
     mocks.setAiGenerationStatus.mockResolvedValue(undefined);
     const controller = new AbortController();
+    let forwardedSignal: AbortSignal | null = null;
     const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
-      expect(init?.signal).toBe(controller.signal);
+      forwardedSignal = init?.signal instanceof AbortSignal ? init.signal : null;
+      expect(forwardedSignal).not.toBeNull();
+      expect(forwardedSignal?.aborted).toBe(false);
       controller.abort();
+      expect(forwardedSignal?.aborted).toBe(true);
       throw new DOMException('Aborted', 'AbortError');
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -39,6 +43,8 @@ describe('Mini App AI request cancellation', () => {
 
     await expect(generateMiniAppAiReply(request, makeEnv())).resolves.toEqual({ cancelled: true });
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(forwardedSignal).not.toBeNull();
+    expect(forwardedSignal?.aborted).toBe(true);
     expect(mocks.setAiGenerationStatus).toHaveBeenCalledWith(
       expect.anything(),
       'user-1',
