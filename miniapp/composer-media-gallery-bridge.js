@@ -5,7 +5,7 @@ export function initComposerMediaGalleryBridge(){
  const actions=composer?.querySelector('.composer-image-actions');
  const addDevice=actions?.querySelector('#composer-add-photo');
  if(!composer||!actions||!addDevice||actions.querySelector('#composer-media-gallery'))return()=>{};
- addDevice.textContent='＋ Добавить фото с устройства';
+ addDevice.textContent='Добавить фото с устройства';
  const gallery=document.createElement('button');
  gallery.type='button';
  gallery.id='composer-media-gallery';
