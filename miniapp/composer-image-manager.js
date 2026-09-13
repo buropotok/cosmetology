@@ -105,12 +105,14 @@ function moveFile(from,to){
  const previous=files;
  const state=window.CosmoComposerState;
  const active=state?.getSnapshot?.().activePhotoIndex;
+ const nextActive=Number.isInteger(active)?translatedActiveIndex(active,from,to):null;
  files=next;
+ if(nextActive!==null)state?.setActivePhotoIndex?.(nextActive);
  if(!notifyChange()){
   files=previous;
+  if(Number.isInteger(active))state?.setActivePhotoIndex?.(active);
   return false;
  }
- if(Number.isInteger(active))state?.setActivePhotoIndex?.(translatedActiveIndex(active,from,to));
  return true;
 }
 
@@ -134,6 +136,11 @@ input.addEventListener('change',event=>{
 removeAll?.addEventListener('click',()=>{files=[];notifyChange()});
 
 function thumbNodes(){return [...previews.querySelectorAll('.composer-thumb')]}
+
+function placeThumbAtIndex(wrap,index){
+ const thumbs=thumbNodes().filter(node=>node!==wrap);
+ previews.insertBefore(wrap,thumbs[index]||null);
+}
 
 function resetDraggedCard(state){
  const {wrap,placeholder}=state;
@@ -163,12 +170,14 @@ function finishDrag(event,commit){
  const to=dragTargetIndex(state);
  if(!commit){
   const thumbs=thumbNodes().filter(node=>node!==state.wrap);
-  const anchor=thumbs[state.from]||null;
-  previews.insertBefore(state.placeholder,anchor);
+  previews.insertBefore(state.placeholder,thumbs[state.from]||null);
  }
  resetDraggedCard(state);
  try{state.wrap.releasePointerCapture?.(event.pointerId)}catch{}
- if(commit&&to>=0&&to!==state.from)moveFile(state.from,to);
+ if(commit&&to>=0&&to!==state.from&&!moveFile(state.from,to)){
+  placeThumbAtIndex(state.wrap,state.from);
+  if(status){status.textContent='Не удалось изменить порядок фотографий на этом устройстве.';status.className='error'}
+ }
 }
 
 function moveDrag(event){
