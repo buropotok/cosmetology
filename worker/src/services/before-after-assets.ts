@@ -1,7 +1,7 @@
 import { AppError, type Env } from '../types';
 import { requireTelegramMiniAppSession } from './telegram-miniapp-auth';
 import { resolveOrCreateTelegramIdentity } from './telegram-identity';
-import { MINIAPP_IMAGE_MAX_BYTES } from './miniapp';
+import { storePermanentMediaAsset } from './media-assets';
 
 type Role = 'before' | 'after';
 
@@ -31,16 +31,10 @@ export async function saveBeforeAfterAsset(request: Request, env: Env) {
   const form = await request.formData().catch(() => { throw new AppError('INVALID_FORM_DATA', 'Не удалось прочитать изображение', 400); });
   const role = roleFrom(form.get('role'));
   const image = form.get('image');
-  if (!(image instanceof File) || image.size <= 0) throw new AppError('INVALID_IMAGE', 'Изображение обязательно', 400);
-  if (!image.type.toLowerCase().startsWith('image/')) throw new AppError('INVALID_IMAGE_TYPE', 'Можно выбрать только изображение', 400);
-  if (image.size > MINIAPP_IMAGE_MAX_BYTES) throw new AppError('IMAGE_TOO_LARGE', 'Изображение должно быть не больше 10 МБ', 400);
+  if (!(image instanceof File)) throw new AppError('INVALID_IMAGE', 'Изображение обязательно', 400);
 
-  const assetId = crypto.randomUUID();
-  const key = `draft_storage/${account.userId}/${assetId}`;
-  await env.IMAGES.put(key, image.stream(), { httpMetadata: { contentType: image.type } });
-  await env.DB.prepare('INSERT INTO media_assets(id,user_id,r2_key,source_type,file_name,content_type,size_bytes) VALUES(?,?,?,?,?,?,?)')
-    .bind(assetId, account.userId, key, 'before_after', image.name || null, image.type || null, image.size).run();
-
+  const stored = await storePermanentMediaAsset(env, account.userId, image, 'before_after');
+  const assetId = stored.asset.id;
   const column = columnFor(role);
   await env.DB.prepare(`INSERT INTO miniapp_before_after_assets(user_id,${column},updated_at) VALUES(?,?,CURRENT_TIMESTAMP) ON CONFLICT(user_id) DO UPDATE SET ${column}=excluded.${column},updated_at=CURRENT_TIMESTAMP`)
     .bind(account.userId, assetId).run();
