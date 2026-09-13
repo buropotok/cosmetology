@@ -14,20 +14,29 @@ export function validateMediaImage(image:File){
 
 export async function storePermanentMediaAsset(env:Env,userId:string,image:File,sourceType:string){
   validateMediaImage(image);
-  const digest=await crypto.subtle.digest('SHA-256',await image.arrayBuffer());
+  const bytes=await image.arrayBuffer();
+  const digest=await crypto.subtle.digest('SHA-256',bytes);
   const hash=hex(new Uint8Array(digest));
   const existing=await env.DB.prepare(SELECT_BY_HASH).bind(userId,hash).first<MediaAsset>();
   if(existing)return {asset:existing,created:false};
-  const id=crypto.randomUUID(),thumbnailId=crypto.randomUUID(),key=`draft_storage/${userId}/${id}`,thumbnailKey=`image_thumbnail/${thumbnailId}`;
-  await env.IMAGES.put(key,image.stream(),{httpMetadata:{contentType:image.type}});
+  const id=crypto.randomUUID(),key=`draft_storage/${userId}/${id}`;
+  await env.IMAGES.put(key,bytes,{httpMetadata:{contentType:image.type}});
   try{
-    await createMediaThumbnail(env,image,thumbnailId);
-    await env.DB.prepare('INSERT OR IGNORE INTO media_assets(id,user_id,r2_key,source_type,file_name,content_type,size_bytes,content_hash,thumbnail_id) VALUES(?,?,?,?,?,?,?,?,?)').bind(id,userId,key,sourceType,image.name||null,image.type||null,image.size,hash,thumbnailId).run();
+    await env.DB.prepare('INSERT OR IGNORE INTO media_assets(id,user_id,r2_key,source_type,file_name,content_type,size_bytes,content_hash,thumbnail_id) VALUES(?,?,?,?,?,?,?,?,NULL)').bind(id,userId,key,sourceType,image.name||null,image.type||null,image.size,hash).run();
     const asset=await env.DB.prepare(SELECT_BY_HASH).bind(userId,hash).first<MediaAsset>();
     if(!asset)throw new AppError('MEDIA_STORE_FAILED','Не удалось сохранить изображение',500);
-    if(asset.id!==id)await Promise.all([env.IMAGES.delete(key),env.IMAGES.delete(thumbnailKey)]);
-    return {asset,created:asset.id===id};
-  }catch(error){await Promise.all([env.IMAGES.delete(key),env.IMAGES.delete(thumbnailKey)]);throw error;}
+    if(asset.id!==id){await env.IMAGES.delete(key);return {asset,created:false};}
+    const thumbnailId=crypto.randomUUID();
+    try{
+      await createMediaThumbnail(env,new File([bytes],image.name,{type:image.type}),userId,thumbnailId);
+      await env.DB.prepare('UPDATE media_assets SET thumbnail_id=? WHERE id=? AND user_id=?').bind(thumbnailId,id,userId).run();
+      asset.thumbnailId=thumbnailId;
+    }catch(error){
+      await env.IMAGES.delete(`image_thumbnail/${userId}/${thumbnailId}`).catch(()=>null);
+      console.error('media thumbnail generation failed',{assetId:id,error:error instanceof Error?error.message:String(error)});
+    }
+    return {asset,created:true};
+  }catch(error){await env.IMAGES.delete(key);throw error;}
 }
 
 export async function listPermanentMediaAssets(env:Env,userId:string,limit=100){
