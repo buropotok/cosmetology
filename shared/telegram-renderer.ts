@@ -42,6 +42,18 @@ function richBlock(block:PostBlock):BlockNode{
 }
 function requiresRich(block:PostBlock):boolean{if(block.type==='details'||block.type==='bullet_list'||block.type==='ordered_list')return true;if(block.type==='quote')return !!block.blocks?.length;return false}
 
+type RichTextJson=string|RichTextJson[]|{type:string;text?:RichTextJson;url?:string};
+function richTextJson(content:TextRun[]):RichTextJson{const values:RichTextJson[]=content.map(run=>{let value:RichTextJson=run.text;for(const mark of [...(run.marks??[])].reverse()){if(mark.type==='link'){const href=safeLink(mark.href);if(href)value={type:'url',text:value,url:href};}else value={type:mark.type,text:value};}return value});return values.length===1?values[0]:values}
+function inputList(type:'bullet_list'|'ordered_list',items:Array<TextRun[]|PostListItem>):unknown{return {type:'list',items:items.map((raw,index)=>{const item=normalizeItem(raw),nested=nestedList(item,type),blocks:unknown[]=[{type:'paragraph',text:richTextJson(item.content)}];if(nested)blocks.push(inputList(nested.type,nested.items));return {blocks,...(type==='ordered_list'?{value:index+1,type:'1'}:{})}})}}
+function inputBlock(block:PostBlock):unknown{
+  if(block.type==='paragraph')return {type:'paragraph',text:richTextJson(block.content)};
+  if(block.type==='heading')return {type:'heading',size:1,text:richTextJson(block.content)};
+  if(block.type==='bullet_list'||block.type==='ordered_list')return inputList(block.type,block.items);
+  if(block.type==='quote')return {type:'blockquote',blocks:block.blocks?.map(inputBlock)??[{type:'paragraph',text:richTextJson(block.content??[])}]};
+  if(block.type==='details')return {type:'details',summary:richTextJson(block.title?.length?block.title:[{text:'Подробнее'}]),blocks:block.blocks.map(inputBlock)};
+  return {type:'paragraph',text:''};
+}
+
 function plainItem(item:TextRun[]|PostListItem,type:'bullet_list'|'ordered_list',depth=0,index=0):string{const value=normalizeItem(item),prefix=type==='ordered_list'?`${index+1}. `:'• ';let text=`${'  '.repeat(depth)}${prefix}${value.content.map(run=>run.text).join('')}`;const nested=nestedList(value,type);if(nested?.items.length)text+='\n'+nested.items.map((child,i)=>plainItem(child,nested.type,depth+1,i)).join('\n');return text}
 function plainBlock(block:PostBlock):string{
   if(block.type==='paragraph'||block.type==='heading')return block.content.map(run=>run.text).join('');
@@ -65,7 +77,7 @@ export function renderTelegram(document:PostDocument):TelegramRender{
   const needsRichMessage=document.blocks.some(requiresRich);
   let richMessageHtml:string|undefined;
   if(needsRichMessage){const rich=tgDoc(...document.blocks.map(richBlock)).validate();richMessageHtml=rich.toHTML()}
-  return {blocks,html:blocks.map(blockHtml).join('\n'),plainText,buttons:document.buttons??[],...(richMessageHtml?{richMessageHtml}:{})};
+  return {blocks,html:blocks.map(blockHtml).join('\n'),plainText,buttons:document.buttons??[],richMessageBlocks:document.blocks.map(inputBlock),...(richMessageHtml?{richMessageHtml}:{})};
 }
 
 export type TelegramPublicationPlan = | {type:'text'; messages:[TelegramRender]} | {type:'photo_with_caption'; messages:[TelegramRender]} | {type:'photo_then_text'; messages:[null,TelegramRender]; reason:'caption_too_long'};
