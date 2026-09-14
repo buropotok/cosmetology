@@ -8,6 +8,7 @@ const sessionStartedAt=new Date().toISOString();
 const transportFetch=typeof window.fetch==='function'?window.fetch.bind(window):null;
 const events=[];
 let sequence=0;
+let deliveryQueue=Promise.resolve();
 let deliveryInFlight=false;
 let deliveryTimer=null;
 let pendingDelivery=false;
@@ -71,7 +72,7 @@ function runPendingDelivery(){
   pendingDelivery=false;
   pendingUrgentDelivery=false;
   deliveryInFlight=true;
-  void deliver(data).catch(()=>undefined).finally(()=>{
+  deliveryQueue=deliveryQueue.catch(()=>undefined).then(()=>deliver(data)).catch(()=>undefined).finally(()=>{
     deliveryInFlight=false;
     if(!pendingDelivery)return;
     if(pendingUrgentDelivery){runPendingDelivery();return}
@@ -91,6 +92,8 @@ function scheduleDelivery(urgent=false){
   if(deliveryTimer!==null)clearTimeout(deliveryTimer);
   deliveryTimer=setTimeout(()=>{deliveryTimer=null;runPendingDelivery()},DELIVERY_COALESCE_MS);
 }
+
+function queueDelivery(urgent=false){scheduleDelivery(urgent)}
 
 function appendEvent({event,stage,module,status,durationMs,error,details}){
   const entry={seq:++sequence,time:new Date().toISOString(),event:String(event),stage:String(stage),module:String(module),status:String(status)};
@@ -113,7 +116,7 @@ function ensureSessionEvent(){
 export function startRuntimeDiagnostics(){
   ensureSessionEvent();
   if(!hasTelegramAuth())return Object.freeze({started:false,reason:'telegram_auth_missing'});
-  if(!initialDeliveryQueued){initialDeliveryQueued=true;scheduleDelivery(true)}
+  if(!initialDeliveryQueued){initialDeliveryQueued=true;queueDelivery()}
   return Object.freeze({started:true,sessionNumber,sessionStartedAt,deviceType});
 }
 
@@ -121,7 +124,7 @@ export function recordRuntimeDiagnostic({event='module_load',stage,module,status
   if(!stage||!module||!status)return null;
   ensureSessionEvent();
   const entry=appendEvent({event,stage,module,status,durationMs,error,details});
-  if(hasTelegramAuth())scheduleDelivery(status==='failed');
+  if(hasTelegramAuth())queueDelivery(status==='failed');
   return Object.freeze({...entry,details:entry.details?Object.freeze({...entry.details}):undefined});
 }
 
