@@ -13,6 +13,6 @@ export function initComposerMediaGalleryBridge(){
  gallery.textContent='Галерея Cosmo Sofa';
  addDevice.insertAdjacentElement('afterend',gallery);
  actions.classList.add('composer-image-actions--gallery');
- const disposeGallery=initComposerMediaGallery({trigger:gallery,onAdd:files=>window.CosmoComposerImages?.addFiles?.(files)});
+ const disposeGallery=initComposerMediaGallery({trigger:gallery,onAdd:files=>window.CosmoComposerImages?.addFiles?.(files),getComposerImageCount:()=>window.CosmoComposerImages?.getFiles?.().length||0});
  return()=>{disposeGallery();gallery.remove();actions.classList.remove('composer-image-actions--gallery');addDevice.textContent=previousLabel};
 }
