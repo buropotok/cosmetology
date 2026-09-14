@@ -21,3 +21,14 @@ test('successful delete compacts existing tiles instead of rebuilding the galler
  assert.match(removeSelected,/compactDeletedTiles\(removed\)/);
  assert.doesNotMatch(removeSelected,/showGrid\(\)/);
 });
+
+test('delete keeps selection state coherent and releases only removed tile blobs',async()=>{
+ const gallery=await read('./composer-media-gallery.js');
+ assert.match(gallery,/const toggleAsset=\(asset,button\)=>\{if\(deleting\)return;/);
+ assert.match(gallery,/img\.dataset\.objectUrl=objectUrl/);
+ assert.match(gallery,/const releaseTileUrls=/);
+ const compact=gallery.match(/const compactDeletedTiles=.*?;\n const removeSelected=/s)?.[0]||'';
+ assert.match(compact,/releaseTileUrls\(deleted\)/);
+ assert.match(compact,/deleted\.forEach\(tile=>tile\.remove\(\)\)/);
+ assert.doesNotMatch(compact,/clearViewUrls\(\)/);
+});
