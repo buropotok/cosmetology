@@ -58,15 +58,33 @@ function hideStartupSplash(){
   if(splash)splash.hidden=true;
 }
 
+function recordStartupRuntimeDiagnostic({module,status,durationMs,error}={}){
+  void import('/runtime-diagnostics.js')
+    .then(diagnostics=>diagnostics.recordRuntimeDiagnostic?.({
+      event:'module_load',
+      stage:'application.startup',
+      module,
+      status,
+      durationMs,
+      error
+    }))
+    .catch(()=>undefined);
+}
+
 async function loadStartupModule(moduleName,loader){
   const startedAt=Date.now();
   appendStartupLog('START',moduleName);
+  recordStartupRuntimeDiagnostic({module:moduleName,status:'loading'});
   try{
     const module=await loader();
-    appendStartupLog('OK',moduleName,`${Date.now()-startedAt}ms`);
+    const durationMs=Date.now()-startedAt;
+    appendStartupLog('OK',moduleName,`${durationMs}ms`);
+    recordStartupRuntimeDiagnostic({module:moduleName,status:'loaded',durationMs});
     return module;
   }catch(error){
-    appendStartupLog('ERROR',moduleName,`${Date.now()-startedAt}ms; ${startupErrorMessage(error)}`);
+    const durationMs=Date.now()-startedAt;
+    appendStartupLog('ERROR',moduleName,`${durationMs}ms; ${startupErrorMessage(error)}`);
+    recordStartupRuntimeDiagnostic({module:moduleName,status:'failed',durationMs,error});
     throw error;
   }
 }
