@@ -7,10 +7,11 @@ vi.mock('./ai-generation-status', () => ({ resolveMiniAppAiUser: mocks.resolveMi
 import { generateMiniAppAiReply } from './miniapp-ai';
 
 const originalFetch = globalThis.fetch;
-function makeEnv(configured = true): Env {
-  return new Proxy({} as Env, {
+function makeEnv(configured = true, logs?: R2Bucket): Env {
+  return new Proxy({ LOGS: logs } as Env, {
     get(_target, property) {
       if (property === 'AI_TEXT_MODEL') return undefined;
+      if (property === 'LOGS' && logs) return logs;
       return configured ? 'x' : undefined;
     },
   });
@@ -87,4 +88,31 @@ describe('Mini App text generation runtime', () => {
     await expect(generateMiniAppAiReply(makeRequest({ message: 'Тест' }), makeEnv()))
       .rejects.toMatchObject({ code: 'AI_GENERATION_FAILED', status: 502 });
   });
+
+  it('includes the current user history URL in discovery without writing history', async () => {
+    const put = vi.fn();
+    const logs = { get: vi.fn(), put } as unknown as R2Bucket;
+    globalThis.fetch = vi.fn().mockResolvedValue(responseText(discovery)) as typeof fetch;
+    await generateMiniAppAiReply(makeRequest({ message: 'Найди темы', mode: 'discovery' }), makeEnv(true, logs));
+    const providerBody = JSON.parse(String((globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0][1].body));
+    expect(providerBody.input).toContain('https://example.test/api/ai/topic-history/user-1.txt');
+    expect(put).not.toHaveBeenCalled();
+  });
+
+  it('rejects selectedIdea in discovery', async () => {
+    await expect(generateMiniAppAiReply(makeRequest({ message: 'Темы', mode: 'discovery', selectedIdea: { title: 'Тема', text: 'Текст' } }), makeEnv()))
+      .rejects.toMatchObject({ code: 'AI_SELECTED_IDEA_NOT_ALLOWED', status: 400 });
+  });
+
+  it('persists selectedIdea before provider configuration failure', async () => {
+    const values = new Map<string, string>();
+    const logs = {
+      get: vi.fn(async (key: string) => values.has(key) ? { text: async () => values.get(key)! } : null),
+      put: vi.fn(async (key: string, value: string) => { values.set(key, value); }),
+    } as unknown as R2Bucket;
+    await expect(generateMiniAppAiReply(makeRequest({ message: 'Пост', selectedIdea: { title: 'Тема', text: 'Текст' } }), makeEnv(false, logs)))
+      .rejects.toMatchObject({ code: 'AI_NOT_CONFIGURED', status: 503 });
+    expect(values.get('topic-history/user-1.txt')).toContain('TITLE: Тема');
+  });
+
 });
