@@ -8,14 +8,16 @@ function loadWorkspaceStyles(){
     link.dataset.cosmoWorkspaceSpacing='';
     document.head.append(link);
   }
-  if(!document.querySelector('link[data-cosmo-telegram-quotes]')){
-    const quoteLink=document.createElement('link');
-    quoteLink.rel='stylesheet';
-    quoteLink.href='/telegram-quote-preview.css';
-    quoteLink.dataset.cosmoTelegramQuotes='';
-    document.head.append(quoteLink);
-  }
   document.head.insertAdjacentHTML('beforeend','<style>#flow-continue[hidden]{display:none!important}.cosmo-home-mark{width:228px!important;height:228px!important}</style>');
+}
+
+function loadComposerStyles(){
+  if(document.querySelector('link[data-cosmo-telegram-quotes]'))return;
+  const quoteLink=document.createElement('link');
+  quoteLink.rel='stylesheet';
+  quoteLink.href='/telegram-quote-preview.css';
+  quoteLink.dataset.cosmoTelegramQuotes='';
+  document.head.append(quoteLink);
 }
 
 function startRuntimeDiagnostics(){
@@ -43,7 +45,7 @@ async function loadCriticalShell(){
   await import('/navigation.js');
 }
 
-async function loadOnboardingAndSettings(){
+async function loadFeaturePlatform(){
   await import('/app.js');
   await import('/account-state.js');
   await import('/onboarding-api.js');
@@ -51,12 +53,16 @@ async function loadOnboardingAndSettings(){
   await import('/onboarding-controller.js');
   await import('/onboarding-view.js');
   await import('/onboarding-router.js');
-  await import('/settings.js');
-  await import('/composer-mockup.js');
-  window.CosmoNavigation?.ensureComposerBackButton?.();
 }
 
-async function loadFeatureUi(){
+async function loadSettingsUi(){
+  await import('/settings.js');
+}
+
+async function loadComposerUi(){
+  loadComposerStyles();
+  await import('/composer-mockup.js');
+  window.CosmoNavigation?.ensureComposerBackButton?.();
   await import('/before-after-controller.js');
   await import('/publish-ai-wizard.js');
   await import('/ai-generation-status.js');
@@ -89,24 +95,50 @@ async function loadRuntimeIntegrations(){
   ]);
 }
 
-let featureRuntimePromise=null;
-async function loadFeatureRuntime(){
-  if(!featureRuntimePromise){
-    featureRuntimePromise=(async()=>{
-      await loadOnboardingAndSettings();
-      await loadFeatureUi();
+let featurePlatformPromise=null;
+function ensureFeaturePlatform(){
+  if(!featurePlatformPromise){
+    featurePlatformPromise=loadFeaturePlatform().catch(error=>{
+      featurePlatformPromise=null;
+      throw error;
+    });
+  }
+  return featurePlatformPromise;
+}
+
+let settingsRuntimePromise=null;
+async function loadSettingsRuntime(){
+  if(!settingsRuntimePromise){
+    settingsRuntimePromise=(async()=>{
+      await ensureFeaturePlatform();
+      await loadSettingsUi();
+      return Object.freeze({ready:true});
+    })().catch(error=>{
+      settingsRuntimePromise=null;
+      throw error;
+    });
+  }
+  return settingsRuntimePromise;
+}
+
+let composerRuntimePromise=null;
+async function loadComposerFeatureRuntime(){
+  if(!composerRuntimePromise){
+    composerRuntimePromise=(async()=>{
+      await ensureFeaturePlatform();
+      await loadComposerUi();
       await loadComposerRuntime();
       await loadRuntimeIntegrations();
       return Object.freeze({ready:true});
     })().catch(error=>{
-      featureRuntimePromise=null;
+      composerRuntimePromise=null;
       throw error;
     });
   }
-  return featureRuntimePromise;
+  return composerRuntimePromise;
 }
 
-window.CosmoFeatureRuntime=Object.freeze({load:loadFeatureRuntime});
+window.CosmoFeatureRuntime=Object.freeze({load:loadComposerFeatureRuntime,loadSettings:loadSettingsRuntime});
 
 async function start(){
   loadWorkspaceStyles();
