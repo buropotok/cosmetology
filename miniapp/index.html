@@ -1,6 +1,94 @@
 <!doctype html>
 <html lang="ru">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="color-scheme" content="light dark"><title>Новый пост</title><link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/composer-mockup.css"><link rel="stylesheet" href="/publish-ai-wizard.css"><script src="https://telegram.org/js/telegram-web-app.js"></script><script type="module" src="/bootstrap.js"></script></head>
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="color-scheme" content="light dark"><title>Новый пост</title><link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/composer-mockup.css"><link rel="stylesheet" href="/publish-ai-wizard.css">
+<script id="cosmo-level0-probe">
+(function(){
+  var ENDPOINT='/api/miniapp/runtime-diagnostics';
+  var sessionNumber=String(Date.now());
+  var sessionStartedAt=new Date().toISOString();
+  var events=[];
+  var sequence=0;
+  function decode(value){try{return decodeURIComponent(value)}catch(error){return value}}
+  function readParam(name){
+    var sources=[String(window.location.hash||'').replace(/^#/,''),String(window.location.search||'').replace(/^\?/, '')];
+    var i,j,parts,pair,eq,key;
+    for(i=0;i<sources.length;i+=1){
+      if(!sources[i])continue;
+      parts=sources[i].split('&');
+      for(j=0;j<parts.length;j+=1){
+        pair=parts[j];eq=pair.indexOf('=');key=eq>=0?pair.slice(0,eq):pair;
+        if(decode(key)===name)return decode(eq>=0?pair.slice(eq+1):'');
+      }
+    }
+    return'';
+  }
+  var initData=readParam('tgWebAppData');
+  var telegramPlatform=readParam('tgWebAppPlatform');
+  var telegramVersion=readParam('tgWebAppVersion');
+  function safe(value){return String(value||'').replace(/tgWebAppData=[^&#\s]+/gi,'tgWebAppData=[redacted]').replace(/\btma\s+[^\s]+/gi,'tma [redacted]').replace(/\b(access[_-]?token|api[_-]?key|token)\s*[:=]\s*[^\s&,;]+/gi,'$1=[redacted]').replace(/[\r\n\t]+/g,' ').slice(0,700)}
+  function deviceType(){
+    var platform=String(telegramPlatform||'').toLowerCase();
+    var ua=String(navigator.userAgent||'');
+    if(platform==='ios'||/iPhone|iPad|iPod/i.test(ua))return'ios';
+    if(platform==='android'||/Android/i.test(ua))return'android';
+    if(platform==='tdesktop'||platform==='macos'||platform==='weba'||platform==='webk')return'desktop';
+    if(platform==='web')return'web';
+    return'unknown';
+  }
+  function snapshot(){
+    return{
+      schemaVersion:1,
+      sessionNumber:sessionNumber,
+      sessionStartedAt:sessionStartedAt,
+      deviceType:deviceType(),
+      telegramPlatform:String(telegramPlatform||''),
+      telegramVersion:String(telegramVersion||''),
+      buildId:'',
+      userAgent:String(navigator.userAgent||''),
+      language:String(navigator.language||''),
+      viewport:{width:window.innerWidth||0,height:window.innerHeight||0,devicePixelRatio:window.devicePixelRatio||1},
+      events:events.slice(0)
+    };
+  }
+  function send(){
+    var xhr;
+    if(!initData||typeof XMLHttpRequest==='undefined'||typeof JSON==='undefined')return;
+    try{
+      xhr=new XMLHttpRequest();
+      xhr.open('POST',ENDPOINT,true);
+      xhr.setRequestHeader('content-type','application/json');
+      xhr.setRequestHeader('authorization','tma '+initData);
+      xhr.send(JSON.stringify(snapshot()));
+    }catch(error){}
+  }
+  function mark(module,status,error){
+    var entry={seq:++sequence,time:new Date().toISOString(),event:'level0',stage:'application.prebootstrap',module:String(module||'unknown'),status:String(status||'loaded')};
+    if(error)entry.error=safe(error);
+    events.push(entry);
+    if(events.length>30)events.splice(0,events.length-30);
+    send();
+    return entry;
+  }
+  window.__CosmoLevel0Diagnostics={sessionNumber:sessionNumber,sessionStartedAt:sessionStartedAt,events:events,mark:mark};
+  if(window.addEventListener){
+    window.addEventListener('error',function(event){
+      var target=event&&event.target;
+      var detail='';
+      if(target&&target!==window){detail=(target.tagName||'resource')+': '+(target.src||target.href||'unknown resource')}
+      else{detail=(event&&event.message?event.message:'window error')+(event&&event.filename?' @ '+event.filename:'')+(event&&event.lineno?' line '+event.lineno:'')}
+      mark('window-error','failed',detail);
+    },true);
+    window.addEventListener('unhandledrejection',function(event){mark('unhandled-rejection','failed',event&&event.reason?event.reason:'unhandled rejection')});
+  }
+  mark('html-head','loaded');
+}());
+</script>
+<script>window.__CosmoLevel0Diagnostics.mark('telegram-sdk','loading');</script>
+<script src="https://telegram.org/js/telegram-web-app.js" onload="window.__CosmoLevel0Diagnostics.mark('telegram-sdk','loaded')" onerror="window.__CosmoLevel0Diagnostics.mark('telegram-sdk','failed','telegram-web-app.js load error')"></script>
+<script>window.__CosmoLevel0Diagnostics.mark('bootstrap','loading');</script>
+<script type="module" src="/bootstrap.js" onload="window.__CosmoLevel0Diagnostics.mark('bootstrap','loaded')" onerror="window.__CosmoLevel0Diagnostics.mark('bootstrap','failed','bootstrap.js module load or parse error')"></script>
+</head>
 <body><main>
 <div id="composer-screen" class="screen" hidden>
 <header class="topbar"><div><p id="greeting" class="eyebrow">Telegram Mini App</p><h1>Новый пост</h1></div></header>
