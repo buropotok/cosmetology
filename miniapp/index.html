@@ -53,12 +53,14 @@
   }
   function send(){
     var xhr;
-    if(!initData||typeof XMLHttpRequest==='undefined'||typeof JSON==='undefined')return;
+    var auth=initData;
+    if(!auth&&window.Telegram&&window.Telegram.WebApp)auth=window.Telegram.WebApp.initData||'';
+    if(!auth||typeof XMLHttpRequest==='undefined'||typeof JSON==='undefined')return;
     try{
       xhr=new XMLHttpRequest();
       xhr.open('POST',ENDPOINT,true);
       xhr.setRequestHeader('content-type','application/json');
-      xhr.setRequestHeader('authorization','tma '+initData);
+      xhr.setRequestHeader('authorization','tma '+auth);
       xhr.send(JSON.stringify(snapshot()));
     }catch(error){}
   }
