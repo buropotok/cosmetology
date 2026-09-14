@@ -58,15 +58,15 @@ function hideStartupSplash(){
   if(splash)splash.hidden=true;
 }
 
-async function loadStartupModule(modulePath){
+async function loadStartupModule(moduleName,loader){
   const startedAt=Date.now();
-  appendStartupLog('START',modulePath);
+  appendStartupLog('START',moduleName);
   try{
-    const module=await import(modulePath);
-    appendStartupLog('OK',modulePath,`${Date.now()-startedAt}ms`);
+    const module=await loader();
+    appendStartupLog('OK',moduleName,`${Date.now()-startedAt}ms`);
     return module;
   }catch(error){
-    appendStartupLog('ERROR',modulePath,`${Date.now()-startedAt}ms; ${startupErrorMessage(error)}`);
+    appendStartupLog('ERROR',moduleName,`${Date.now()-startedAt}ms; ${startupErrorMessage(error)}`);
     throw error;
   }
 }
@@ -90,68 +90,91 @@ function loadWorkspaceStyles(){
 }
 
 function startRuntimeDiagnostics(){
-  void loadStartupModule('/runtime-diagnostics.js')
-    .then(diagnostics=>diagnostics.startRuntimeDiagnostics?.())
-    .catch(error=>console.warn('Runtime diagnostics failed to start',error));
-  void loadStartupModule('/diagnostic-trace-panel.js')
-    .catch(error=>console.warn('Diagnostic trace panel failed to start',error));
+  void import('/runtime-diagnostics.js')
+    .then(diagnostics=>{
+      appendStartupLog('OK','runtime-diagnostics.js',`${Date.now()-runtimeDiagnosticsStartedAt}ms`);
+      return diagnostics.startRuntimeDiagnostics?.();
+    })
+    .catch(error=>{
+      appendStartupLog('ERROR','runtime-diagnostics.js',`${Date.now()-runtimeDiagnosticsStartedAt}ms; ${startupErrorMessage(error)}`);
+      console.warn('Runtime diagnostics failed to start',error);
+    });
+  const runtimeDiagnosticsStartedAt=Date.now();
+  appendStartupLog('START','runtime-diagnostics.js');
+
+  void import('/diagnostic-trace-panel.js')
+    .then(()=>appendStartupLog('OK','diagnostic-trace-panel.js',`${Date.now()-diagnosticTraceStartedAt}ms`))
+    .catch(error=>{
+      appendStartupLog('ERROR','diagnostic-trace-panel.js',`${Date.now()-diagnosticTraceStartedAt}ms; ${startupErrorMessage(error)}`);
+      console.warn('Diagnostic trace panel failed to start',error);
+    });
+  const diagnosticTraceStartedAt=Date.now();
+  appendStartupLog('START','diagnostic-trace-panel.js');
 }
 
 function startComposerGallery(){
-  void loadStartupModule('/composer-media-gallery-bridge.js')
-    .then(galleryBridge=>galleryBridge.initComposerMediaGalleryBridge?.())
-    .catch(error=>console.warn('Composer gallery failed to start',error));
+  void import('/composer-media-gallery-bridge.js')
+    .then(galleryBridge=>{
+      appendStartupLog('OK','composer-media-gallery-bridge.js',`${Date.now()-galleryStartedAt}ms`);
+      return galleryBridge.initComposerMediaGalleryBridge?.();
+    })
+    .catch(error=>{
+      appendStartupLog('ERROR','composer-media-gallery-bridge.js',`${Date.now()-galleryStartedAt}ms; ${startupErrorMessage(error)}`);
+      console.warn('Composer gallery failed to start',error);
+    });
+  const galleryStartedAt=Date.now();
+  appendStartupLog('START','composer-media-gallery-bridge.js');
 }
 
 async function loadPlatform(){
-  await loadStartupModule('/telegram-gateway.js');
-  await loadStartupModule('/app-router.js');
-  await loadStartupModule('/app.js');
-  await loadStartupModule('/account-state.js');
+  await loadStartupModule('telegram-gateway.js',()=>import('/telegram-gateway.js'));
+  await loadStartupModule('app-router.js',()=>import('/app-router.js'));
+  await loadStartupModule('app.js',()=>import('/app.js'));
+  await loadStartupModule('account-state.js',()=>import('/account-state.js'));
 }
 
 async function loadOnboardingAndSettings(){
-  await loadStartupModule('/onboarding-api.js');
-  await loadStartupModule('/vk-destination-selection.js');
-  await loadStartupModule('/onboarding-controller.js');
-  await loadStartupModule('/onboarding-view.js');
-  await loadStartupModule('/onboarding-router.js');
-  await loadStartupModule('/settings.js');
-  await loadStartupModule('/composer-mockup.js');
+  await loadStartupModule('onboarding-api.js',()=>import('/onboarding-api.js'));
+  await loadStartupModule('vk-destination-selection.js',()=>import('/vk-destination-selection.js'));
+  await loadStartupModule('onboarding-controller.js',()=>import('/onboarding-controller.js'));
+  await loadStartupModule('onboarding-view.js',()=>import('/onboarding-view.js'));
+  await loadStartupModule('onboarding-router.js',()=>import('/onboarding-router.js'));
+  await loadStartupModule('settings.js',()=>import('/settings.js'));
+  await loadStartupModule('composer-mockup.js',()=>import('/composer-mockup.js'));
 }
 
 async function loadAppShell(){
-  await loadStartupModule('/before-after-controller.js');
-  await loadStartupModule('/publish-ai-wizard.js');
-  await loadStartupModule('/ai-generation-status.js');
-  await loadStartupModule('/navigation.js');
-  await loadStartupModule('/draft-loading-overlay.js');
-  await loadStartupModule('/ai-response-ui.js');
+  await loadStartupModule('before-after-controller.js',()=>import('/before-after-controller.js'));
+  await loadStartupModule('publish-ai-wizard.js',()=>import('/publish-ai-wizard.js'));
+  await loadStartupModule('ai-generation-status.js',()=>import('/ai-generation-status.js'));
+  await loadStartupModule('navigation.js',()=>import('/navigation.js'));
+  await loadStartupModule('draft-loading-overlay.js',()=>import('/draft-loading-overlay.js'));
+  await loadStartupModule('ai-response-ui.js',()=>import('/ai-response-ui.js'));
 }
 
 async function loadComposerRuntime(){
   await Promise.all([
-    loadStartupModule('/composer-screen.js'),
-    loadStartupModule('/composer-editor-stability.js'),
-    loadStartupModule('/composer-image-manager.js'),
-    loadStartupModule('/before-after-bridge.js')
+    loadStartupModule('composer-screen.js',()=>import('/composer-screen.js')),
+    loadStartupModule('composer-editor-stability.js',()=>import('/composer-editor-stability.js')),
+    loadStartupModule('composer-image-manager.js',()=>import('/composer-image-manager.js')),
+    loadStartupModule('before-after-bridge.js',()=>import('/before-after-bridge.js'))
   ]);
-  await loadStartupModule('/diagnostics-fetch.js');
-  await loadStartupModule('/composer-state.js');
-  await loadStartupModule('/composer-image-generation.js');
+  await loadStartupModule('diagnostics-fetch.js',()=>import('/diagnostics-fetch.js'));
+  await loadStartupModule('composer-state.js',()=>import('/composer-state.js'));
+  await loadStartupModule('composer-image-generation.js',()=>import('/composer-image-generation.js'));
   startComposerGallery();
-  await loadStartupModule('/draft-store.js');
-  await loadStartupModule('/drafts.js');
-  await loadStartupModule('/composer-actions.js');
-  await loadStartupModule('/composer-vk-destination.js');
-  await loadStartupModule('/onboarding-flow.js');
+  await loadStartupModule('draft-store.js',()=>import('/draft-store.js'));
+  await loadStartupModule('drafts.js',()=>import('/drafts.js'));
+  await loadStartupModule('composer-actions.js',()=>import('/composer-actions.js'));
+  await loadStartupModule('composer-vk-destination.js',()=>import('/composer-vk-destination.js'));
+  await loadStartupModule('onboarding-flow.js',()=>import('/onboarding-flow.js'));
 }
 
 async function loadRuntimeIntegrations(){
   await Promise.all([
-    loadStartupModule('/ai-post-editor-transfer.js'),
-    loadStartupModule('/build-id.js'),
-    loadStartupModule('/vk-return-confirmation.js')
+    loadStartupModule('ai-post-editor-transfer.js',()=>import('/ai-post-editor-transfer.js')),
+    loadStartupModule('build-id.js',()=>import('/build-id.js')),
+    loadStartupModule('vk-return-confirmation.js',()=>import('/vk-return-confirmation.js'))
   ]);
 }
 
