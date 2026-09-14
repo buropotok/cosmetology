@@ -1,13 +1,17 @@
 const ENDPOINT='/api/miniapp/runtime-diagnostics';
 const MAX_EVENTS=200;
 const MAX_ERROR_LENGTH=700;
+const DELIVERY_COALESCE_MS=250;
 const telegram=window.Telegram?.WebApp;
 const sessionNumber=String(Date.now());
 const sessionStartedAt=new Date().toISOString();
 const transportFetch=typeof window.fetch==='function'?window.fetch.bind(window):null;
 const events=[];
 let sequence=0;
-let deliveryQueue=Promise.resolve();
+let deliveryInFlight=false;
+let deliveryTimer=null;
+let pendingDelivery=false;
+let pendingUrgentDelivery=false;
 let sessionEventRecorded=false;
 let initialDeliveryQueued=false;
 
@@ -61,9 +65,31 @@ async function deliver(data){
   if(!response.ok)throw new Error(`Runtime diagnostics HTTP ${response.status}`);
 }
 
-function queueDelivery(){
+function runPendingDelivery(){
+  if(deliveryInFlight||!pendingDelivery)return;
   const data=snapshot();
-  deliveryQueue=deliveryQueue.catch(()=>undefined).then(()=>deliver(data)).catch(()=>undefined);
+  pendingDelivery=false;
+  pendingUrgentDelivery=false;
+  deliveryInFlight=true;
+  void deliver(data).catch(()=>undefined).finally(()=>{
+    deliveryInFlight=false;
+    if(!pendingDelivery)return;
+    if(pendingUrgentDelivery){runPendingDelivery();return}
+    scheduleDelivery();
+  });
+}
+
+function scheduleDelivery(urgent=false){
+  pendingDelivery=true;
+  if(urgent){
+    pendingUrgentDelivery=true;
+    if(deliveryTimer!==null){clearTimeout(deliveryTimer);deliveryTimer=null}
+    runPendingDelivery();
+    return;
+  }
+  if(deliveryInFlight)return;
+  if(deliveryTimer!==null)clearTimeout(deliveryTimer);
+  deliveryTimer=setTimeout(()=>{deliveryTimer=null;runPendingDelivery()},DELIVERY_COALESCE_MS);
 }
 
 function appendEvent({event,stage,module,status,durationMs,error,details}){
@@ -87,7 +113,7 @@ function ensureSessionEvent(){
 export function startRuntimeDiagnostics(){
   ensureSessionEvent();
   if(!hasTelegramAuth())return Object.freeze({started:false,reason:'telegram_auth_missing'});
-  if(!initialDeliveryQueued){initialDeliveryQueued=true;queueDelivery()}
+  if(!initialDeliveryQueued){initialDeliveryQueued=true;scheduleDelivery(true)}
   return Object.freeze({started:true,sessionNumber,sessionStartedAt,deviceType});
 }
 
@@ -95,7 +121,7 @@ export function recordRuntimeDiagnostic({event='module_load',stage,module,status
   if(!stage||!module||!status)return null;
   ensureSessionEvent();
   const entry=appendEvent({event,stage,module,status,durationMs,error,details});
-  if(hasTelegramAuth())queueDelivery();
+  if(hasTelegramAuth())scheduleDelivery(status==='failed');
   return Object.freeze({...entry,details:entry.details?Object.freeze({...entry.details}):undefined});
 }
 
