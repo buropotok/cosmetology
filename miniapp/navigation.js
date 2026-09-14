@@ -16,6 +16,7 @@ document.head.append(style);
 const home=document.createElement('section');home.id='home-screen';home.className='cosmo-flow-screen';home.innerHTML=`<header class="cosmo-flow-nav"><span class="cosmo-logo" aria-hidden="true"></span><h1>Cosmo Sofa</h1><button class="cosmo-flow-settings cosmo-settings-button" type="button" aria-label="Настройки"></button></header><div class="cosmo-home-hero"><div class="cosmo-home-mark" aria-hidden="true"></div><h2>Создайте публикацию</h2><p>Подготовьте новый материал или вернитесь к сохранённому черновику.</p></div><div class="cosmo-flow-actions"><button id="flow-new" class="cosmo-primary" type="button">Новый пост</button><button id="flow-continue" class="cosmo-secondary" type="button">Продолжить</button></div>`;
 document.querySelector('main')?.prepend(home);
 const continueButton=home.querySelector('#flow-continue');
+const settingsButton=home.querySelector('.cosmo-flow-settings');
 let preparationOverlay;
 function getPreparationOverlay(){
   if(preparationOverlay)return preparationOverlay;
@@ -42,6 +43,18 @@ async function showDraftLoadError(){
 async function showNewPostLoadError(){
   await popup({title:'Новый пост недоступен',message:'Не удалось открыть создание публикации. Попробуйте ещё раз.',buttons:[{id:'ok',type:'ok',text:'ОК'}]});
 }
+let featureRuntimePromise=null;
+function ensureFeatureRuntime(){
+  if(featureRuntimePromise)return featureRuntimePromise;
+  const load=window.CosmoFeatureRuntime?.load;
+  if(typeof load!=='function')return Promise.reject(new Error('Feature runtime loader unavailable'));
+  featureRuntimePromise=Promise.resolve(load()).catch(error=>{featureRuntimePromise=null;throw error});
+  return featureRuntimePromise;
+}
+async function ensureFeatureRuntimeOrReport(promise=ensureFeatureRuntime()){
+  try{await promise;return true}
+  catch(error){console.error('Feature runtime failed to load',error);await showNewPostLoadError();return false}
+}
 const PREPARATION_MIN_MS=450;
 const PREPARATION_STAGE='new-post.preparation';
 let diagnosticsPromise,editorPreparationPromise,editorPrepared=false;
@@ -54,6 +67,7 @@ function prepareNewPostRuntime(){
   if(!editorPreparationPromise){
     const startupReady=window.CosmoMiniAppReady||Promise.resolve();
     editorPreparationPromise=Promise.resolve(startupReady)
+      .then(()=>ensureFeatureRuntime())
       .then(async()=>{
         const diagnostics=await loadRuntimeDiagnostics();
         diagnostics?.recordRuntimeDiagnostic({event:'stage_started',stage:PREPARATION_STAGE,module:'new-post',status:'loading'});
@@ -129,6 +143,7 @@ async function renderState(state,options={}){
     router.show('home');
     return true;
   }
+  if(!await ensureFeatureRuntimeOrReport())return false;
   const composerView=await getNewPostEntryOrReport();
   if(!composerView)return false;
   if(state===STATES.BEFORE_AFTER){
@@ -147,9 +162,22 @@ async function renderState(state,options={}){
   return true;
 }
 const navigation=createNavigationStack({render:renderState});
-window.CosmoNavigation=navigation;
-
-const nav=composer.querySelector('.composer-nav');if(nav&&!nav.querySelector('#flow-composer-back')){const backButton=document.createElement('button');backButton.id='flow-composer-back';backButton.className='cosmo-composer-back';backButton.type='button';backButton.setAttribute('aria-label','Назад');backButton.textContent='‹ Назад';nav.prepend(backButton);backButton.addEventListener('click',()=>{void navigation.back()})}
+function ensureComposerBackButton(){
+  const nav=composer.querySelector('.composer-nav');
+  if(!nav||nav.querySelector('#flow-composer-back'))return;
+  const backButton=document.createElement('button');backButton.id='flow-composer-back';backButton.className='cosmo-composer-back';backButton.type='button';backButton.setAttribute('aria-label','Назад');backButton.textContent='‹ Назад';nav.prepend(backButton);backButton.addEventListener('click',()=>{void navigation.back()});
+}
+ensureComposerBackButton();
+window.CosmoNavigation=Object.freeze({
+  STATES:navigation.STATES,
+  push:navigation.push,
+  replace:navigation.replace,
+  reset:navigation.reset,
+  back:navigation.back,
+  ensureComposerBackButton,
+  get current(){return navigation.current},
+  get stack(){return navigation.stack}
+});
 
 async function commitNewPost(draft){
   const composerView=await getNewPostEntryOrReport();
@@ -165,9 +193,11 @@ async function openNewPost(){
   if(newPostInFlight)return;
   newPostInFlight=true;
   const button=home.querySelector('#flow-new');button.disabled=true;
-  const preparation=settlePreparation();
+  const featureRuntime=ensureFeatureRuntime();
   try{
     if(!(await confirmDraftReplacement()))return;
+    if(!await ensureFeatureRuntimeOrReport(featureRuntime))return;
+    const preparation=settlePreparation();
     const draft=window.CosmoSofaDraft;
     if(!draft){if(await prepareNewPostOrReport(preparation))await commitNewPost(draft);return}
     let state;
@@ -180,23 +210,25 @@ async function openNewPost(){
 let resumeInFlight=false,resumeOperation=0;
 async function resumeDraft(){
   if(resumeInFlight)return;
-  const draft=window.CosmoSofaDraft,overlay=window.CosmoDraftLoadingOverlay;
-  if(!draft?.load)return;
-  const operation=++resumeOperation;
-  let cancelled=false;
-  const cancelRestore=()=>{
-    if(cancelled||operation!==resumeOperation)return;
-    cancelled=true;
-    resumeOperation++;
-    resumeInFlight=false;
-    continueButton.disabled=false;
-    draft.cancelRestore?.();
-    overlay?.hide?.();
-    void navigation.reset([STATES.HOME]);
-  };
-  resumeInFlight=true;continueButton.disabled=true;overlay?.showLoading?.(cancelRestore);
-  const preparation=settlePreparation();
+  resumeInFlight=true;continueButton.disabled=true;
   try{
+    if(!await ensureFeatureRuntimeOrReport())return;
+    const draft=window.CosmoSofaDraft,overlay=window.CosmoDraftLoadingOverlay;
+    if(!draft?.load)return;
+    const operation=++resumeOperation;
+    let cancelled=false;
+    const cancelRestore=()=>{
+      if(cancelled||operation!==resumeOperation)return;
+      cancelled=true;
+      resumeOperation++;
+      resumeInFlight=false;
+      continueButton.disabled=false;
+      draft.cancelRestore?.();
+      overlay?.hide?.();
+      void navigation.reset([STATES.HOME]);
+    };
+    overlay?.showLoading?.(cancelRestore);
+    const preparation=settlePreparation();
     let restored;
     try{restored=await draft.load()}catch{if(cancelled)return;overlay?.hide?.();await showDraftLoadError();return}
     if(cancelled||operation!==resumeOperation)return;
@@ -213,10 +245,16 @@ async function resumeDraft(){
     overlay?.hide?.();
     await navigation.reset([STATES.HOME,STATES.MENU]);
   }finally{
-    if(operation===resumeOperation){resumeInFlight=false;continueButton.disabled=false}
+    if(resumeInFlight){resumeInFlight=false;continueButton.disabled=false}
   }
 }
 home.querySelector('#flow-new').addEventListener('click',()=>{void openNewPost()});
 continueButton.addEventListener('click',()=>{void resumeDraft()});
+settingsButton?.addEventListener('click',event=>{
+  event.stopPropagation();
+  if(settingsButton.disabled)return;
+  settingsButton.disabled=true;
+  void ensureFeatureRuntime().then(()=>router.openSettings()).catch(error=>console.error('Settings runtime failed to load',error)).finally(()=>{settingsButton.disabled=false});
+});
 router.show('home',{notify:false});
 })();
