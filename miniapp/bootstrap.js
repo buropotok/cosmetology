@@ -125,7 +125,7 @@ let composerRuntimePromise=null;
 async function loadComposerFeatureRuntime(){
   if(!composerRuntimePromise){
     composerRuntimePromise=(async()=>{
-      await loadSettingsRuntime();
+      await ensureFeaturePlatform();
       await loadComposerUi();
       await loadComposerRuntime();
       await loadRuntimeIntegrations();
