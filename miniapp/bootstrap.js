@@ -26,6 +26,11 @@ function startRuntimeDiagnostics(){
     .catch(error=>console.warn('Diagnostic trace panel failed to start',error));
 }
 
+function startBuildId(){
+  void import('/build-id.js')
+    .catch(error=>console.warn('Build id failed to start',error));
+}
+
 function startComposerGallery(){
   void import('/composer-media-gallery-bridge.js')
     .then(galleryBridge=>galleryBridge.initComposerMediaGalleryBridge?.())
@@ -36,7 +41,6 @@ async function loadCriticalShell(){
   await import('/telegram-gateway.js');
   await import('/app-router.js');
   await import('/navigation.js');
-  await import('/build-id.js');
 }
 
 async function loadOnboardingAndSettings(){
@@ -107,6 +111,7 @@ window.CosmoFeatureRuntime=Object.freeze({load:loadFeatureRuntime});
 async function start(){
   loadWorkspaceStyles();
   startRuntimeDiagnostics();
+  startBuildId();
   await loadCriticalShell();
   const webApp=window.Telegram?.WebApp;
   webApp?.expand?.();
