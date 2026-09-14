@@ -5,12 +5,16 @@ import {readFile} from 'node:fs/promises';
 const bootstrap=await readFile(new URL('./bootstrap.js',import.meta.url),'utf8');
 const splashCss=await readFile(new URL('./startup-splash.css',import.meta.url),'utf8');
 
-test('startup bootstrap routes every dynamic module load through the visible trace',()=>{
-  assert.match(bootstrap,/async function loadStartupModule\(modulePath\)/);
-  assert.equal((bootstrap.match(/\bimport\(/g)||[]).length,1);
-  assert.match(bootstrap,/appendStartupLog\('START',modulePath\)/);
-  assert.match(bootstrap,/appendStartupLog\('OK',modulePath,/);
-  assert.match(bootstrap,/appendStartupLog\('ERROR',modulePath,/);
+test('startup bootstrap traces module lifecycle without hiding explicit import contracts',()=>{
+  assert.match(bootstrap,/async function loadStartupModule\(moduleName,loader\)/);
+  assert.match(bootstrap,/const module=await loader\(\)/);
+  assert.doesNotMatch(bootstrap,/import\(modulePath\)/);
+  assert.match(bootstrap,/appendStartupLog\('START',moduleName\)/);
+  assert.match(bootstrap,/appendStartupLog\('OK',moduleName,/);
+  assert.match(bootstrap,/appendStartupLog\('ERROR',moduleName,/);
+  assert.match(bootstrap,/import\('\/telegram-gateway\.js'\)/);
+  assert.match(bootstrap,/void import\('\/runtime-diagnostics\.js'\)/);
+  assert.match(bootstrap,/void import\('\/composer-media-gallery-bridge\.js'\)/);
   assert.match(bootstrap,/throw error;/);
 });
 
