@@ -21,3 +21,9 @@ test('Idea separators remain and inline select button reuses the existing action
   assert.match(css,/\.publish-ai-wizard__idea-select\{margin-top:10px\}/);
   assert.match(css,/\.publish-ai-wizard__controls button,\.publish-ai-wizard__idea-select\{/);
 });
+
+test('Selected idea is sent as structured title and text metadata',()=>{
+  assert.match(source,/requestMeta=\{\}/);
+  assert.match(source,/JSON\.stringify\(\{message,mode,\.\.\.requestMeta\}\)/);
+  assert.match(source,/selectedIdea:\{title:idea\.title,text:idea\.text\}/);
+});
