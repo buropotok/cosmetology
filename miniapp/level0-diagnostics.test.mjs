@@ -25,7 +25,9 @@ test('Level 0 diagnostics can persist before telegram-web-app.js initializes',()
   assert.match(probe,/readParam\('tgWebAppData'\)/);
   assert.match(probe,/XMLHttpRequest/);
   assert.match(probe,/xhr\.open\('POST',ENDPOINT,true\)/);
-  assert.match(probe,/xhr\.setRequestHeader\('authorization','tma '\+initData\)/);
+  assert.match(probe,/var auth=initData/);
+  assert.match(probe,/window\.Telegram&&window\.Telegram\.WebApp/);
+  assert.match(probe,/xhr\.setRequestHeader\('authorization','tma '\+auth\)/);
   assert.match(probe,/ENDPOINT='\/api\/miniapp\/runtime-diagnostics'/);
   const snapshot=probe.slice(probe.indexOf('function snapshot()'),probe.indexOf('function send()'));
   assert.doesNotMatch(snapshot,/initData|tgWebAppData/);
