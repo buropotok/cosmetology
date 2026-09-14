@@ -38,16 +38,14 @@ describe('public topic history route', () => {
     expect(await response.text()).toContain('ИСТОРИЯ РАНЕЕ ВЫБРАННЫХ ПОЛЬЗОВАТЕЛЕМ ТЕМ');
   });
 
-  it('returns 400 for a malformed user id', async () => {
-    const response = await worker.fetch(
+  it('rejects a malformed user id through the Worker route', async () => {
+    await expect(worker.fetch(
       new Request('https://worker.example/api/ai/topic-history/%2E%2E.txt'),
       makeEnv(),
       ctx,
-    );
-
-    expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toMatchObject({
-      error: { code: 'TOPIC_HISTORY_USER_ID_INVALID' },
+    )).rejects.toMatchObject({
+      code: 'TOPIC_HISTORY_USER_ID_INVALID',
+      status: 400,
     });
   });
 });
