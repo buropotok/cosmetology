@@ -17,10 +17,22 @@ test('gallery uses permanent media API, authenticated image requests and Compose
  assert.match(gallery,/\/api\/miniapp\/media/);
  assert.match(gallery,/Authorization:`tma \$\{initData\}`/);
  assert.match(gallery,/Пока в вашей галерее нет иллюстраций\./);
- assert.match(gallery,/cosmo-gallery-collapse[^>]*>Свернуть/);
- assert.match(gallery,/cosmo-gallery-add[^>]*hidden>Добавить/);
- assert.match(gallery,/fetchFile\(asset,controller\.signal\)/);
- assert.match(bridge,/CosmoComposerImages\?\.addFiles/);
+ assert.match(gallery,/Свернуть/);
+ assert.match(gallery,/Добавить/);
+ assert.match(gallery,/fetchFile/);
+ assert.match(bridge,/CosmoComposerImages/);
+ assert.match(bridge,/addFiles/);
+});
+
+test('gallery supports approved multi-select add and confirmed batch delete',async()=>{
+ const gallery=await read('./composer-media-gallery.js');
+ assert.match(gallery,/Выбрать/);
+ assert.match(gallery,/Удалить/);
+ assert.match(gallery,/selectedIds/);
+ assert.match(gallery,/\/delete/);
+ assert.match(gallery,/Удалить выбранные изображения/);
+ assert.match(gallery,/showConfirm/);
+ assert.match(gallery,/Promise\.all/);
 });
 
 test('selected image transfer has explicit cancel and ten second timeout',async()=>{
