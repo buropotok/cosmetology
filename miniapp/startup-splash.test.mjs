@@ -18,6 +18,18 @@ test('startup bootstrap traces module lifecycle without hiding explicit import c
   assert.match(bootstrap,/throw error;/);
 });
 
+test('startup module trace is mirrored to persistent diagnostics without blocking imports',()=>{
+  const recorder=bootstrap.slice(bootstrap.indexOf('function recordStartupRuntimeDiagnostic'),bootstrap.indexOf('async function loadStartupModule'));
+  const loader=bootstrap.slice(bootstrap.indexOf('async function loadStartupModule'),bootstrap.indexOf('function loadWorkspaceStyles'));
+  assert.match(recorder,/void import\('\/runtime-diagnostics\.js'\)/);
+  assert.match(recorder,/recordRuntimeDiagnostic\?\.\(\{/);
+  assert.match(recorder,/stage:'application\.startup'/);
+  assert.match(loader,/recordStartupRuntimeDiagnostic\(\{module:moduleName,status:'loading'\}\)/);
+  assert.match(loader,/recordStartupRuntimeDiagnostic\(\{module:moduleName,status:'loaded',durationMs\}\)/);
+  assert.match(loader,/recordStartupRuntimeDiagnostic\(\{module:moduleName,status:'failed',durationMs,error\}\)/);
+  assert.doesNotMatch(loader,/await recordStartupRuntimeDiagnostic/);
+});
+
 test('startup splash becomes visible before platform imports and stays until bootstrap completes',()=>{
   const start=bootstrap.slice(bootstrap.indexOf('async function start()'));
   assert.ok(start.indexOf('showStartupSplash()')<start.indexOf('await loadPlatform()'));
