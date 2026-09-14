@@ -1,4 +1,74 @@
 const BOOTSTRAP_KEY='__CosmoMiniAppBootstrap';
+const STARTUP_SPLASH_ID='cosmo-startup-splash';
+const STARTUP_LOG_ID='cosmo-startup-log';
+const startupStartedAt=Date.now();
+
+function loadStartupSplashStyles(){
+  if(document.querySelector('link[data-cosmo-startup-splash]'))return;
+  const link=document.createElement('link');
+  link.rel='stylesheet';
+  link.href='/startup-splash.css';
+  link.dataset.cosmoStartupSplash='';
+  document.head.append(link);
+}
+
+function startupErrorMessage(error){
+  if(error instanceof Error)return`${error.name}: ${error.message}`;
+  return String(error);
+}
+
+function appendStartupLog(status,subject,detail=''){
+  const output=document.querySelector(`#${STARTUP_LOG_ID}`);
+  if(!output)return;
+  const elapsed=Date.now()-startupStartedAt;
+  const suffix=detail?` — ${detail}`:'';
+  output.textContent+=`+${elapsed}ms [${status}] ${subject}${suffix}\n`;
+  output.scrollTop=output.scrollHeight;
+}
+
+function showStartupSplash(){
+  loadStartupSplashStyles();
+  let splash=document.querySelector(`#${STARTUP_SPLASH_ID}`);
+  if(!splash){
+    splash=document.createElement('section');
+    splash.id=STARTUP_SPLASH_ID;
+    splash.className='cosmo-startup-splash';
+    splash.setAttribute('aria-label','Загрузка приложения');
+    splash.innerHTML='<p class="cosmo-startup-splash__title">Загрузка Cosmo Sofa…</p><pre id="cosmo-startup-log" class="cosmo-startup-splash__log" aria-live="polite"></pre>';
+    document.body.appendChild(splash);
+  }
+  splash.hidden=false;
+  appendStartupLog('START','/bootstrap.js');
+  const webApp=window.Telegram?.WebApp;
+  if(!webApp){
+    appendStartupLog('INFO','Telegram.WebApp','API недоступен');
+    return;
+  }
+  try{
+    webApp.ready();
+    appendStartupLog('OK','Telegram.WebApp.ready()');
+  }catch(error){
+    appendStartupLog('ERROR','Telegram.WebApp.ready()',startupErrorMessage(error));
+  }
+}
+
+function hideStartupSplash(){
+  const splash=document.querySelector(`#${STARTUP_SPLASH_ID}`);
+  if(splash)splash.hidden=true;
+}
+
+async function loadStartupModule(modulePath){
+  const startedAt=Date.now();
+  appendStartupLog('START',modulePath);
+  try{
+    const module=await import(modulePath);
+    appendStartupLog('OK',modulePath,`${Date.now()-startedAt}ms`);
+    return module;
+  }catch(error){
+    appendStartupLog('ERROR',modulePath,`${Date.now()-startedAt}ms; ${startupErrorMessage(error)}`);
+    throw error;
+  }
+}
 
 function loadWorkspaceStyles(){
   if(!document.querySelector('link[data-cosmo-workspace-spacing]')){
@@ -19,80 +89,88 @@ function loadWorkspaceStyles(){
 }
 
 function startRuntimeDiagnostics(){
-  void import('/runtime-diagnostics.js')
+  void loadStartupModule('/runtime-diagnostics.js')
     .then(diagnostics=>diagnostics.startRuntimeDiagnostics?.())
     .catch(error=>console.warn('Runtime diagnostics failed to start',error));
-  void import('/diagnostic-trace-panel.js')
+  void loadStartupModule('/diagnostic-trace-panel.js')
     .catch(error=>console.warn('Diagnostic trace panel failed to start',error));
 }
 
 function startComposerGallery(){
-  void import('/composer-media-gallery-bridge.js')
+  void loadStartupModule('/composer-media-gallery-bridge.js')
     .then(galleryBridge=>galleryBridge.initComposerMediaGalleryBridge?.())
     .catch(error=>console.warn('Composer gallery failed to start',error));
 }
 
 async function loadPlatform(){
-  await import('/telegram-gateway.js');
-  await import('/app-router.js');
-  await import('/app.js');
-  await import('/account-state.js');
+  await loadStartupModule('/telegram-gateway.js');
+  await loadStartupModule('/app-router.js');
+  await loadStartupModule('/app.js');
+  await loadStartupModule('/account-state.js');
 }
 
 async function loadOnboardingAndSettings(){
-  await import('/onboarding-api.js');
-  await import('/vk-destination-selection.js');
-  await import('/onboarding-controller.js');
-  await import('/onboarding-view.js');
-  await import('/onboarding-router.js');
-  await import('/settings.js');
-  await import('/composer-mockup.js');
+  await loadStartupModule('/onboarding-api.js');
+  await loadStartupModule('/vk-destination-selection.js');
+  await loadStartupModule('/onboarding-controller.js');
+  await loadStartupModule('/onboarding-view.js');
+  await loadStartupModule('/onboarding-router.js');
+  await loadStartupModule('/settings.js');
+  await loadStartupModule('/composer-mockup.js');
 }
 
 async function loadAppShell(){
-  await import('/before-after-controller.js');
-  await import('/publish-ai-wizard.js');
-  await import('/ai-generation-status.js');
-  await import('/navigation.js');
-  await import('/draft-loading-overlay.js');
-  await import('/ai-response-ui.js');
+  await loadStartupModule('/before-after-controller.js');
+  await loadStartupModule('/publish-ai-wizard.js');
+  await loadStartupModule('/ai-generation-status.js');
+  await loadStartupModule('/navigation.js');
+  await loadStartupModule('/draft-loading-overlay.js');
+  await loadStartupModule('/ai-response-ui.js');
 }
 
 async function loadComposerRuntime(){
   await Promise.all([
-    import('/composer-screen.js'),
-    import('/composer-editor-stability.js'),
-    import('/composer-image-manager.js'),
-    import('/before-after-bridge.js')
+    loadStartupModule('/composer-screen.js'),
+    loadStartupModule('/composer-editor-stability.js'),
+    loadStartupModule('/composer-image-manager.js'),
+    loadStartupModule('/before-after-bridge.js')
   ]);
-  await import('/diagnostics-fetch.js');
-  await import('/composer-state.js');
-  await import('/composer-image-generation.js');
+  await loadStartupModule('/diagnostics-fetch.js');
+  await loadStartupModule('/composer-state.js');
+  await loadStartupModule('/composer-image-generation.js');
   startComposerGallery();
-  await import('/draft-store.js');
-  await import('/drafts.js');
-  await import('/composer-actions.js');
-  await import('/composer-vk-destination.js');
-  await import('/onboarding-flow.js');
+  await loadStartupModule('/draft-store.js');
+  await loadStartupModule('/drafts.js');
+  await loadStartupModule('/composer-actions.js');
+  await loadStartupModule('/composer-vk-destination.js');
+  await loadStartupModule('/onboarding-flow.js');
 }
 
 async function loadRuntimeIntegrations(){
   await Promise.all([
-    import('/ai-post-editor-transfer.js'),
-    import('/build-id.js'),
-    import('/vk-return-confirmation.js')
+    loadStartupModule('/ai-post-editor-transfer.js'),
+    loadStartupModule('/build-id.js'),
+    loadStartupModule('/vk-return-confirmation.js')
   ]);
 }
 
 async function start(){
-  loadWorkspaceStyles();
-  startRuntimeDiagnostics();
-  await loadPlatform();
-  await loadOnboardingAndSettings();
-  await loadAppShell();
-  await loadComposerRuntime();
-  await loadRuntimeIntegrations();
-  return Object.freeze({ready:true});
+  showStartupSplash();
+  try{
+    loadWorkspaceStyles();
+    startRuntimeDiagnostics();
+    await loadPlatform();
+    await loadOnboardingAndSettings();
+    await loadAppShell();
+    await loadComposerRuntime();
+    await loadRuntimeIntegrations();
+    appendStartupLog('OK','/bootstrap.js',`${Date.now()-startupStartedAt}ms total`);
+    hideStartupSplash();
+    return Object.freeze({ready:true});
+  }catch(error){
+    appendStartupLog('ERROR','/bootstrap.js',startupErrorMessage(error));
+    throw error;
+  }
 }
 
 window[BOOTSTRAP_KEY]??=start();
