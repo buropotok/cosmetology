@@ -55,6 +55,14 @@ async function ensureFeatureRuntimeOrReport(promise=ensureFeatureRuntime()){
   try{await promise;return true}
   catch(error){console.error('Feature runtime failed to load',error);await showNewPostLoadError();return false}
 }
+let settingsRuntimePromise=null;
+function ensureSettingsRuntime(){
+  if(settingsRuntimePromise)return settingsRuntimePromise;
+  const load=window.CosmoFeatureRuntime?.loadSettings;
+  if(typeof load!=='function')return Promise.reject(new Error('Settings runtime loader unavailable'));
+  settingsRuntimePromise=Promise.resolve(load()).catch(error=>{settingsRuntimePromise=null;throw error});
+  return settingsRuntimePromise;
+}
 const PREPARATION_MIN_MS=450;
 const PREPARATION_STAGE='new-post.preparation';
 let diagnosticsPromise,editorPreparationPromise,editorPrepared=false;
@@ -254,7 +262,7 @@ settingsButton?.addEventListener('click',event=>{
   event.stopPropagation();
   if(settingsButton.disabled)return;
   settingsButton.disabled=true;
-  void ensureFeatureRuntime().then(()=>router.openSettings()).catch(error=>console.error('Settings runtime failed to load',error)).finally(()=>{settingsButton.disabled=false});
+  void ensureSettingsRuntime().then(()=>router.openSettings()).catch(error=>console.error('Settings runtime failed to load',error)).finally(()=>{settingsButton.disabled=false});
 });
 router.show('home',{notify:false});
 })();
