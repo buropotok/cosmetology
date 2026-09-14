@@ -32,14 +32,16 @@ function startComposerGallery(){
     .catch(error=>console.warn('Composer gallery failed to start',error));
 }
 
-async function loadPlatform(){
+async function loadCriticalShell(){
   await import('/telegram-gateway.js');
   await import('/app-router.js');
-  await import('/app.js');
-  await import('/account-state.js');
+  await import('/navigation.js');
+  await import('/build-id.js');
 }
 
 async function loadOnboardingAndSettings(){
+  await import('/app.js');
+  await import('/account-state.js');
   await import('/onboarding-api.js');
   await import('/vk-destination-selection.js');
   await import('/onboarding-controller.js');
@@ -47,13 +49,13 @@ async function loadOnboardingAndSettings(){
   await import('/onboarding-router.js');
   await import('/settings.js');
   await import('/composer-mockup.js');
+  window.CosmoNavigation?.ensureComposerBackButton?.();
 }
 
-async function loadAppShell(){
+async function loadFeatureUi(){
   await import('/before-after-controller.js');
   await import('/publish-ai-wizard.js');
   await import('/ai-generation-status.js');
-  await import('/navigation.js');
   await import('/draft-loading-overlay.js');
   await import('/ai-response-ui.js');
 }
@@ -79,19 +81,36 @@ async function loadComposerRuntime(){
 async function loadRuntimeIntegrations(){
   await Promise.all([
     import('/ai-post-editor-transfer.js'),
-    import('/build-id.js'),
     import('/vk-return-confirmation.js')
   ]);
 }
 
+let featureRuntimePromise=null;
+async function loadFeatureRuntime(){
+  if(!featureRuntimePromise){
+    featureRuntimePromise=(async()=>{
+      await loadOnboardingAndSettings();
+      await loadFeatureUi();
+      await loadComposerRuntime();
+      await loadRuntimeIntegrations();
+      return Object.freeze({ready:true});
+    })().catch(error=>{
+      featureRuntimePromise=null;
+      throw error;
+    });
+  }
+  return featureRuntimePromise;
+}
+
+window.CosmoFeatureRuntime=Object.freeze({load:loadFeatureRuntime});
+
 async function start(){
   loadWorkspaceStyles();
   startRuntimeDiagnostics();
-  await loadPlatform();
-  await loadOnboardingAndSettings();
-  await loadAppShell();
-  await loadComposerRuntime();
-  await loadRuntimeIntegrations();
+  await loadCriticalShell();
+  const webApp=window.Telegram?.WebApp;
+  webApp?.expand?.();
+  webApp?.ready?.();
   return Object.freeze({ready:true});
 }
 
