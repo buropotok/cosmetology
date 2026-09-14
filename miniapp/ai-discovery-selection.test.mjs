@@ -21,3 +21,9 @@ test('Idea separators remain and inline select button reuses the existing action
   assert.match(css,/\.publish-ai-wizard__idea-select\{margin-top:10px\}/);
   assert.match(css,/\.publish-ai-wizard__controls button,\.publish-ai-wizard__idea-select\{/);
 });
+
+test('Confirmed idea is sent as structured selectedIdea only with full-post request',()=>{
+  assert.match(source,/selectedIdea\?\{message,mode,selectedIdea:\{title:selectedIdea\.title,text:selectedIdea\.text\}\}:\{message,mode\}/);
+  assert.match(source,/requestAi\(prompt,'text',imageOptionsForPreset\(activePreset\(\)\),idea\)/);
+  assert.doesNotMatch(source,/requestAi\([^\n]*'discovery'[^\n]*selectedIdea/);
+});

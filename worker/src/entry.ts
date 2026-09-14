@@ -15,6 +15,7 @@ import { decryptManagedBotToken } from './services/managed-bot-crypto';
 import { deleteTelegramMessageWithToken, getTelegramBotMeWithToken, sendTelegramVkBackupWithToken } from './services/telegram';
 import { adminHtml, listAdminUsers, deleteAdminTelegramBot, deleteAdminTelegramGroup, deleteAdminVkGroup, deleteAdminUser } from './admin';
 import { AppError, type Env } from './types';
+import { getTopicHistory } from './services/topic-history';
 
 const json = (body: unknown, status = 200, extra: HeadersInit = {}) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', ...extra } });
 const onboardingCors = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'content-type', 'access-control-allow-methods': 'GET, POST, OPTIONS' };
@@ -69,6 +70,7 @@ export default { async fetch(req: Request, env: Env, ctx: ExecutionContext) {
     if (req.method === 'GET' && url.pathname === '/api/miniapp/session') { await checkTelegramMiniAppSession(req,env); return json({ok:true}); }
     if (req.method === 'POST' && url.pathname === '/api/miniapp/runtime-diagnostics') return json(await saveRuntimeDiagnostics(req,env));
     if (req.method === 'POST' && url.pathname === '/api/miniapp/ai/chat') return json(await generateMiniAppAiReply(req, env));
+    const topicHistory=url.pathname.match(/^\/api\/ai\/topic-history\/([^/]+)\.txt$/);if(req.method==='GET'&&topicHistory)return getTopicHistory(env,topicHistory[1]);
     if (req.method === 'GET' && url.pathname === '/api/miniapp/news/status') return json(await getMiniAppNewsGenerationStatus(req, env));
     if (req.method === 'POST' && url.pathname === '/api/miniapp/ai/image') return generateMiniAppImage(req, env);
     if (req.method === 'POST' && url.pathname === '/api/miniapp/ai/image/search') return handleImageSearch(req, env);
