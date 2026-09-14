@@ -26,6 +26,12 @@ function startRuntimeDiagnostics(){
     .catch(error=>console.warn('Diagnostic trace panel failed to start',error));
 }
 
+function startComposerGallery(){
+  void import('/composer-media-gallery-bridge.js')
+    .then(galleryBridge=>galleryBridge.initComposerMediaGalleryBridge?.())
+    .catch(error=>console.warn('Composer gallery failed to start',error));
+}
+
 async function loadPlatform(){
   await import('/telegram-gateway.js');
   await import('/app-router.js');
@@ -62,6 +68,7 @@ async function loadComposerRuntime(){
   await import('/diagnostics-fetch.js');
   await import('/composer-state.js');
   await import('/composer-image-generation.js');
+  startComposerGallery();
   await import('/draft-store.js');
   await import('/drafts.js');
   await import('/composer-actions.js');
