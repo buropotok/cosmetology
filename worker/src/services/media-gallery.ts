@@ -19,6 +19,26 @@ export async function getMediaGallery(request:Request,env:Env){
   return {assets:assets.map(asset=>({id:asset.id,thumbnailId:asset.thumbnailId,fileName:asset.fileName,contentType:asset.contentType,size:asset.size,sourceType:asset.sourceType,createdAt:asset.createdAt,originalUrl:`/api/miniapp/media/original/${encodeURIComponent(asset.id)}`,thumbnailUrl:asset.thumbnailId?`/api/miniapp/media/thumbnail/${encodeURIComponent(asset.thumbnailId)}`:null})),nextCursor:hasMore&&last?encodeCursor({createdAt:last.createdAt,id:last.id}):null};
 }
 
+export async function deleteMediaGalleryAssets(request:Request,env:Env){
+  const account=await accountFor(request,env);
+  let body:unknown;try{body=await request.json()}catch{throw new AppError('INVALID_MEDIA_SELECTION','Некорректный список изображений',400);}
+  const ids=Array.isArray((body as {ids?:unknown})?.ids)?(body as {ids:unknown[]}).ids:null;
+  if(!ids||ids.length===0||ids.some(id=>typeof id!=='string'||!id||id.length>128)||new Set(ids).size!==ids.length)throw new AppError('INVALID_MEDIA_SELECTION','Некорректный список изображений',400);
+  const placeholders=ids.map(()=>'?').join(',');
+  const rows=await env.DB.prepare(`SELECT id,r2_key AS key,thumbnail_id AS thumbnailId FROM media_assets WHERE user_id=? AND id IN (${placeholders})`).bind(account.userId,...ids).all<{id:string;key:string;thumbnailId:string|null}>();
+  const owned=rows.results||[];
+  if(owned.length!==ids.length)throw new AppError('NOT_FOUND','Одно или несколько изображений не найдены',404);
+  await env.DB.batch([
+    env.DB.prepare(`UPDATE miniapp_before_after_assets SET before_asset_id=NULL WHERE user_id=? AND before_asset_id IN (${placeholders})`).bind(account.userId,...ids),
+    env.DB.prepare(`UPDATE miniapp_before_after_assets SET after_asset_id=NULL WHERE user_id=? AND after_asset_id IN (${placeholders})`).bind(account.userId,...ids),
+    env.DB.prepare(`DELETE FROM media_assets WHERE user_id=? AND id IN (${placeholders})`).bind(account.userId,...ids),
+  ]);
+  const keys=owned.flatMap(asset=>[asset.key,...(asset.thumbnailId?[`image_thumbnail/${account.userId}/${asset.thumbnailId}`]:[])]);
+  const cleanup=await Promise.allSettled(keys.map(key=>env.IMAGES.delete(key)));
+  cleanup.forEach((result,index)=>{if(result.status==='rejected')console.error('gallery media cleanup failed',{key:keys[index],error:result.reason instanceof Error?result.reason.message:String(result.reason)})});
+  return {ok:true,deleted:owned.map(asset=>asset.id)};
+}
+
 export async function getMediaOriginal(request:Request,env:Env,assetId:string){
   const account=await accountFor(request,env),asset=await env.DB.prepare('SELECT r2_key AS key,content_type AS contentType FROM media_assets WHERE user_id=? AND id=? LIMIT 1').bind(account.userId,assetId).first<{key:string;contentType:string|null}>();
   if(!asset)throw new AppError('NOT_FOUND','Изображение не найдено',404);
