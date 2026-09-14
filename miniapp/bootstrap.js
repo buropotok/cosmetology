@@ -91,10 +91,8 @@ function loadWorkspaceStyles(){
 
 function startRuntimeDiagnostics(){
   void import('/runtime-diagnostics.js')
-    .then(diagnostics=>{
-      appendStartupLog('OK','runtime-diagnostics.js',`${Date.now()-runtimeDiagnosticsStartedAt}ms`);
-      return diagnostics.startRuntimeDiagnostics?.();
-    })
+    .then(diagnostics=>diagnostics.startRuntimeDiagnostics?.())
+    .then(()=>appendStartupLog('OK','runtime-diagnostics.js',`${Date.now()-runtimeDiagnosticsStartedAt}ms`))
     .catch(error=>{
       appendStartupLog('ERROR','runtime-diagnostics.js',`${Date.now()-runtimeDiagnosticsStartedAt}ms; ${startupErrorMessage(error)}`);
       console.warn('Runtime diagnostics failed to start',error);
