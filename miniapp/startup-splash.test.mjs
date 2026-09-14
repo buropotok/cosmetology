@@ -23,9 +23,11 @@ test('startup splash becomes visible before platform imports and stays until boo
   assert.match(show,/aria-live=\"polite\"/);
 });
 
-test('startup trace uses isolated static styles and contains no auth payload logging',()=>{
+test('startup trace uses isolated compatible styles and contains no auth payload logging',()=>{
   assert.match(bootstrap,/href='\/startup-splash\.css'/);
-  assert.match(splashCss,/\.cosmo-startup-splash\{position:fixed;/);
+  assert.match(bootstrap,/splash\.scrollTop=splash\.scrollHeight/);
+  assert.match(splashCss,/\.cosmo-startup-splash\{position:fixed;top:0;right:0;bottom:0;left:0;/);
+  assert.doesNotMatch(splashCss,/\binset:/);
   assert.match(splashCss,/\.cosmo-startup-splash\[hidden\]\{display:none!important\}/);
   assert.doesNotMatch(bootstrap,/initData|Authorization/);
 });

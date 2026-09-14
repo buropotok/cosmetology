@@ -23,7 +23,8 @@ function appendStartupLog(status,subject,detail=''){
   const elapsed=Date.now()-startupStartedAt;
   const suffix=detail?` — ${detail}`:'';
   output.textContent+=`+${elapsed}ms [${status}] ${subject}${suffix}\n`;
-  output.scrollTop=output.scrollHeight;
+  const splash=output.parentElement;
+  if(splash)splash.scrollTop=splash.scrollHeight;
 }
 
 function showStartupSplash(){
