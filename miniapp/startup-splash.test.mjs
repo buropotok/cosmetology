@@ -35,9 +35,10 @@ test('startup splash becomes visible before platform imports and stays until boo
   const start=bootstrap.slice(bootstrap.indexOf('async function start()'));
   assert.ok(start.indexOf('showStartupSplash()')<start.indexOf('await loadPlatform()'));
   assert.ok(start.indexOf('hideStartupSplash()')>start.indexOf('await loadRuntimeIntegrations()'));
-  const show=bootstrap.slice(bootstrap.indexOf('function showStartupSplash()'),bootstrap.indexOf('function hideStartupSplash()'));
+  const show=bootstrap.slice(bootstrap.indexOf('function showStartupSplash()'),bootstrap.indexOf('function showStartupFailure()'));
   assert.match(show,/webApp\.ready\(\)/);
   assert.match(show,/src=\"\/icons\/sofa-animated\.svg\"/);
+  assert.match(show,/id=\"cosmo-startup-error\"[^>]*hidden>Не удалось загрузить приложение<\/p>/);
   assert.match(show,/id=\"cosmo-startup-log\"[^>]*hidden/);
 });
 
@@ -45,9 +46,10 @@ test('startup splash is a centered white logo screen while diagnostics remain hi
   assert.match(bootstrap,/href='\/startup-splash\.css'/);
   assert.match(bootstrap,/splash\.scrollTop=splash\.scrollHeight/);
   assert.match(splashCss,/\.cosmo-startup-splash\{position:fixed;top:0;right:0;bottom:0;left:0;/);
-  assert.match(splashCss,/display:flex;align-items:center;justify-content:center/);
+  assert.match(splashCss,/display:flex;flex-direction:column;align-items:center;justify-content:center/);
   assert.match(splashCss,/background:#fff/);
   assert.match(splashCss,/\.cosmo-startup-splash__logo\{display:block;width:82vw;max-width:420px;height:auto\}/);
+  assert.match(splashCss,/\.cosmo-startup-splash__error\{text-align:center\}/);
   assert.match(splashCss,/\.cosmo-startup-splash__log\{display:none!important\}/);
   assert.doesNotMatch(splashCss,/\binset:/);
   assert.doesNotMatch(splashCss,/\bmin\(/);
