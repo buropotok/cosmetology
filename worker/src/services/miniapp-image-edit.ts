@@ -44,7 +44,7 @@ function providerSize(width: number, height: number) {
   if (isProviderSize(width, height)) return `${width}x${height}`;
   const sourceRatio = width / height,
     ratio = Math.min(3, Math.max(1 / 3, sourceRatio));
-  let pixels = Math.min(MAX_PROVIDER_PIXELS, Math.max(MIN_PROVIDER_PIXELS, width * height));
+  const pixels = Math.min(MAX_PROVIDER_PIXELS, Math.max(MIN_PROVIDER_PIXELS, width * height));
   let targetHeight = Math.sqrt(pixels / ratio),
     targetWidth = targetHeight * ratio;
   const edgeScale = Math.min(1, MAX_PROVIDER_EDGE / targetWidth, MAX_PROVIDER_EDGE / targetHeight);
@@ -130,10 +130,23 @@ export async function editMiniAppImage(request: Request, env: Env) {
   if (!env.OPENAI_API_KEY)
     throw new AppError("AI_NOT_CONFIGURED", "AI пока не настроен", 503);
 
-  const imageTransform = env.IMAGE_TRANSFORM,
-    sourceInfo = imageTransform?.info
-      ? await imageTransform.info(image.stream()).catch(() => null)
-      : null;
+  const imageTransform = env.IMAGE_TRANSFORM;
+  let sourceInfo = null;
+  if (imageTransform?.info) {
+    sourceInfo = await imageTransform.info(image.stream()).catch(() => {
+      throw new AppError(
+        "INVALID_IMAGE_DATA",
+        "Не удалось определить размер изображения",
+        400,
+      );
+    });
+    if (!(sourceInfo.width > 0 && sourceInfo.height > 0))
+      throw new AppError(
+        "INVALID_IMAGE_DATA",
+        "Не удалось определить размер изображения",
+        400,
+      );
+  }
 
   const providerForm = new FormData();
   providerForm.set("model", env.AI_IMAGE_MODEL?.trim() || DEFAULT_IMAGE_MODEL);
@@ -142,7 +155,7 @@ export async function editMiniAppImage(request: Request, env: Env) {
     "prompt",
     `${EDIT_PROMPT}\n\nИНСТРУКЦИЯ ПОЛЬЗОВАТЕЛЯ:\n${instruction}`,
   );
-  if (sourceInfo?.width && sourceInfo?.height)
+  if (sourceInfo)
     providerForm.set("size", providerSize(sourceInfo.width, sourceInfo.height));
   providerForm.set("quality", "medium");
   providerForm.set("output_format", "png");
@@ -175,7 +188,7 @@ export async function editMiniAppImage(request: Request, env: Env) {
     );
 
   const decoded = decodeBase64(data);
-  if (sourceInfo?.width && sourceInfo?.height && imageTransform?.input) {
+  if (sourceInfo && imageTransform?.input) {
     const transformed = await imageTransform
       .input(new Blob([decoded], { type: "image/png" }).stream())
       .transform({ width: sourceInfo.width, height: sourceInfo.height, fit: "cover" })
