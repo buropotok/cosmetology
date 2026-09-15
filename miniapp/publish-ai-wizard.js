@@ -37,7 +37,7 @@
   function stopSearchDots(){if(dotTimer!==null){clearInterval(dotTimer);dotTimer=null}dotCount=1;if(searchDots)searchDots.textContent='.'}
   function startSearchDots(){stopSearchDots();if(!searchDots)return;dotTimer=setInterval(()=>{dotCount=dotCount%3+1;searchDots.textContent='.'.repeat(dotCount)},450)}
   function setPending(pending){if(searchModal)searchModal.hidden=!pending;if(pending)startSearchDots();else stopSearchDots()}
-  function scrollResponseIntoView(){const response=root.querySelector('.publish-ai-wizard__response');if(!response)return;const scroll=()=>response.scrollIntoView({behavior:'smooth',block:'start'});if(typeof window.requestAnimationFrame==='function')window.requestAnimationFrame(scroll);else scroll()}
+  function scrollResponseIntoView(){const response=root.querySelector('.publish-ai-wizard__response');if(!response)return;responseBody.scrollTop=0;const scroll=()=>response.scrollIntoView({behavior:'smooth',block:'start'});if(typeof window.requestAnimationFrame==='function')window.requestAnimationFrame(scroll);else scroll()}
   function cancelAiMessage(){const controller=activeController;if(!controller)return;activeController=null;controller.abort();setPending(false)}
   async function requestAi(message,mode='text',imageOptions=imageOptionsForPreset(activePreset()),selectedIdea){
     if(!message||activeController)return;
