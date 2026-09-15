@@ -9,6 +9,7 @@ const beforeAfterHtml=await readFile(new URL('./before-after.html',import.meta.u
 const bootstrap=await readFile(new URL('./bootstrap.js',import.meta.url),'utf8');
 const pencil=await readFile(new URL('./assets/icons/manual-edit.svg',import.meta.url),'utf8');
 const transfer=await readFile(new URL('./ai-post-editor-transfer.js',import.meta.url),'utf8');
+const styles=await readFile(new URL('./styles.css',import.meta.url),'utf8');
 
 test('Home new-post flow resets the logical navigation stack to Menu',()=>{
   assert.match(entry,/data-new-post-choice="ai"/);
@@ -60,12 +61,17 @@ test('duplicate manual and before-after actions are removed from AI screen',()=>
   assert.match(entry,/wizard\.querySelectorAll\('\.publish-ai-wizard__manual,\.publish-ai-wizard__before-after'\)\.forEach\(node=>node\.remove\(\)\)/);
 });
 
-test('choice buttons keep requested icons, blue styling and centered labels',()=>{
+test('Home and New Post menu buttons use the shared white pillow styling and keep centered labels',()=>{
   assert.match(entry,/new-post-entry__icon--ai[^>]*[^<]*>✨<\/span>/);
-  assert.match(entry,/\.new-post-entry__button\{[^}]*justify-content:center[^}]*background:#2d8fd3[^}]*text-align:center/);
+  assert.match(entry,/\.new-post-entry__button\{[^}]*justify-content:center[^}]*text-align:center/);
   assert.match(entry,/data-new-post-choice="before-after"[\s\S]*account-box\.svg[\s\S]*account-box\.svg/);
   assert.match(entry,/\.new-post-entry__title\{[^}]*text-align:center/);
   assert.match(entry,/\.new-post-entry__subtitle\{[^}]*text-align:center/);
+  assert.match(styles,/#home-screen \.cosmo-flow-actions \.cosmo-primary,[\s\S]*#home-screen \.cosmo-flow-actions \.cosmo-secondary,[\s\S]*\.new-post-entry \.new-post-entry__actions \.new-post-entry__button\{/);
+  assert.match(styles,/background:radial-gradient\(circle at 32% 28%,#fff 0%,#f5f8fb 30%,#e2eaf1 100%\)/);
+  assert.match(styles,/border-radius:22px/);
+  assert.match(styles,/box-shadow:-5px -5px 9px rgba\(255,255,255,\.98\),7px 8px 11px rgba\(112,130,149,\.34\),0 3px 5px rgba\(105,123,142,\.22\)/);
+  assert.match(styles,/\.new-post-entry \.new-post-entry__actions \.new-post-entry__button:active\{[\s\S]*box-shadow:inset 4px 4px 7px/);
 });
 
 test('existing pencil artwork is unchanged except for white stroke color',()=>{
