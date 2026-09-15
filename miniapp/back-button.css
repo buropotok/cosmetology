@@ -1,4 +1,4 @@
-/* Shared visual contract for in-app Back controls. Navigation behavior remains owned by each screen. */
+/* Shared visual contract for screen-level Back controls. Local in-component Back controls keep component-owned presentation. */
 .back-button {
   -webkit-appearance:none !important;
   appearance:none !important;

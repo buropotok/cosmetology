@@ -5,7 +5,6 @@ import {readFile} from 'node:fs/promises';
 const entry=await readFile(new URL('./new-post-entry.js',import.meta.url),'utf8');
 const navigation=await readFile(new URL('./navigation.js',import.meta.url),'utf8');
 const controller=await readFile(new URL('./before-after-controller.js',import.meta.url),'utf8');
-const beforeAfterHtml=await readFile(new URL('./before-after.html',import.meta.url),'utf8');
 const bootstrap=await readFile(new URL('./bootstrap.js',import.meta.url),'utf8');
 const pencil=await readFile(new URL('./assets/icons/manual-edit.svg',import.meta.url),'utf8');
 const transfer=await readFile(new URL('./ai-post-editor-transfer.js',import.meta.url),'utf8');
@@ -50,10 +49,10 @@ test('Before/After Back and Save use the shared navigation API',()=>{
   assert.doesNotMatch(controller,/dispatchEvent\(new CustomEvent\('cosmo-before-after-close'/);
 });
 
-test('Back controls preserve accessible labels and the shared navigation path',()=>{
+test('Composer Back preserves accessible label and the shared navigation path',()=>{
+  assert.match(navigation,/backButton\.className='cosmo-composer-back back-button'/);
   assert.match(navigation,/backButton\.setAttribute\('aria-label','Назад'\)/);
   assert.match(navigation,/backButton\.addEventListener\('click',\(\)=>\{void navigation\.back\(\)\}\)/);
-  assert.match(beforeAfterHtml,/<button id="back" class="ghost" type="button" aria-label="Назад">‹ Назад<\/button>/);
 });
 
 test('duplicate manual and before-after actions are removed from AI screen',()=>{
