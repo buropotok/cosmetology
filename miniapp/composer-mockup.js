@@ -10,6 +10,27 @@
   const settings=document.querySelector('#open-settings');
   if(!composer||!form||!imageInput||!text||!publish||!publishVk)return;
 
+  function waitForComposerPillowPress(button){
+    if(!button||button.dataset.composerPillowActivation==='pending')return Promise.resolve(false);
+    button.dataset.composerPillowActivation='pending';
+    return new Promise(resolve=>{
+      let settled=false,fallbackTimer;
+      const finish=event=>{
+        if(settled)return;
+        if(event&&(event.target!==button||event.animationName!=='composer-pillow-press-hold'))return;
+        settled=true;
+        button.removeEventListener('animationend',finish);
+        clearTimeout(fallbackTimer);
+        button.classList.remove('composer-pillow-activating');
+        delete button.dataset.composerPillowActivation;
+        resolve(true);
+      };
+      button.addEventListener('animationend',finish);
+      button.classList.add('composer-pillow-activating');
+      fallbackTimer=setTimeout(()=>finish(),180);
+    });
+  }
+
   composer.classList.add('approved-composer');
   const topbar=composer.querySelector('.topbar');
   if(topbar){
@@ -45,7 +66,7 @@
   bottom.append(telegramPreview,publish,publishVk);if(status)bottom.after(status);
   publish.type='submit';publish.setAttribute('form','publish-form');publish.hidden=false;publishVk.hidden=false;
 
-  telegramPreview.addEventListener('click',async()=>{await window.CosmoSofaDraft?.flush?.('preview');
+  telegramPreview.addEventListener('click',async()=>{if(!(await waitForComposerPillowPress(telegramPreview)))return;await window.CosmoSofaDraft?.flush?.('preview');
     const webApp=window.Telegram?.WebApp;
     if(!webApp?.initData){status.textContent='Откройте Mini App внутри Telegram.';status.className='error';return}
     const images=Array.from(imageInput.files||[]).slice(0,10),plainText=currentPlainText();
