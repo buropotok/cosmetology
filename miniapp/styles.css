@@ -12,17 +12,15 @@
   border:1px solid rgba(255,255,255,.78);
   border-radius:22px;
   background:radial-gradient(circle at 32% 28%,#fff 0%,#f5f8fb 30%,#e2eaf1 100%);
-  color:#6f7d8b;
+  color:#536170;
   box-shadow:-5px -5px 9px rgba(255,255,255,.98),7px 8px 11px rgba(112,130,149,.34),0 3px 5px rgba(105,123,142,.22);
   transition:transform 120ms ease,box-shadow 120ms ease,background 120ms ease;
 }
-#home-screen .cosmo-flow-actions .cosmo-primary:focus,
 #home-screen .cosmo-flow-actions .cosmo-primary:focus-visible,
-#home-screen .cosmo-flow-actions .cosmo-secondary:focus,
 #home-screen .cosmo-flow-actions .cosmo-secondary:focus-visible,
-.new-post-entry .new-post-entry__actions .new-post-entry__button:focus,
 .new-post-entry .new-post-entry__actions .new-post-entry__button:focus-visible{
-  outline:none;
+  outline:2px solid rgba(83,97,112,.78);
+  outline-offset:3px;
   box-shadow:-5px -5px 9px rgba(255,255,255,.98),7px 8px 11px rgba(112,130,149,.34),0 3px 5px rgba(105,123,142,.22);
 }
 #home-screen .cosmo-flow-actions .cosmo-primary:hover,
