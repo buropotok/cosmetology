@@ -15,23 +15,26 @@ document.head.append(style);
 
 const home=document.createElement('section');home.id='home-screen';home.className='cosmo-flow-screen';home.innerHTML=`<header class="cosmo-flow-nav"><span class="cosmo-logo" aria-hidden="true"></span><h1>Cosmo Sofa</h1><button class="cosmo-flow-settings cosmo-settings-button" type="button" aria-label="Настройки"></button></header><div class="cosmo-home-hero"><div class="cosmo-home-mark" aria-hidden="true"></div><h2>Создайте публикацию</h2><p>Подготовьте новый материал или вернитесь к сохранённому черновику.</p></div><div class="cosmo-flow-actions"><button id="flow-new" class="cosmo-primary" type="button">Новый пост</button><button id="flow-continue" class="cosmo-secondary" type="button">Продолжить</button></div>`;
 document.querySelector('main')?.prepend(home);
-const newPostButton=home.querySelector('#flow-new');
 const continueButton=home.querySelector('#flow-continue');
-function runAfterPillowPress(button,action){
-  if(button.dataset.pillowActivation==='pending')return;
+function waitForPillowPress(button){
+  if(button.dataset.pillowActivation==='pending')return Promise.resolve(false);
   button.dataset.pillowActivation='pending';
-  let fallbackTimer;
-  const finish=event=>{
-    if(event&&(event.target!==button||event.animationName!=='cosmo-pillow-press-hold'))return;
-    button.removeEventListener('animationend',finish);
-    clearTimeout(fallbackTimer);
-    button.classList.remove('cosmo-pillow-activating');
-    delete button.dataset.pillowActivation;
-    void action();
-  };
-  button.addEventListener('animationend',finish);
-  button.classList.add('cosmo-pillow-activating');
-  fallbackTimer=setTimeout(()=>finish(),180);
+  return new Promise(resolve=>{
+    let settled=false,fallbackTimer;
+    const finish=event=>{
+      if(settled)return;
+      if(event&&(event.target!==button||event.animationName!=='cosmo-pillow-press-hold'))return;
+      settled=true;
+      button.removeEventListener('animationend',finish);
+      clearTimeout(fallbackTimer);
+      button.classList.remove('cosmo-pillow-activating');
+      delete button.dataset.pillowActivation;
+      resolve(true);
+    };
+    button.addEventListener('animationend',finish);
+    button.classList.add('cosmo-pillow-activating');
+    fallbackTimer=setTimeout(()=>finish(),180);
+  });
 }
 let preparationOverlay;
 function getPreparationOverlay(){
@@ -180,8 +183,11 @@ async function commitNewPost(draft){
 let newPostInFlight=false;
 async function openNewPost(){
   if(newPostInFlight)return;
+  const button=home.querySelector('#flow-new');
+  if(!(await waitForPillowPress(button)))return;
+  if(newPostInFlight)return;
   newPostInFlight=true;
-  newPostButton.disabled=true;
+  button.disabled=true;
   const preparation=settlePreparation();
   try{
     if(!(await confirmDraftReplacement()))return;
@@ -192,10 +198,12 @@ async function openNewPost(){
     if(!state||state.loadStatus!=='ready'){await showDraftLoadError();return}
     if(!(await prepareNewPostOrReport(preparation)))return;
     await commitNewPost(draft);
-  }finally{newPostInFlight=false;newPostButton.disabled=false}
+  }finally{newPostInFlight=false;button.disabled=false}
 }
 let resumeInFlight=false,resumeOperation=0;
 async function resumeDraft(){
+  if(resumeInFlight)return;
+  if(!(await waitForPillowPress(continueButton)))return;
   if(resumeInFlight)return;
   const draft=window.CosmoSofaDraft,overlay=window.CosmoDraftLoadingOverlay;
   if(!draft?.load)return;
@@ -233,7 +241,7 @@ async function resumeDraft(){
     if(operation===resumeOperation){resumeInFlight=false;continueButton.disabled=false}
   }
 }
-newPostButton.addEventListener('click',()=>runAfterPillowPress(newPostButton,openNewPost));
-continueButton.addEventListener('click',()=>runAfterPillowPress(continueButton,resumeDraft));
+home.querySelector('#flow-new').addEventListener('click',()=>{void openNewPost()});
+continueButton.addEventListener('click',()=>{void resumeDraft()});
 router.show('home',{notify:false});
 })();
