@@ -35,7 +35,7 @@ function showStartupSplash(){
     splash.id=STARTUP_SPLASH_ID;
     splash.className='cosmo-startup-splash';
     splash.setAttribute('aria-label','Загрузка приложения');
-    splash.innerHTML='<p>Загрузка Cosmo Sofa…</p><pre id="cosmo-startup-log" class="cosmo-startup-splash__log" aria-live="polite"></pre>';
+    splash.innerHTML='<img class="cosmo-startup-splash__logo" src="/icons/sofa-animated.svg" alt="" aria-hidden="true"><pre id="cosmo-startup-log" class="cosmo-startup-splash__log" hidden></pre>';
     document.body.appendChild(splash);
   }
   splash.hidden=false;

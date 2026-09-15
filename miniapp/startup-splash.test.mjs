@@ -4,6 +4,7 @@ import {readFile} from 'node:fs/promises';
 
 const bootstrap=await readFile(new URL('./bootstrap.js',import.meta.url),'utf8');
 const splashCss=await readFile(new URL('./startup-splash.css',import.meta.url),'utf8');
+const sofaSvg=await readFile(new URL('./icons/sofa-animated.svg',import.meta.url),'utf8');
 
 test('startup bootstrap traces module lifecycle without hiding explicit import contracts',()=>{
   assert.match(bootstrap,/async function loadStartupModule\(moduleName,loader\)/);
@@ -36,14 +37,21 @@ test('startup splash becomes visible before platform imports and stays until boo
   assert.ok(start.indexOf('hideStartupSplash()')>start.indexOf('await loadRuntimeIntegrations()'));
   const show=bootstrap.slice(bootstrap.indexOf('function showStartupSplash()'),bootstrap.indexOf('function hideStartupSplash()'));
   assert.match(show,/webApp\.ready\(\)/);
-  assert.match(show,/aria-live=\"polite\"/);
+  assert.match(show,/src=\"\/icons\/sofa-animated\.svg\"/);
+  assert.match(show,/id=\"cosmo-startup-log\"[^>]*hidden/);
 });
 
-test('startup trace uses isolated compatible styles and contains no auth payload logging',()=>{
+test('startup splash is a centered white logo screen while diagnostics remain hidden',()=>{
   assert.match(bootstrap,/href='\/startup-splash\.css'/);
   assert.match(bootstrap,/splash\.scrollTop=splash\.scrollHeight/);
   assert.match(splashCss,/\.cosmo-startup-splash\{position:fixed;top:0;right:0;bottom:0;left:0;/);
+  assert.match(splashCss,/display:flex;align-items:center;justify-content:center/);
+  assert.match(splashCss,/background:#fff/);
+  assert.match(splashCss,/\.cosmo-startup-splash__logo\{display:block;width:min\(82vw,420px\);height:auto\}/);
+  assert.match(splashCss,/\.cosmo-startup-splash__log\{display:none!important\}/);
   assert.doesNotMatch(splashCss,/\binset:/);
   assert.match(splashCss,/\.cosmo-startup-splash\[hidden\]\{display:none!important\}/);
+  assert.match(sofaSvg,/@keyframes sofa-sit/);
+  assert.match(sofaSvg,/@media \(prefers-reduced-motion: reduce\)/);
   assert.doesNotMatch(bootstrap,/initData|Authorization/);
 });
