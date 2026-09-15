@@ -51,6 +51,8 @@ function resolvePos(json,pos){
 function topRanges(json){let offset=0;return children(json).map((node,index)=>{const range={index,node,from:offset,to:offset+nodeSize(node)};offset=range.to;return range})}
 function bodyCaret(detailsNode,start){const summarySize=nodeSize(detailsNode.content[0]),bodyStart=start+1+summarySize,paragraphStart=bodyStart+1;return paragraphStart+1}
 
+// This harness supplies only the Tiptap/ProseMirror contracts used by composer-tiptap.js.
+// The production module itself is executed below, so toolbar and keyboard handlers stay production code.
 class FakeEditor{
   constructor({extensions=[],content}){
     this.docJson=clone(content);this.selectionSpec={from:1,to:1};this.keyboard={};
