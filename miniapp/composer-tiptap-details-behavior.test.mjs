@@ -8,8 +8,8 @@ const contentSize=node=>children(node).reduce((sum,child)=>sum+nodeSize(child),0
 function nodeSize(node){return node?.type==='text'?String(node.text||'').length:2+contentSize(node)}
 const textContent=node=>node?.type==='text'?String(node.text||''):children(node).map(textContent).join('');
 const paragraph=text=>text?{type:'paragraph',content:[{type:'text',text}]}:{type:'paragraph'};
-const details=body=>({type:'details',content:[
-  {type:'detailsSummary',content:[{type:'text',text:'Подробнее'}]},
+const details=(body,title='Подробнее')=>({type:'details',content:[
+  title?{type:'detailsSummary',content:[{type:'text',text:title}]}:{type:'detailsSummary'},
   {type:'detailsBody',content:body}
 ]});
 const doc=content=>({type:'doc',content});
@@ -49,6 +49,7 @@ function resolvePos(json,pos){
 }
 
 function topRanges(json){let offset=0;return children(json).map((node,index)=>{const range={index,node,from:offset,to:offset+nodeSize(node)};offset=range.to;return range})}
+function summaryCaret(detailsNode,start){return start+2+textContent(detailsNode.content[0]).length}
 function bodyCaret(detailsNode,start){const summarySize=nodeSize(detailsNode.content[0]),bodyStart=start+1+summarySize,paragraphStart=bodyStart+1;return paragraphStart+1}
 
 // This harness supplies only the Tiptap/ProseMirror contracts used by composer-tiptap.js.
@@ -188,16 +189,30 @@ await test('Composer details behavior mutates editor state instead of only match
     assert.equal(editor.state.selection.empty,true);
   });
 
-  await t.test('Backspace removes a sole details block whose body is empty even though its summary is not',()=>{
-    const only=details([paragraph('')]),initial=doc([only]);
-    editor.setTestState(initial,{from:bodyCaret(only,0),to:bodyCaret(only,0)});
+  await t.test('Backspace keeps the block while the summary still has text, even when the body is empty',()=>{
+    const only=details([paragraph('')]),initial=doc([only]),caret=summaryCaret(only,0);
+    editor.setTestState(initial,{from:caret,to:caret});
+    assert.equal(editor.keyboard.Backspace(),false);
+    assert.deepEqual(editor.getJSON(),initial);
+  });
+
+  await t.test('Backspace also keeps the block while the body still has text',()=>{
+    const only=details([paragraph('body')],''),initial=doc([only]),caret=summaryCaret(only,0);
+    editor.setTestState(initial,{from:caret,to:caret});
+    assert.equal(editor.keyboard.Backspace(),false);
+    assert.deepEqual(editor.getJSON(),initial);
+  });
+
+  await t.test('Backspace removes a sole details block only after both summary and body are empty',()=>{
+    const only=details([paragraph('')],''),initial=doc([only]),caret=summaryCaret(only,0);
+    editor.setTestState(initial,{from:caret,to:caret});
     assert.equal(editor.keyboard.Backspace(),true);
     assert.deepEqual(editor.getJSON(),doc([paragraph('')]));
     assert.equal(editor.state.selection.empty,true);
   });
 
-  await t.test('Backspace removes an empty details block from the middle without touching neighbors',()=>{
-    const middleDetails=details([paragraph('')]),initial=doc([paragraph('before'),middleDetails,paragraph('after')]),range=topRanges(initial)[1],caret=bodyCaret(middleDetails,range.from);
+  await t.test('Backspace removes a fully empty details block from the middle without touching neighbors',()=>{
+    const middleDetails=details([paragraph('')],''),initial=doc([paragraph('before'),middleDetails,paragraph('after')]),range=topRanges(initial)[1],caret=summaryCaret(middleDetails,range.from);
     editor.setTestState(initial,{from:caret,to:caret});
     assert.equal(editor.keyboard.Backspace(),true);
     assert.deepEqual(editor.getJSON(),doc([paragraph('before'),paragraph('after')]));
