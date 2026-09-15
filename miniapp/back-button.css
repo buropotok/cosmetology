@@ -1,7 +1,5 @@
 /* Shared visual contract for in-app Back controls. Navigation behavior remains owned by each screen. */
-.back-button,
-#composer-screen.approved-composer .composer-nav .cosmo-composer-back,
-#back {
+.back-button {
   -webkit-appearance:none !important;
   appearance:none !important;
   -webkit-tap-highlight-color:transparent;
@@ -31,9 +29,7 @@
   display:none !important;
 }
 
-.back-button::before,
-#composer-screen.approved-composer .composer-nav .cosmo-composer-back::before,
-#back::before {
+.back-button::before {
   content:"←";
   display:block;
   color:currentColor;
@@ -41,33 +37,25 @@
   transform:translateY(-1px);
 }
 
-.back-button:focus-visible,
-#composer-screen.approved-composer .composer-nav .cosmo-composer-back:focus-visible,
-#back:focus-visible {
+.back-button:focus-visible {
   outline:2px solid rgba(83,97,112,.72) !important;
   outline-offset:3px;
   box-shadow:-5px -5px 9px rgba(255,255,255,.98),7px 8px 11px rgba(112,130,149,.32),0 3px 5px rgba(105,123,142,.18) !important;
 }
 
-.back-button:hover,
-#composer-screen.approved-composer .composer-nav .cosmo-composer-back:hover,
-#back:hover {
+.back-button:hover {
   transform:translateY(-1px);
   box-shadow:-5px -5px 9px rgba(255,255,255,1),8px 9px 12px rgba(112,130,149,.36),0 4px 6px rgba(105,123,142,.2) !important;
 }
 
-.back-button:active,
-#composer-screen.approved-composer .composer-nav .cosmo-composer-back:active,
-#back:active {
+.back-button:active {
   transform:translateY(2px) scale(.98);
   background:linear-gradient(145deg,#f7f9fb 0%,#fff 72%,#fff 100%) !important;
   box-shadow:inset 4px 4px 7px rgba(112,130,149,.22),inset -4px -4px 7px rgba(255,255,255,.9),0 2px 3px rgba(105,123,142,.16) !important;
 }
 
 @media(prefers-reduced-motion:reduce){
-  .back-button,
-  #composer-screen.approved-composer .composer-nav .cosmo-composer-back,
-  #back {
+  .back-button {
     transition:none;
   }
 }
