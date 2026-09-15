@@ -105,8 +105,15 @@ function captureSoloGeometry() {
 async function applySoloVersion(fileValue, versionGeometry = null) {
   const sharedWatermark = state.selectedWatermark;
   const sharedWatermarkState = { ...state.watermarkState };
-  const geometryState = versionGeometry || { ratio: '16/9', cropHeight: null, x: 0, y: 0, scale: 1, rotation: 0, fitted: false };
-  await state.restore({ version: 1, layout: 'horizontal', ratio: geometryState.ratio || '16/9', cropHeight: geometryState.cropHeight ?? null, before: { imageIndex: 0, x: geometryState.x || 0, y: geometryState.y || 0, scale: geometryState.scale || 1, rotation: geometryState.rotation || 0, fitted: geometryState.fitted !== false }, after: null, watermark: null, watermarkState: sharedWatermarkState }, [fileValue], watermarks.find);
+  const savedPhoto = versionGeometry ? {
+    imageIndex: 0,
+    x: versionGeometry.x || 0,
+    y: versionGeometry.y || 0,
+    scale: versionGeometry.scale || 1,
+    rotation: versionGeometry.rotation || 0,
+    fitted: versionGeometry.fitted !== false,
+  } : { imageIndex: 0, x: 0, y: 0, scale: 1, rotation: 0, fitted: false };
+  await state.restore({ version: 1, layout: 'horizontal', ratio: versionGeometry?.ratio || '16/9', cropHeight: versionGeometry?.cropHeight ?? null, before: savedPhoto, after: null, watermark: null, watermarkState: sharedWatermarkState }, [fileValue], watermarks.find);
   state.selectedWatermark = sharedWatermark;
   state.watermarkState = sharedWatermarkState;
   if (!versionGeometry) return refitSoloSource();
