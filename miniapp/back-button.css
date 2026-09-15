@@ -1,0 +1,61 @@
+/* Shared visual contract for screen-level Back controls. Local in-component Back controls keep component-owned presentation. */
+.back-button {
+  -webkit-appearance:none !important;
+  appearance:none !important;
+  -webkit-tap-highlight-color:transparent;
+  display:grid !important;
+  place-items:center !important;
+  flex:0 0 44px !important;
+  width:44px !important;
+  min-width:44px !important;
+  height:44px !important;
+  min-height:44px !important;
+  margin:0 !important;
+  padding:0 !important;
+  border:1px solid rgba(255,255,255,.92) !important;
+  border-radius:50% !important;
+  outline:none;
+  background:linear-gradient(145deg,#fff 0%,#fff 68%,#fafbfd 100%) !important;
+  color:#536170 !important;
+  box-shadow:-5px -5px 9px rgba(255,255,255,.98),7px 8px 11px rgba(112,130,149,.32),0 3px 5px rgba(105,123,142,.18) !important;
+  font-size:0 !important;
+  line-height:1 !important;
+  cursor:pointer;
+  transition:transform 120ms ease,box-shadow 120ms ease,background 120ms ease;
+}
+
+.back-button > svg,
+.back-button > span {
+  display:none !important;
+}
+
+.back-button::before {
+  content:"←";
+  display:block;
+  color:currentColor;
+  font:400 30px/1 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  transform:translateY(-1px);
+}
+
+.back-button:focus-visible {
+  outline:2px solid rgba(83,97,112,.72) !important;
+  outline-offset:3px;
+  box-shadow:-5px -5px 9px rgba(255,255,255,.98),7px 8px 11px rgba(112,130,149,.32),0 3px 5px rgba(105,123,142,.18) !important;
+}
+
+.back-button:hover {
+  transform:translateY(-1px);
+  box-shadow:-5px -5px 9px rgba(255,255,255,1),8px 9px 12px rgba(112,130,149,.36),0 4px 6px rgba(105,123,142,.2) !important;
+}
+
+.back-button:active {
+  transform:translateY(2px) scale(.98);
+  background:linear-gradient(145deg,#f7f9fb 0%,#fff 72%,#fff 100%) !important;
+  box-shadow:inset 4px 4px 7px rgba(112,130,149,.22),inset -4px -4px 7px rgba(255,255,255,.9),0 2px 3px rgba(105,123,142,.16) !important;
+}
+
+@media(prefers-reduced-motion:reduce){
+  .back-button {
+    transition:none;
+  }
+}
