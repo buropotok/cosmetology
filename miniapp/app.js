@@ -3,6 +3,27 @@ import {moveChildInPlace,moveItemInPlace,translatedActiveIndex} from './composer
 const webApp=window.Telegram?.WebApp;webApp?.ready();webApp?.expand();
 const form=document.querySelector('#publish-form'),imageInput=document.querySelector('#image'),previewWrap=document.querySelector('#preview-wrap'),previews=document.querySelector('#previews'),removeImage=document.querySelector('#remove-image'),publish=document.querySelector('#publish'),status=document.querySelector('#status'),publishVk=document.querySelector('#publish-vk');
 
+function waitForComposerPillowPress(button){
+  if(!button||button.dataset.composerPillowActivation==='pending')return Promise.resolve(false);
+  button.dataset.composerPillowActivation='pending';
+  return new Promise(resolve=>{
+    let settled=false,fallbackTimer;
+    const finish=event=>{
+      if(settled)return;
+      if(event&&(event.target!==button||event.animationName!=='composer-pillow-press-hold'))return;
+      settled=true;
+      button.removeEventListener('animationend',finish);
+      clearTimeout(fallbackTimer);
+      button.classList.remove('composer-pillow-activating');
+      delete button.dataset.composerPillowActivation;
+      resolve(true);
+    };
+    button.addEventListener('animationend',finish);
+    button.classList.add('composer-pillow-activating');
+    fallbackTimer=setTimeout(()=>finish(),180);
+  });
+}
+
 const SESSION_HEALTHCHECK_INTERVAL_MS=60_000;
 let sessionHealthcheckTimer=null,sessionHealthcheckPending=null,sessionBootstrapped=false,sessionExpired=false;
 function stopSessionHealthcheck(){if(sessionHealthcheckTimer!==null){clearTimeout(sessionHealthcheckTimer);sessionHealthcheckTimer=null}}
@@ -50,7 +71,7 @@ async function publishVkExistingFlow(){
   }catch(error){const message=error instanceof Error?error.message:'Не удалось подготовить материалы.';vkDiag('vk-preparation-error',{message});setStatus(message,'error')}
   finally{publishVk.disabled=false}
 }
-publishVk.addEventListener('click',()=>{const flow=window.CosmoComposerVkDestination;if(!flow?.requestPublication)return setStatus('Выбор группы VK ещё не готов. Попробуйте ещё раз.','error');flow.requestPublication(()=>window.CosmoComposerActions.publishVk(publishVkExistingFlow)).catch(error=>setStatus(error instanceof Error?error.message:'Не удалось проверить группу VK.','error'))});
+publishVk.addEventListener('click',async()=>{if(!(await waitForComposerPillowPress(publishVk)))return;const flow=window.CosmoComposerVkDestination;if(!flow?.requestPublication)return setStatus('Выбор группы VK ещё не готов. Попробуйте ещё раз.','error');flow.requestPublication(()=>window.CosmoComposerActions.publishVk(publishVkExistingFlow)).catch(error=>setStatus(error instanceof Error?error.message:'Не удалось проверить группу VK.','error'))});
 
 let previewUrls=[];const previewIndexSetters=new WeakMap();const user=webApp?.initDataUnsafe?.user;if(user?.first_name)document.querySelector('#greeting').textContent=`Здравствуйте, ${user.first_name}`;
 publish.disabled=false;
@@ -62,5 +83,5 @@ function openActivePhotoEditor(){const index=activePhoto(),files=window.CosmoCom
 function buildPhotoStage(){const stage=document.querySelector('.composer-image');if(!stage||!previewUrls.length)return;stage.classList.add('has-photo');stage.querySelector('.composer-photo-stage-track')?.remove();const track=document.createElement('div');track.className='composer-photo-stage-track';for(const url of previewUrls){const img=document.createElement('img');img.src=url;img.alt='Фото публикации';track.append(img)}stage.append(track);let startX=0,currentX=0,dragging=false,suppressOpen=false;stage.ontouchstart=e=>{if(e.touches.length!==1)return;dragging=true;suppressOpen=false;startX=currentX=e.touches[0].clientX;track.style.transition='none'};stage.ontouchmove=e=>{if(!dragging)return;currentX=e.touches[0].clientX;const delta=currentX-startX;if(Math.abs(delta)>6)suppressOpen=true;track.style.transform=`translate3d(calc(${-activePhoto()*100}% + ${delta}px),0,0)`};stage.ontouchend=()=>{if(!dragging)return;dragging=false;const current=activePhoto(),delta=currentX-startX,threshold=Math.min(70,(stage.clientWidth||300)*.18);if(delta<-threshold&&current<previewUrls.length-1)selectPhoto(current+1);else if(delta>threshold&&current>0)selectPhoto(current-1);else renderPhoto(current)};stage.onclick=event=>{if(suppressOpen){suppressOpen=false;return}if(event.target?.closest?.('.composer-photo-stage-track img'))openActivePhotoEditor()};queueMicrotask(()=>renderPhoto(activePhoto(),false))}
 imageInput.addEventListener('change',()=>{for(const url of previewUrls)URL.revokeObjectURL(url);previewUrls=[];previews.replaceChildren();const files=selectedImages();if(!files.length)return clearImage();if((imageInput.files?.length||0)>10)setStatus('Можно выбрать не больше 10 фотографий. Будут использованы первые 10.','error');files.forEach((file,index)=>{const url=URL.createObjectURL(file);previewUrls.push(url);const img=document.createElement('img');img.src=url;img.alt='Предпросмотр '+file.name;img.addEventListener('click',()=>selectPhoto(index));previewIndexSetters.set(img,value=>{index=value});previews.append(img)});previewWrap.hidden=false;buildPhotoStage();if((imageInput.files?.length||0)<=10)setStatus('')});removeImage.addEventListener('click',clearImage);
 window.addEventListener('cosmo-composer-images-reordered',event=>{const {from,to}=event.detail||{};if(!moveItemInPlace(previewUrls,from,to))return;const track=document.querySelector('.composer-photo-stage-track');if(track)moveChildInPlace(track,from,to);previews.querySelectorAll('img').forEach((img,index)=>previewIndexSetters.get(img)?.(index));const active=activePhoto();window.CosmoComposerState?.setActivePhotoIndex(translatedActiveIndex(active,from,to));renderPhoto(activePhoto(),false)});
-form.addEventListener('submit',async event=>{event.preventDefault();const plainText=currentPlainText();if(!plainText.trim()&&!selectedImages().length)return setStatus('Добавьте текст или изображение.','error');publish.disabled=true;publish.textContent='Публикуем…';setStatus('Публикуем…');const body=new FormData();body.set('text',currentSubmissionText());appendImages(body);try{const {response,result}=await window.CosmoComposerActions.publishTelegram({method:'POST',headers:authHeaders(),body});if(!response.ok)throw new Error(result?.error?.message||'Не удалось опубликовать. Попробуйте ещё раз.');setStatus('Опубликовано через персонального бота.','success');webApp.HapticFeedback?.notificationOccurred('success')}catch(error){setStatus(error instanceof Error?error.message:'Не удалось опубликовать.','error');webApp.HapticFeedback?.notificationOccurred('error')}finally{publish.disabled=false;publish.textContent='Опубликовать в Telegram'}});
+form.addEventListener('submit',async event=>{event.preventDefault();if(!(await waitForComposerPillowPress(publish)))return;const plainText=currentPlainText();if(!plainText.trim()&&!selectedImages().length)return setStatus('Добавьте текст или изображение.','error');publish.disabled=true;publish.textContent='Публикуем…';setStatus('Публикуем…');const body=new FormData();body.set('text',currentSubmissionText());appendImages(body);try{const {response,result}=await window.CosmoComposerActions.publishTelegram({method:'POST',headers:authHeaders(),body});if(!response.ok)throw new Error(result?.error?.message||'Не удалось опубликовать. Попробуйте ещё раз.');setStatus('Опубликовано через персонального бота.','success');webApp.HapticFeedback?.notificationOccurred('success')}catch(error){setStatus(error instanceof Error?error.message:'Не удалось опубликовать.','error');webApp.HapticFeedback?.notificationOccurred('error')}finally{publish.disabled=false;publish.textContent='Опубликовать в Telegram'}});
 window.addEventListener('cosmo-composer-restore',()=>{requestAnimationFrame(()=>renderPhoto(activePhoto(),false))});
