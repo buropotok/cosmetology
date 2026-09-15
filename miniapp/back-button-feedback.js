@@ -5,7 +5,7 @@ const FALLBACK_MS=160;
 export function runAfterBackButtonPress(button,action){
   if(!button||typeof action!=='function')return false;
   if(button.dataset.backButtonActivation==='pending')return false;
-  if(window.matchMedia?.(REDUCED_MOTION_QUERY).matches){action();return true}
+  if(window.matchMedia?.(REDUCED_MOTION_QUERY)?.matches){action();return true}
   button.dataset.backButtonActivation='pending';
   let settled=false,fallbackTimer;
   const finish=event=>{
