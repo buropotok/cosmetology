@@ -72,15 +72,34 @@
     if(focus)queueMicrotask(()=>document.querySelector('#text')?.focus());
   }
 
+  function runAfterPillowPress(button,action){
+    if(button.dataset.pillowActivation==='pending')return;
+    button.dataset.pillowActivation='pending';
+    let fallbackTimer;
+    const finish=event=>{
+      if(event&&(event.target!==button||event.animationName!=='cosmo-pillow-press-hold'))return;
+      button.removeEventListener('animationend',finish);
+      clearTimeout(fallbackTimer);
+      button.classList.remove('cosmo-pillow-activating');
+      delete button.dataset.pillowActivation;
+      void action();
+    };
+    button.addEventListener('animationend',finish);
+    button.classList.add('cosmo-pillow-activating');
+    fallbackTimer=setTimeout(()=>finish(),180);
+  }
+
   controls.addEventListener('click',event=>{
     const button=event.target.closest?.('[data-new-post-choice]');
     if(!button)return;
     const navigation=window.CosmoNavigation;
     if(!navigation)return;
     const choice=button.dataset.newPostChoice;
-    if(choice==='ai')void navigation.push(navigation.STATES.AI);
-    else if(choice==='manual')void navigation.push(navigation.STATES.PUBLISH,{manual:true});
-    else if(choice==='before-after')void navigation.push(navigation.STATES.BEFORE_AFTER);
+    runAfterPillowPress(button,()=>{
+      if(choice==='ai')return navigation.push(navigation.STATES.AI);
+      if(choice==='manual')return navigation.push(navigation.STATES.PUBLISH,{manual:true});
+      if(choice==='before-after')return navigation.push(navigation.STATES.BEFORE_AFTER);
+    });
   });
 
   window.CosmoComposerView=Object.freeze({showEntry,showAi,showEditor});

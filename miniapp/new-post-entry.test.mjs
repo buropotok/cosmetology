@@ -78,6 +78,19 @@ test('Home and New Post menu buttons use white pillow surfaces on a soft gray pa
   assert.match(styles,/\.new-post-entry \.new-post-entry__actions \.new-post-entry__button:active\{[\s\S]*box-shadow:inset 4px 4px 7px/);
 });
 
+test('Pillow buttons finish pressed feedback before Home and New Post actions run',()=>{
+  assert.match(styles,/@keyframes cosmo-pillow-press-hold\{/);
+  assert.match(styles,/animation:cosmo-pillow-press-hold 140ms linear both/);
+  assert.match(styles,/@media\(prefers-reduced-motion:reduce\)/);
+  assert.match(navigation,/function runAfterPillowPress\(button,action\)[\s\S]*addEventListener\('animationend',finish\)[\s\S]*void action\(\)/);
+  assert.match(navigation,/fallbackTimer=setTimeout\(\(\)=>finish\(\),180\)/);
+  assert.match(navigation,/newPostButton\.addEventListener\('click',\(\)=>runAfterPillowPress\(newPostButton,openNewPost\)\)/);
+  assert.match(navigation,/continueButton\.addEventListener\('click',\(\)=>runAfterPillowPress\(continueButton,resumeDraft\)\)/);
+  assert.match(entry,/function runAfterPillowPress\(button,action\)[\s\S]*animationName!=='cosmo-pillow-press-hold'[\s\S]*void action\(\)/);
+  assert.match(entry,/fallbackTimer=setTimeout\(\(\)=>finish\(\),180\)/);
+  assert.match(entry,/runAfterPillowPress\(button,\(\)=>\{[\s\S]*navigation\.push\(navigation\.STATES\.AI\)/);
+});
+
 test('existing pencil artwork is unchanged except for white stroke color',()=>{
   assert.match(pencil,/stroke="#fff"/);
   assert.match(pencil,/M3 20\.5h5\.2L19 9\.7/);
