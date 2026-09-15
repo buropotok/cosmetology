@@ -15,9 +15,10 @@ test('details Backspace removes a fully selected block or a completely empty blo
   assert.match(tiptap,/function selectedWholeDetails\(selection\)/);
   assert.match(tiptap,/selection\.node\?\.type\?\.name==='details'/);
   assert.match(tiptap,/selection\.from<=bounds\.from&&selection\.to>=bounds\.to/);
+  assert.match(tiptap,/function removeDetails\(editor,range\).*insertContentAt\(range,\{type:'paragraph'\}\).*deleteRange\(range\)/s);
   assert.match(tiptap,/addKeyboardShortcuts\(\)\{return\{Backspace:/);
-  assert.match(tiptap,/if\(selected\)return this\.editor\.commands\.deleteRange\(selected\)/);
-  assert.match(tiptap,/current\.node\.textContent\.length===0\?this\.editor\.commands\.deleteRange/);
+  assert.match(tiptap,/if\(selected\)return removeDetails\(this\.editor,selected\)/);
+  assert.match(tiptap,/current\.node\.textContent\.length===0\?removeDetails\(this\.editor,\{from:current\.from,to:current\.to\}\)/);
 });
 
 test('main editor heading uses Times New Roman and toolbar pointerdown keeps editor focus',()=>{
