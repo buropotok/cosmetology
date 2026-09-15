@@ -6,6 +6,7 @@ import { saveBeforeAfterAsset, removeBeforeAfterAsset, swapBeforeAfterAssets } f
 import { generateMiniAppAiReply } from './services/miniapp-ai';
 import { getMiniAppNewsGenerationStatus } from './services/ai-generation-status';
 import { generateMiniAppImage } from './services/miniapp-image-generation';
+import { editMiniAppImage } from './services/miniapp-image-edit';
 import { searchMiniAppImage } from './services/miniapp-image-search';
 import { saveRuntimeDiagnostics } from './services/runtime-diagnostics';
 import { deleteMediaGalleryAssets, getMediaGallery, getMediaOriginal, getMediaThumbnail } from './services/media-gallery';
@@ -73,6 +74,7 @@ export default { async fetch(req: Request, env: Env, ctx: ExecutionContext) {
     const topicHistory=url.pathname.match(/^\/api\/ai\/topic-history\/([^/]+)\.txt$/);if(req.method==='GET'&&topicHistory)return getTopicHistory(env,topicHistory[1]);
     if (req.method === 'GET' && url.pathname === '/api/miniapp/news/status') return json(await getMiniAppNewsGenerationStatus(req, env));
     if (req.method === 'POST' && url.pathname === '/api/miniapp/ai/image') return generateMiniAppImage(req, env);
+    if (req.method === 'POST' && url.pathname === '/api/miniapp/ai/image/edit') return editMiniAppImage(req, env);
     if (req.method === 'POST' && url.pathname === '/api/miniapp/ai/image/search') return handleImageSearch(req, env);
     if (req.method === 'POST' && url.pathname === '/api/miniapp/vk-link') return json(await prepareVkLink(req,env));
     if(req.method==='GET'&&url.pathname==='/api/miniapp/media')return json(await getMediaGallery(req,env));

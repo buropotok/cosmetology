@@ -4,6 +4,7 @@ import { createComposite } from './before-after/composite.js';
 import { createEditor } from './before-after/editor.js';
 import { createWatermarks } from './before-after/watermarks.js';
 import { createResize } from './before-after/resize.js';
+import { createSoloAi } from './before-after/solo-ai.js';
 
 const $ = id => document.getElementById(id);
 const mode = new URLSearchParams(location.search).get('mode') === 'solo' ? 'solo' : 'dual';
@@ -23,6 +24,7 @@ let editor;
 const watermarks = createWatermarks({ $, carousel: wmCarousel, fileInput: wmFile, state, getEditor: () => editor, composite, authHeaders, loadImage, showError, onRender: render });
 editor = createEditor({ $, editor: editorElement, stage, editImage, wmImage, rotation, opacity, opacityControl, photos: state.photos, state, geometry, composite, loadImage, onRender: render });
 const resize = createResize({ handle: cropHandle, slots, state, geometry, composite, onRender: render });
+let soloAi = null;
 let soloGestureHint = null, soloGestureHintTimer = 0, soloGestureHintShown = false;
 function hideSoloGestureHint() {
   if (soloGestureHintTimer) { clearTimeout(soloGestureHintTimer); soloGestureHintTimer = 0; }
@@ -95,10 +97,39 @@ function applySoloFit(kind) {
   composite.clearCommitted();
   render();
 }
+function captureSoloGeometry() {
+  const photo = state.photos.before;
+  if (mode !== 'solo' || !photo) return null;
+  return { ratio: state.selectedRatio, cropHeight: state.cropHeight, x: photo.x, y: photo.y, scale: photo.scale, rotation: photo.rotation, fitted: photo.fitted };
+}
+async function applySoloVersion(fileValue, versionGeometry = null) {
+  const sharedWatermark = state.selectedWatermark;
+  const sharedWatermarkState = { ...state.watermarkState };
+  const savedPhoto = versionGeometry ? {
+    imageIndex: 0,
+    x: versionGeometry.x || 0,
+    y: versionGeometry.y || 0,
+    scale: versionGeometry.scale || 1,
+    rotation: versionGeometry.rotation || 0,
+    fitted: versionGeometry.fitted !== false,
+  } : { imageIndex: 0, x: 0, y: 0, scale: 1, rotation: 0, fitted: false };
+  await state.restore({ version: 1, layout: 'horizontal', ratio: versionGeometry?.ratio || '16/9', cropHeight: versionGeometry?.cropHeight ?? null, before: savedPhoto, after: null, watermark: null, watermarkState: sharedWatermarkState }, [fileValue], watermarks.find);
+  state.selectedWatermark = sharedWatermark;
+  state.watermarkState = sharedWatermarkState;
+  if (!versionGeometry) return refitSoloSource();
+  restoreLayoutStyles();
+  composite.clearCommitted();
+  render();
+  return true;
+}
 function configureMode() {
   document.body.dataset.mode = mode;
   if (mode !== 'solo') return;
   file.disabled = true;
+  soloAi = createSoloAi({ root: document, getCurrentBlob: () => composite.photoBlob(), getGeometry: captureSoloGeometry, applyVersion: applySoloVersion, authHeaders: () => {
+    if (!webApp?.initData) throw new Error('Откройте приложение внутри Telegram.');
+    return authHeaders();
+  }, showError });
   document.querySelectorAll('.empty').forEach(element => { element.style.display = 'none'; });
   document.querySelector('header strong').textContent = 'Фото';
   soloGestureHint = document.createElement('div');
@@ -108,7 +139,7 @@ function configureMode() {
   slots.append(soloGestureHint);
   const controls = document.createElement('section'); controls.className = 'solo-rotation'; controls.innerHTML = '<div class="solo-rotation-head"><strong>Поворот</strong><span id="soloAngle">0°</span></div>';
   const slider = rotation.cloneNode(true); slider.id = 'soloRotation'; slider.min = '-180'; slider.max = '180'; slider.step = '1'; controls.append(slider);
-  const fitActions = document.createElement('div'); fitActions.className = 'solo-fit-actions'; fitActions.innerHTML = '<button type="button" data-solo-fit="width">По ширине</button><button type="button" data-solo-fit="height">По высоте</button><button type="button" data-solo-fit="contain">Вписать целиком</button>'; controls.append(fitActions); slots.after(controls);
+  const fitActions = document.createElement('div'); fitActions.className = 'solo-fit-actions'; fitActions.innerHTML = '<button type="button" data-solo-fit="width">По ширине</button><button type="button" data-solo-fit="height">По высоте</button><button type="button" data-solo-fit="contain">Вписать целиком</button>'; controls.append(fitActions); const versionStrip = $('soloVersions'); if (versionStrip) versionStrip.after(controls); else slots.after(controls);
   slider.addEventListener('input', () => { const photo = state.photos.before; if (!photo) return; photo.rotation = Number(slider.value); controls.querySelector('#soloAngle').textContent = `${slider.value}°`; composite.clearCommitted(); render(); });
   fitActions.querySelectorAll('[data-solo-fit]').forEach(button => button.addEventListener('click', () => applySoloFit(button.dataset.soloFit)));
 }
@@ -211,8 +242,8 @@ document.querySelectorAll('[data-slot]').forEach(element => {
 
 window.cosmoBeforeAfterCompositeBlob = () => composite.publicBlob();
 window.CosmoBeforeAfterState = Object.freeze({ getDraftSnapshot: () => state.snapshot(), restoreDraft: async (saved, files = []) => { await state.restore(saved, files, watermarks.find); await fitSoloSource(); restoreLayoutStyles(); composite.clearCommitted(); render(); } });
-window.CosmoBeforeAfterSolo = Object.freeze({ setSourceIndex(index) { if (mode === 'solo') document.body.dataset.sourceIndex = String(index); }, fitSource: refitSoloSource });
+window.CosmoBeforeAfterSolo = Object.freeze({ setSourceIndex(index) { if (mode === 'solo') document.body.dataset.sourceIndex = String(index); }, initialize(fileValue) { if (mode === 'solo') soloAi?.initialize(fileValue); }, destroy() { soloAi?.destroy(); }, fitSource: refitSoloSource });
 function returnToPublisher() { try { sessionStorage.setItem('cosmo-return-screen', 'composer'); } catch {} location.href = '/'; }
 $('back').onclick = returnToPublisher; $('finish').onclick = returnToPublisher;
-window.addEventListener('beforeunload', () => { if (soloGestureHintTimer) clearTimeout(soloGestureHintTimer); resize.destroy(); for (const role of ['before', 'after']) if (state.photos[role]) URL.revokeObjectURL(state.photos[role].url); wmCarousel.querySelectorAll('[data-url]').forEach(button => URL.revokeObjectURL(button.dataset.url)); if (compositeResult.dataset.url) URL.revokeObjectURL(compositeResult.dataset.url); });
+window.addEventListener('beforeunload', () => { soloAi?.destroy(); if (soloGestureHintTimer) clearTimeout(soloGestureHintTimer); resize.destroy(); for (const role of ['before', 'after']) if (state.photos[role]) URL.revokeObjectURL(state.photos[role].url); wmCarousel.querySelectorAll('[data-url]').forEach(button => URL.revokeObjectURL(button.dataset.url)); if (compositeResult.dataset.url) URL.revokeObjectURL(compositeResult.dataset.url); });
 configureMode(); applyRatio(state.selectedRatio); watermarks.load();
