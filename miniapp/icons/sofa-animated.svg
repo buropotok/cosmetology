@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 1536 1536">
+  <style>
+    .sofa {
+      transform-box: fill-box;
+      transform-origin: 50% 100%;
+      animation: sofa-sit 1100ms cubic-bezier(.2,.8,.2,1) infinite;
+    }
+    .star {
+      transform-box: fill-box;
+      transform-origin: center;
+      animation: star-pop 1100ms cubic-bezier(.2,.8,.2,1) infinite;
+    }
+
+    @keyframes sofa-sit {
+      0%   { transform: scale(1, 1); }
+      20%  { transform: scale(1.035, .955); }
+      43%  { transform: scale(.992, 1.012); }
+      60%  { transform: scale(1.007, .993); }
+      74%  { transform: scale(.997, 1.004); }
+      86%  { transform: scale(1.002, .998); }
+      100% { transform: scale(1, 1); }
+    }
+
+    @keyframes star-pop {
+      0%   { transform: scale(1); }
+      20%  { transform: scale(1.12); }
+      43%  { transform: scale(.97); }
+      60%  { transform: scale(1.025); }
+      74%  { transform: scale(.99); }
+      86%  { transform: scale(1.006); }
+      100% { transform: scale(1); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .sofa, .star { animation: none; }
+    }
+  </style>
+
+  <g fill="#574652">
+    <g class="sofa">
+      <path d="M285 896C230 884 186 842 186 779C186 710 237 658 305 658C373 658 425 707 425 768L425 941C519 925 635 914 768 914C901 914 1016 924 1106 942L1106 763C1106 704 1153 659 1218 659C1290 659 1347 713 1347 779C1347 843 1304 881 1247 897L1247 1059C1247 1085 1226 1102 1177 1105L1176 1136L1112 1136L1111 1103L421 1103L419 1136L356 1136L355 1104C313 1104 286 1086 286 1060L285 896Z"/>
+      <path d="M324 634C405 574 501 544 600 546C666 547 724 566 768 597C813 566 870 548 932 545C1033 540 1132 570 1209 633C1153 641 1114 674 1093 722C1085 741 1082 754 1082 764L1082 912C994 898 884 889 768 889C651 889 541 898 452 912L452 769C451 718 431 680 392 661C368 649 347 642 324 634Z"/>
+    </g>
+    <path class="star" d="M1263 289C1258 367 1253 416 1234 438C1215 457 1183 464 1126 469C1182 476 1215 486 1237 503C1251 520 1258 555 1264 615C1270 556 1277 520 1293 499C1313 480 1348 473 1401 468C1346 463 1311 454 1290 435C1273 416 1268 367 1263 289Z"/>
+  </g>
+</svg>

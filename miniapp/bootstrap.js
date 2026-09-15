@@ -1,6 +1,7 @@
 const BOOTSTRAP_KEY='__CosmoMiniAppBootstrap';
 const STARTUP_SPLASH_ID='cosmo-startup-splash';
 const STARTUP_LOG_ID='cosmo-startup-log';
+const STARTUP_ERROR_ID='cosmo-startup-error';
 const startupStartedAt=Date.now();
 
 function loadStartupSplashStyles(){
@@ -35,7 +36,7 @@ function showStartupSplash(){
     splash.id=STARTUP_SPLASH_ID;
     splash.className='cosmo-startup-splash';
     splash.setAttribute('aria-label','Загрузка приложения');
-    splash.innerHTML='<p>Загрузка Cosmo Sofa…</p><pre id="cosmo-startup-log" class="cosmo-startup-splash__log" aria-live="polite"></pre>';
+    splash.innerHTML='<img class="cosmo-startup-splash__logo" src="/icons/sofa-animated.svg" alt="" aria-hidden="true"><p id="cosmo-startup-error" class="cosmo-startup-splash__error" role="alert" hidden>Не удалось загрузить приложение</p><pre id="cosmo-startup-log" class="cosmo-startup-splash__log" hidden></pre>';
     document.body.appendChild(splash);
   }
   splash.hidden=false;
@@ -51,6 +52,16 @@ function showStartupSplash(){
   }catch(error){
     appendStartupLog('ERROR','Telegram.WebApp.ready()',startupErrorMessage(error));
   }
+}
+
+function showStartupFailure(){
+  const splash=document.querySelector(`#${STARTUP_SPLASH_ID}`);
+  if(!splash)return;
+  const logo=splash.querySelector('.cosmo-startup-splash__logo');
+  const message=splash.querySelector(`#${STARTUP_ERROR_ID}`);
+  if(logo)logo.src='/icons/sofa-sparkle-error-v4.svg';
+  if(message)message.hidden=false;
+  splash.setAttribute('aria-label','Не удалось загрузить приложение');
 }
 
 function hideStartupSplash(){
@@ -209,6 +220,7 @@ async function start(){
     return Object.freeze({ready:true});
   }catch(error){
     appendStartupLog('ERROR','/bootstrap.js',startupErrorMessage(error));
+    showStartupFailure();
     throw error;
   }
 }
