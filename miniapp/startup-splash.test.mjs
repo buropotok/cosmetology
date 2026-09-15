@@ -47,9 +47,10 @@ test('startup splash is a centered white logo screen while diagnostics remain hi
   assert.match(splashCss,/\.cosmo-startup-splash\{position:fixed;top:0;right:0;bottom:0;left:0;/);
   assert.match(splashCss,/display:flex;align-items:center;justify-content:center/);
   assert.match(splashCss,/background:#fff/);
-  assert.match(splashCss,/\.cosmo-startup-splash__logo\{display:block;width:min\(82vw,420px\);height:auto\}/);
+  assert.match(splashCss,/\.cosmo-startup-splash__logo\{display:block;width:82vw;max-width:420px;height:auto\}/);
   assert.match(splashCss,/\.cosmo-startup-splash__log\{display:none!important\}/);
   assert.doesNotMatch(splashCss,/\binset:/);
+  assert.doesNotMatch(splashCss,/\bmin\(/);
   assert.match(splashCss,/\.cosmo-startup-splash\[hidden\]\{display:none!important\}/);
   assert.match(sofaSvg,/@keyframes sofa-sit/);
   assert.match(sofaSvg,/@media \(prefers-reduced-motion: reduce\)/);
