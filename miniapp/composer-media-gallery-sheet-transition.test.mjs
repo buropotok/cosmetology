@@ -16,12 +16,13 @@ test('gallery sheet enters from below with a fading scrim',async()=>{
 test('gallery sheet stays mounted until its exit transition completes',async()=>{
  const gallery=await read('./composer-media-gallery.js');
  assert.match(gallery,/const SHEET_TRANSITION_MS=280/);
- assert.match(gallery,/classList\.add\('is-closing'\)/);
- assert.match(gallery,/classList\.remove\('is-open'\)/);
- assert.match(gallery,/addEventListener\('transitionend',onEnd\)/);
- assert.match(gallery,/event\.propertyName!=='transform'/);
- const close=gallery.match(/const finishClose=.*?;\n const renderEmpty=/s)?.[0]||'';
- assert.match(close,/closingRoot\.remove\(\)/);
+ const finishClose=gallery.match(/const finishClose=.*?;\n const close=/s)?.[0]||'';
+ const close=gallery.match(/const close=.*?;\n const renderEmpty=/s)?.[0]||'';
+ assert.match(close,/classList\.add\('is-closing'\)/);
+ assert.match(close,/classList\.remove\('is-open'\)/);
+ assert.match(close,/addEventListener\('transitionend',onEnd\)/);
+ assert.match(close,/event\.propertyName!=='transform'/);
  assert.match(close,/setTimeout\(/);
- assert.ok(close.indexOf("classList.remove('is-open')")<close.indexOf('closingRoot.remove()'));
+ assert.doesNotMatch(close,/closingRoot\.remove\(\)/);
+ assert.match(finishClose,/closingRoot\.remove\(\)/);
 });
