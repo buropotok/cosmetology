@@ -105,6 +105,9 @@ describe("Mini App image edit dimensions", () => {
     const provider = fetchMock.mock.calls[0]?.[1]?.body as FormData;
 
     expect(imageTransform.info).toHaveBeenCalledTimes(1);
+    expect(provider.get("prompt") as string).toContain(
+      "Не меняй размер и соотношение сторон изображения.",
+    );
     expect(provider.get("size")).toBe("1088x608");
     expect(transform).toHaveBeenCalledWith({
       width: 1080,
