@@ -46,7 +46,7 @@ describe('structured Telegram publishing',()=>{
       {type:'slideshow',blocks:[
         {type:'photo',photo:{type:'photo',media:'attach://photo0'}},
         {type:'photo',photo:{type:'photo',media:'attach://photo1'}},
-      ]},
+      ],caption:{text:'Прокрутите влево или вправо'}},
       ...rich().richMessageBlocks,
     ]});
     expect(result.delivery_mode).toBe('rich_message_slideshow');
