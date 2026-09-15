@@ -37,8 +37,36 @@
   function stopSearchDots(){if(dotTimer!==null){clearInterval(dotTimer);dotTimer=null}dotCount=1;if(searchDots)searchDots.textContent='.'}
   function startSearchDots(){stopSearchDots();if(!searchDots)return;dotTimer=setInterval(()=>{dotCount=dotCount%3+1;searchDots.textContent='.'.repeat(dotCount)},450)}
   function setPending(pending){if(searchModal)searchModal.hidden=!pending;if(pending)startSearchDots();else stopSearchDots()}
+  function scrollResponseIntoView(){const response=root.querySelector('.publish-ai-wizard__response');if(!response)return;responseBody.scrollTop=0;const scroll=()=>response.scrollIntoView({behavior:'smooth',block:'start'});if(typeof window.requestAnimationFrame==='function')window.requestAnimationFrame(scroll);else scroll()}
   function cancelAiMessage(){const controller=activeController;if(!controller)return;activeController=null;controller.abort();setPending(false)}
-  async function requestAi(message,mode='text',imageOptions=imageOptionsForPreset(activePreset()),selectedIdea){if(!message||activeController)return;const requestImageOptions=normalizeImageOptions(imageOptions);const controller=new AbortController();activeController=controller;setPending(true);try{const response=await fetch('/api/miniapp/ai/chat',{method:'POST',headers:{Authorization:`tma ${tg?.initData||''}`,'content-type':'application/json'},body:JSON.stringify(selectedIdea?{message,mode,selectedIdea:{title:selectedIdea.title,text:selectedIdea.text}}:{message,mode}),signal:controller.signal});const result=await response.json().catch(()=>null);if(controller.signal.aborted||activeController!==controller)return;if(!response.ok)throw new Error(result?.error?.message||'Не удалось получить ответ AI.');if(mode==='discovery'){if(!result?.discovery)throw new Error('AI вернул некорректные варианты.');renderDiscovery(result.discovery)}else{if(typeof result?.text!=='string'||!result.text.trim())throw new Error('AI вернул пустой ответ.');setResponse(result.text,{controlsState:'ready-post',imageOptions:requestImageOptions})}tg?.HapticFeedback?.notificationOccurred?.('success')}catch(error){if(!controller.signal.aborted&&activeController===controller){setResponse(error instanceof Error?error.message:'Не удалось получить ответ AI.',{imageOptions:DEFAULT_IMAGE_OPTIONS});tg?.HapticFeedback?.notificationOccurred?.('error')}}finally{if(activeController===controller){activeController=null;setPending(false)}}}
+  async function requestAi(message,mode='text',imageOptions=imageOptionsForPreset(activePreset()),selectedIdea){
+    if(!message||activeController)return;
+    const requestImageOptions=normalizeImageOptions(imageOptions);
+    const controller=new AbortController();
+    activeController=controller;
+    setPending(true);
+    let shouldScrollResponse=false;
+    try{
+      const response=await fetch('/api/miniapp/ai/chat',{method:'POST',headers:{Authorization:`tma ${tg?.initData||''}`,'content-type':'application/json'},body:JSON.stringify(selectedIdea?{message,mode,selectedIdea:{title:selectedIdea.title,text:selectedIdea.text}}:{message,mode}),signal:controller.signal});
+      const result=await response.json().catch(()=>null);
+      if(controller.signal.aborted||activeController!==controller)return;
+      if(!response.ok)throw new Error(result?.error?.message||'Не удалось получить ответ AI.');
+      if(mode==='discovery'){
+        if(!result?.discovery)throw new Error('AI вернул некорректные варианты.');
+        renderDiscovery(result.discovery);
+        shouldScrollResponse=true;
+      }else{
+        if(typeof result?.text!=='string'||!result.text.trim())throw new Error('AI вернул пустой ответ.');
+        setResponse(result.text,{controlsState:'ready-post',imageOptions:requestImageOptions});
+        shouldScrollResponse=true;
+      }
+      tg?.HapticFeedback?.notificationOccurred?.('success');
+    }catch(error){
+      if(!controller.signal.aborted&&activeController===controller){setResponse(error instanceof Error?error.message:'Не удалось получить ответ AI.',{imageOptions:DEFAULT_IMAGE_OPTIONS});tg?.HapticFeedback?.notificationOccurred?.('error')}
+    }finally{
+      if(activeController===controller){activeController=null;setPending(false);if(shouldScrollResponse)scrollResponseIntoView()}
+    }
+  }
   function confirmIdea(idea,n){if(!window.confirm(`Выбрать вариант ${n}: «${idea.title}»?`))return;const prompt=`Раскрой выбранный тезис и подготовь готовый пост для публикации, сохранив предметные требования выбранной темы.\n\nЭто отдельный API-запрос, поэтому весь выбранный тезис передан ниже. Используй именно его как предмет публикации и не ссылайся на предыдущий диалог.\n\nВыбранный тезис:\n${JSON.stringify(idea,null,2)}\n\nВерни полный новый готовый пост. Не комментируй изменения и не добавляй вводных фраз.\n\n${READY_POST_FORMAT_CONTRACT}`;void requestAi(prompt,'text',imageOptionsForPreset(activePreset()),idea)}
   function rewritePost(action){const previous=currentResponse.trim(),instruction=rewriteInstructions[action];if(!previous||!instruction||activeController)return;const prompt=`${instruction}\n\nЭто отдельный API-запрос, поэтому предыдущий готовый пост передан ниже. Работай именно с ним.\n\nПредыдущий готовый пост:\n${previous}\n\nВерни полный новый готовый пост. Не комментируй изменения и не добавляй вводных фраз.\n\n${READY_POST_FORMAT_CONTRACT}`;void requestAi(prompt,'text',currentImageOptions)}
   function setMode(mode,{notify=true}={}){const wizardMode=mode==='wizard';root.hidden=!wizardMode;composerContent.hidden=wizardMode;screen.dataset.publishMode=mode;window.dispatchEvent(new CustomEvent('cosmo-publish-mode',{detail:{mode}}));if(notify)emit('screen')}
