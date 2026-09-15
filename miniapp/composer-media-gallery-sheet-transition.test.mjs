@@ -10,7 +10,11 @@ test('gallery sheet enters from below with a fading scrim',async()=>{
  assert.match(css,/\.cosmo-gallery-sheet\{[^}]*transform:translate3d\(0,100%,0\);[^}]*transition:transform 280ms cubic-bezier\(\.22,\.61,\.36,1\)/);
  assert.match(css,/\.cosmo-gallery-layer\.is-open \.cosmo-gallery-scrim\{opacity:1\}/);
  assert.match(css,/\.cosmo-gallery-layer\.is-open \.cosmo-gallery-sheet\{transform:translate3d\(0,0,0\)\}/);
- assert.match(gallery,/requestAnimationFrame\(\(\)=>\{if\(root===openingRoot&&!openingRoot\.classList\.contains\('is-closing'\)\)openingRoot\.classList\.add\('is-open'\)\}\)/);
+ const open=gallery.match(/const open=.*?;\n trigger\.addEventListener/s)?.[0]||'';
+ assert.match(open,/openingSheet=openingRoot\.querySelector\('\.cosmo-gallery-sheet'\)/);
+ assert.match(open,/void openingSheet\.offsetHeight/);
+ assert.ok(open.indexOf('void openingSheet.offsetHeight')<open.indexOf("classList.add('is-open')"));
+ assert.doesNotMatch(open,/requestAnimationFrame/);
 });
 
 test('gallery sheet stays mounted until its exit transition completes',async()=>{
