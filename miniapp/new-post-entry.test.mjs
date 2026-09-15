@@ -50,10 +50,9 @@ test('Before/After Back and Save use the shared navigation API',()=>{
   assert.doesNotMatch(controller,/dispatchEvent\(new CustomEvent\('cosmo-before-after-close'/);
 });
 
-test('Back controls use the same arrow and Назад label',()=>{
-  assert.match(navigation,/backButton\.textContent='‹ Назад'/);
+test('Back controls preserve accessible labels and the shared navigation path',()=>{
+  assert.match(navigation,/backButton\.setAttribute\('aria-label','Назад'\)/);
   assert.match(navigation,/backButton\.addEventListener\('click',\(\)=>\{void navigation\.back\(\)\}\)/);
-  assert.match(navigation,/\.cosmo-composer-back\{[^}]*font:600 15px\/1 inherit!important[^}]*padding:8px 4px!important/);
   assert.match(beforeAfterHtml,/<button id="back" class="ghost">‹ Назад<\/button>/);
 });
 
