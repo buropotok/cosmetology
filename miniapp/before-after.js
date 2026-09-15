@@ -97,15 +97,29 @@ function applySoloFit(kind) {
   composite.clearCommitted();
   render();
 }
-async function applySoloVersion(fileValue) {
-  await state.restore({ version: 1, layout: 'horizontal', ratio: '16/9', cropHeight: null, before: { imageIndex: 0, x: 0, y: 0, scale: 1, rotation: 0, fitted: false }, after: null, watermark: null, watermarkState: { x: 0, y: 0, scale: 1, rotation: 0, opacity: .2 } }, [fileValue], watermarks.find);
-  await refitSoloSource();
+function captureSoloGeometry() {
+  const photo = state.photos.before;
+  if (mode !== 'solo' || !photo) return null;
+  return { ratio: state.selectedRatio, cropHeight: state.cropHeight, x: photo.x, y: photo.y, scale: photo.scale, rotation: photo.rotation, fitted: photo.fitted };
+}
+async function applySoloVersion(fileValue, versionGeometry = null) {
+  const sharedWatermark = state.selectedWatermark;
+  const sharedWatermarkState = { ...state.watermarkState };
+  const geometryState = versionGeometry || { ratio: '16/9', cropHeight: null, x: 0, y: 0, scale: 1, rotation: 0, fitted: false };
+  await state.restore({ version: 1, layout: 'horizontal', ratio: geometryState.ratio || '16/9', cropHeight: geometryState.cropHeight ?? null, before: { imageIndex: 0, x: geometryState.x || 0, y: geometryState.y || 0, scale: geometryState.scale || 1, rotation: geometryState.rotation || 0, fitted: geometryState.fitted !== false }, after: null, watermark: null, watermarkState: sharedWatermarkState }, [fileValue], watermarks.find);
+  state.selectedWatermark = sharedWatermark;
+  state.watermarkState = sharedWatermarkState;
+  if (!versionGeometry) return refitSoloSource();
+  restoreLayoutStyles();
+  composite.clearCommitted();
+  render();
+  return true;
 }
 function configureMode() {
   document.body.dataset.mode = mode;
   if (mode !== 'solo') return;
   file.disabled = true;
-  soloAi = createSoloAi({ root: document, getCurrentBlob: () => composite.publicBlob(), applyVersion: applySoloVersion, authHeaders: () => {
+  soloAi = createSoloAi({ root: document, getCurrentBlob: () => composite.photoBlob(), getGeometry: captureSoloGeometry, applyVersion: applySoloVersion, authHeaders: () => {
     if (!webApp?.initData) throw new Error('Откройте приложение внутри Telegram.');
     return authHeaders();
   }, showError });
@@ -118,7 +132,7 @@ function configureMode() {
   slots.append(soloGestureHint);
   const controls = document.createElement('section'); controls.className = 'solo-rotation'; controls.innerHTML = '<div class="solo-rotation-head"><strong>Поворот</strong><span id="soloAngle">0°</span></div>';
   const slider = rotation.cloneNode(true); slider.id = 'soloRotation'; slider.min = '-180'; slider.max = '180'; slider.step = '1'; controls.append(slider);
-  const fitActions = document.createElement('div'); fitActions.className = 'solo-fit-actions'; fitActions.innerHTML = '<button type="button" data-solo-fit="width">По ширине</button><button type="button" data-solo-fit="height">По высоте</button><button type="button" data-solo-fit="contain">Вписать целиком</button>'; controls.append(fitActions); slots.after(controls);
+  const fitActions = document.createElement('div'); fitActions.className = 'solo-fit-actions'; fitActions.innerHTML = '<button type="button" data-solo-fit="width">По ширине</button><button type="button" data-solo-fit="height">По высоте</button><button type="button" data-solo-fit="contain">Вписать целиком</button>'; controls.append(fitActions); const versionStrip = $('soloVersions'); if (versionStrip) versionStrip.after(controls); else slots.after(controls);
   slider.addEventListener('input', () => { const photo = state.photos.before; if (!photo) return; photo.rotation = Number(slider.value); controls.querySelector('#soloAngle').textContent = `${slider.value}°`; composite.clearCommitted(); render(); });
   fitActions.querySelectorAll('[data-solo-fit]').forEach(button => button.addEventListener('click', () => applySoloFit(button.dataset.soloFit)));
 }

@@ -3,23 +3,22 @@ import { createSoloImageHistory } from "./solo-image-history.js";
 export function createSoloAi({
   root,
   getCurrentBlob,
+  getGeometry,
   applyVersion,
   authHeaders,
   showError,
 }) {
   const history = createSoloImageHistory();
   const strip = root.querySelector("#soloVersions"),
-    instruction = root.querySelector("#soloAiInstruction");
-  const generate = root.querySelector("#soloAiGenerate"),
-    undo = root.querySelector("#soloUndo"),
-    redo = root.querySelector("#soloRedo");
-  const overlay = root.querySelector("#saveOverlay"),
-    title = root.querySelector("#saveTitle"),
-    stage = root.querySelector("#saveStage"),
-    cancel = root.querySelector("#saveCancel");
+    instruction = root.querySelector("#soloAiInstruction"),
+    generate = root.querySelector("#soloAiGenerate");
+  const overlay = root.querySelector("#soloAiOverlay"),
+    stage = root.querySelector("#soloAiStage"),
+    cancel = root.querySelector("#soloAiCancel");
   let controller = null,
     dotsTimer = 0,
-    operation = 0;
+    operation = 0,
+    selecting = false;
 
   function render() {
     const value = history.snapshot();
@@ -38,21 +37,27 @@ export function createSoloAi({
         return button;
       }),
     );
-    undo.disabled = !value.canUndo;
-    redo.disabled = !value.canRedo;
+  }
+
+  function syncActiveGeometry() {
+    history.updateActiveGeometry(getGeometry?.() || null);
   }
 
   async function select(index) {
-    const previous = history.snapshot().activeIndex,
-      version = history.select(index);
-    if (!version || index === previous) return;
+    const previousIndex = history.snapshot().activeIndex;
+    if (index === previousIndex || selecting) return;
+    const version = history.get(index);
+    if (!version) return;
+    syncActiveGeometry();
+    selecting = true;
     try {
-      await applyVersion(version.file);
+      await applyVersion(version.file, version.geometry);
+      history.select(index);
       render();
     } catch (error) {
-      history.select(previous);
-      render();
       showError(error?.message || "Не удалось открыть выбранную версию.");
+    } finally {
+      selecting = false;
     }
   }
 
@@ -60,14 +65,10 @@ export function createSoloAi({
     if (dotsTimer) clearInterval(dotsTimer);
     dotsTimer = 0;
     overlay.hidden = true;
-    cancel.hidden = true;
-    title.textContent = "Загрузка в редактор";
-    stage.textContent = "Подготавливаем изображение…";
   }
+
   function showLoading() {
     let dots = 0;
-    title.textContent = "AI-редактирование";
-    cancel.hidden = false;
     overlay.hidden = false;
     const tick = () => {
       dots = (dots % 3) + 1;
@@ -76,6 +77,7 @@ export function createSoloAi({
     tick();
     dotsTimer = window.setInterval(tick, 450);
   }
+
   function abort() {
     if (!controller) return;
     operation += 1;
@@ -90,8 +92,10 @@ export function createSoloAi({
       showError("Введите пожелания для редактирования изображения.");
       return;
     }
-    if (controller) return;
+    if (controller || selecting) return;
     showError("");
+    syncActiveGeometry();
+    const baseVersion = history.current();
     const currentOperation = ++operation;
     controller = new AbortController();
     const signal = controller.signal;
@@ -124,8 +128,13 @@ export function createSoloAi({
         type: blob.type,
         lastModified: Date.now(),
       });
-      history.append(file);
-      await applyVersion(file);
+      await applyVersion(file, null);
+      if (currentOperation !== operation) {
+        if (baseVersion)
+          await applyVersion(baseVersion.file, baseVersion.geometry).catch(() => {});
+        return;
+      }
+      history.append(file, getGeometry?.() || null);
       render();
     } catch (error) {
       if (currentOperation === operation && error?.name !== "AbortError")
@@ -143,25 +152,21 @@ export function createSoloAi({
 
   generate.onclick = () => void run();
   cancel.onclick = abort;
-  undo.onclick = () => {
-    const value = history.snapshot();
-    if (value.canUndo) void select(value.activeIndex - 1);
-  };
-  redo.onclick = () => {
-    const value = history.snapshot();
-    if (value.canRedo) void select(value.activeIndex + 1);
-  };
 
   function initialize(file) {
     abort();
     history.initialize(file);
     render();
   }
+
   function destroy() {
     abort();
+    selecting = false;
     history.destroy();
     strip.replaceChildren();
+    hideLoading();
   }
+
   return {
     initialize,
     destroy,
