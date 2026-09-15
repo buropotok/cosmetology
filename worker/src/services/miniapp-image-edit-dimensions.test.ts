@@ -112,7 +112,34 @@ describe("Mini App image edit dimensions", () => {
       fit: "cover",
     });
     expect(output).toHaveBeenCalledWith({ format: "image/png" });
+    expect(responseOptions).toHaveBeenCalledWith({
+      headers: {
+        "cache-control": "no-store",
+        "content-disposition": 'inline; filename="edited-image.png"',
+      },
+    });
     expect(response.headers.get("content-type")).toBe("image/png");
     expect(response.headers.get("cache-control")).toBe("no-store");
+  });
+
+  it("fails locally when source dimensions cannot be decoded", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const imageTransform = {
+      info: vi.fn().mockRejectedValue(new Error("decode failed")),
+      input: vi.fn(),
+    };
+    const env = {
+      TELEGRAM_BOT_TOKEN: token,
+      OPENAI_API_KEY: "openai-key",
+      IMAGE_TRANSFORM: imageTransform,
+    } as unknown as Env;
+
+    await expect(editMiniAppImage(await request(), env)).rejects.toMatchObject({
+      code: "INVALID_IMAGE_DATA",
+      status: 400,
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(imageTransform.input).not.toHaveBeenCalled();
   });
 });
