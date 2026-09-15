@@ -17,7 +17,7 @@ import {postDocumentToTiptap,tiptapToPostDocument} from './post-document-tiptap-
     .composer-tiptap-editor{min-height:250px;max-height:none;overflow:auto;white-space:normal;overflow-wrap:anywhere}
     .composer-tiptap-editor .tiptap{min-height:250px;outline:none;white-space:pre-wrap}
     .composer-tiptap-editor .tiptap p{margin:0 0 .7em}
-    .composer-tiptap-editor .tiptap h1{margin:.35em 0 .55em;font-size:1.45em;line-height:1.25}
+    .composer-tiptap-editor .tiptap h1{margin:.35em 0 .55em;font-family:"Times New Roman",Times,serif;font-size:1.45em;line-height:1.25}
     .composer-tiptap-editor .tiptap blockquote{margin:8px 0;padding:4px 0 4px 12px;border-left:3px solid #8d96a0}
     .composer-tiptap-editor .tiptap [data-cosmo-spoiler]{background:#d8d8de;border-radius:4px;padding:0 3px;text-decoration:underline dotted}
     .composer-tiptap-editor .tiptap [data-cosmo-spoiler]::before{content:'⟦'}
@@ -50,10 +50,21 @@ import {postDocumentToTiptap,tiptapToPostDocument} from './post-document-tiptap-
   `;
   document.head.append(style);
 
+  function detailsAtResolvedPos($pos){for(let depth=$pos.depth;depth>0;depth--){const node=$pos.node(depth);if(node.type.name==='details')return{node,from:$pos.before(depth),to:$pos.after(depth)}}return null}
+  function detailsTextBounds(node,from){let first=null,last=null;node.descendants((child,offset)=>{if(!child.isTextblock)return;const start=from+offset+2,end=start+child.content.size;if(first===null)first=start;last=end});return first===null?null:{from:first,to:last}}
+  function selectedWholeDetails(selection){
+    if(selection.node?.type?.name==='details')return{from:selection.from,to:selection.to};
+    if(selection.empty)return null;
+    const start=detailsAtResolvedPos(selection.$from),end=detailsAtResolvedPos(selection.$to);
+    if(!start||!end||start.from!==end.from)return null;
+    const bounds=detailsTextBounds(start.node,start.from);
+    return bounds&&selection.from<=bounds.from&&selection.to>=bounds.to?{from:start.from,to:start.to}:null;
+  }
+
   const Spoiler=Mark.create({name:'spoiler',parseHTML(){return[{tag:'span[data-cosmo-spoiler]'}]},renderHTML({HTMLAttributes}){return['span',mergeAttributes(HTMLAttributes,{'data-cosmo-spoiler':'1'}),0]}});
   const DetailsSummary=Node.create({name:'detailsSummary',content:'inline*',defining:true,parseHTML(){return[{tag:'summary'}]},renderHTML({HTMLAttributes}){return['summary',mergeAttributes(HTMLAttributes),0]}});
   const DetailsBody=Node.create({name:'detailsBody',content:'block+',defining:true,parseHTML(){return[{tag:'div[data-cosmo-details-body]'}]},renderHTML({HTMLAttributes}){return['div',mergeAttributes(HTMLAttributes,{'data-cosmo-details-body':'1'}),0]}});
-  const Details=Node.create({name:'details',group:'block',content:'detailsSummary detailsBody',isolating:true,parseHTML(){return[{tag:'details'}]},renderHTML({HTMLAttributes}){return['details',mergeAttributes(HTMLAttributes),0]}});
+  const Details=Node.create({name:'details',priority:1000,group:'block',content:'detailsSummary detailsBody',isolating:true,parseHTML(){return[{tag:'details'}]},renderHTML({HTMLAttributes}){return['details',mergeAttributes(HTMLAttributes),0]},addKeyboardShortcuts(){return{Backspace:()=>{const {selection}=this.editor.state,selected=selectedWholeDetails(selection);if(selected)return this.editor.commands.deleteRange(selected);if(!selection.empty)return false;const current=detailsAtResolvedPos(selection.$from);return current&&current.node.textContent.length===0?this.editor.commands.deleteRange({from:current.from,to:current.to}):false}}}});
 
   const plainDocument=value=>({type:'doc',content:String(value||'').replace(/\r\n?/g,'\n').split('\n').map(line=>({type:'paragraph',content:line?[{type:'text',text:line}]:undefined}))});
   const changeListeners=new Set();
@@ -100,11 +111,19 @@ import {postDocumentToTiptap,tiptapToPostDocument} from './post-document-tiptap-
   let listItems=listMenu?[...listMenu.querySelectorAll('.composer-menu-item')]:[];
   const listBox=listItems[0]?.parentElement;if(listBox&&listItems.length===3){for(const label of ['Увеличить уровень','Уменьшить уровень','Убрать список']){const b=document.createElement('button');b.type='button';b.className='composer-menu-item';b.textContent=label;listBox.append(b)}listItems=[...listMenu.querySelectorAll('.composer-menu-item')]}
   const closeMenu=menu=>menu?.classList.remove('open');const preserve=e=>e.preventDefault();
+  toolbar.addEventListener('pointerdown',e=>{if(e.target.closest?.('button'))e.preventDefault()});
   formatItems.forEach(i=>i.addEventListener('mousedown',preserve));blockItems.forEach(i=>i.addEventListener('mousedown',preserve));listItems.forEach(i=>i.addEventListener('mousedown',preserve));linkItems.forEach(i=>i.addEventListener('mousedown',preserve));
   formatItems.forEach((item,index)=>item.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();const c=editor.chain().focus();if(index===0)c.toggleBold();else if(index===1)c.toggleItalic();else if(index===2)c.toggleUnderline();else if(index===3)c.toggleStrike();else if(index===4)c.toggleMark('spoiler');c.run();closeMenu(formatMenu)}));
   blockItems.forEach((item,index)=>item.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();const c=editor.chain().focus();if(index===0)c.setParagraph();else if(index===1)c.toggleHeading({level:1});else if(index===2)c.toggleBlockquote();c.run();closeMenu(blockMenu)}));
   function selectedLines(){const {from,to}=editor.state.selection;return editor.state.doc.textBetween(from,to,'\n').split('\n').map(x=>x.trim()).filter(Boolean)}
-  function insertDetails(){const lines=selectedLines();if(!lines.length)return;const content=lines.map(line=>({type:'paragraph',content:[{type:'text',text:line}]}));const {from,to}=editor.state.selection;editor.chain().focus().deleteRange({from,to}).insertContent({type:'details',content:[{type:'detailsSummary',content:[{type:'text',text:'Подробнее'}]},{type:'detailsBody',content}]}).run()}
+  function detailsNode(content){return{type:'details',content:[{type:'detailsSummary',content:[{type:'text',text:'Подробнее'}]},{type:'detailsBody',content}]}}
+  function insertDetails(){
+    const lines=selectedLines(),{selection}=editor.state;
+    if(lines.length){const content=lines.map(line=>({type:'paragraph',content:[{type:'text',text:line}]}));const {from,to}=selection;editor.chain().focus().deleteRange({from,to}).insertContent(detailsNode(content)).run();return}
+    const {$from}=selection;
+    if(!selection.empty||$from.depth!==1||$from.parent.type.name!=='paragraph'||$from.parent.content.size!==0)return;
+    editor.chain().focus().insertContentAt({from:$from.before($from.depth),to:$from.after($from.depth)},detailsNode([{type:'paragraph'}])).run()
+  }
   listItems.forEach((item,index)=>item.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();const c=editor.chain().focus();if(index===0)c.toggleOrderedList().run();else if(index===1)c.toggleBulletList().run();else if(index===2)insertDetails();else if(index===3)c.sinkListItem('listItem').run();else if(index===4)c.liftListItem('listItem').run();else if(index===5){if(editor.isActive('orderedList'))c.toggleOrderedList().run();else if(editor.isActive('bulletList'))c.toggleBulletList().run()}closeMenu(listMenu)}));
 
   if(linkItems[0])linkItems[0].addEventListener('click',e=>{e.preventDefault();e.stopPropagation();const previous=editor.getAttributes('link').href||'https://',href=prompt('Ссылка',previous);if(!href)return;try{const u=new URL(href);if(!/^https?:$/.test(u.protocol))throw 0;editor.chain().focus().extendMarkRange('link').setLink({href:u.href}).run();closeMenu(linkMenu)}catch{alert('Нужна ссылка http:// или https://')}});
@@ -119,7 +138,7 @@ import {postDocumentToTiptap,tiptapToPostDocument} from './post-document-tiptap-
   function makeEmojiPanelDraggable(panel,handle){let drag=null;const finish=event=>{if(!drag||event.pointerId!==drag.pointerId)return;try{handle.releasePointerCapture?.(event.pointerId)}catch{}drag=null};handle.addEventListener('pointerdown',event=>{if(event.pointerType==='mouse'&&event.button!==0)return;const rect=panel.getBoundingClientRect();drag={pointerId:event.pointerId,x:event.clientX,y:event.clientY,left:rect.left,top:rect.top};handle.setPointerCapture?.(event.pointerId);event.preventDefault()});handle.addEventListener('pointermove',event=>{if(!drag||event.pointerId!==drag.pointerId)return;event.preventDefault();placeEmojiPanel(panel,drag.left+event.clientX-drag.x,drag.top+event.clientY-drag.y)});handle.addEventListener('pointerup',finish);handle.addEventListener('pointercancel',finish)}
 
   const EMOJIS=['😀','😃','😄','😁','😆','😅','😂','🤣','😊','😇','🙂','🙃','😉','😍','🥰','😘','😋','😎','🤩','🥳','😌','😏','🤔','🤗','🤭','🫶','🤫','😴','😮','😲','🥺','😢','😭','😤','😡','🤯','😱','😬','🙄','👍','👎','👌','✌️','🤞','🤟','🤘','👏','🙌','🤝','🙏','💪','👉','👈','☝️','👇','👋','💅','🤳','❤️','🩷','🧡','💛','💚','🩵','💙','💜','🤎','🖤','🤍','💔','❣️','💕','💞','💓','💗','💖','💘','💝','💟','✨','⭐','🌟','💫','🔥','💥','💯','💢','💦','💧','🌿','🍃','☘️','🌱','🌸','🌺','🌷','🌹','🌻','🌼','🪻','🪷','🌞','🌙','☀️','🌈','❄️','⚡','🍏','🍎','🍋','🍓','🍒','🥑','🥦','🥗','☕','🍵','🥤','🧴','🧼','🫧','🪥','🧖‍♀️','💆‍♀️','💇‍♀️','💄','💋','👄','👁️','🩺','💊','🩹','🧬','🔬','🧪','🧫','📌','📍','📎','✂️','📝','📖','📚','📅','⏰','⌛','📱','💻','📸','🎥','🎁','🎉','🎊','🎀','🏆','🥇','💎','🔔','🔗','🔒','🔑','💡','🔍','📣','💬','🗨️','✅','☑️','❌','⚠️','❗','❓','ℹ️','➕','➖','➡️','⬅️','⬆️','⬇️','↗️','↘️','🔴','🟠','🟡','🟢','🔵','🟣','⚪','⚫'];
-  const emojiBtn=toolbar.querySelector('[title="Emoji"]');if(emojiBtn){emojiBtn.addEventListener('mousedown',preserve);emojiBtn.addEventListener('click',e=>{e.preventDefault();const existing=document.querySelector('.composer-emoji-panel');if(existing){existing.remove();return}const panel=document.createElement('div');panel.className='composer-emoji-panel';panel.style.visibility='hidden';const handle=document.createElement('div');handle.className='composer-emoji-drag-handle';handle.setAttribute('aria-label','Переместить панель эмодзи');panel.append(handle);const scroll=document.createElement('div');scroll.className='composer-emoji-scroll';scroll.setAttribute('aria-label','Эмодзи');for(const emoji of EMOJIS){const b=document.createElement('button');b.type='button';b.textContent=emoji;b.setAttribute('aria-label',emoji);b.addEventListener('mousedown',preserve);b.addEventListener('click',()=>{editor.chain().focus().insertContent(emoji).run();panel.remove()});scroll.append(b)}panel.append(scroll);document.body.append(panel);positionEmojiPanel(panel,emojiBtn);makeEmojiPanelDraggable(panel,handle);panel.style.visibility=''})}
+  const emojiBtn=toolbar.querySelector('[title="Emoji"]');if(emojiBtn){emojiBtn.addEventListener('mousedown',preserve);emojiBtn.addEventListener('click',e=>{e.preventDefault();const existing=document.querySelector('.composer-emoji-panel');if(existing){existing.remove();return}const panel=document.createElement('div');panel.className='composer-emoji-panel';panel.style.visibility='hidden';const handle=document.createElement('div');handle.className='composer-emoji-drag-handle';handle.setAttribute('aria-label','Переместить панель эмодзи');panel.append(handle);const scroll=document.createElement('div');scroll.className='composer-emoji-scroll';scroll.setAttribute('aria-label','Эмодзи');for(const emoji of EMOJIS){const b=document.createElement('button');b.type='button';b.textContent=emoji;b.setAttribute('aria-label',emoji);b.addEventListener('pointerdown',preserve);b.addEventListener('mousedown',preserve);b.addEventListener('click',()=>{editor.chain().focus().insertContent(emoji).run();panel.remove()});scroll.append(b)}panel.append(scroll);document.body.append(panel);positionEmojiPanel(panel,emojiBtn);makeEmojiPanelDraggable(panel,handle);panel.style.visibility=''})}
 
   renderButtons();
   window.CosmoRichEditor={element:host,editor,toPostDocument,getPlainText,focus,getSubmissionValue,setDocument,subscribe,draftValue,restoreDraft,restorePlain,clear,openButtonEditor};
