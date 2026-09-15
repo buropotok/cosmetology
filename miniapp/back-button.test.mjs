@@ -40,7 +40,7 @@ test('Before After, gallery and link-editor Back controls keep their component-o
   assert.doesNotMatch(beforeAfterHtml,/back-button\.css|class="[^"]*\bback-button\b/);
   assert.match(beforeAfterHtml,/<button id="back" class="ghost">‹ Назад<\/button>/);
   assert.doesNotMatch(gallery,/cosmo-gallery-back back-button/);
-  assert.match(gallery,/class=\\"cosmo-gallery-back\\" hidden aria-label=\\"Назад\\">‹/);
+  assert.match(gallery,/class="cosmo-gallery-back" hidden aria-label="Назад">‹/);
   assert.doesNotMatch(tiptap,/composer-button-modal-back back-button/);
   assert.match(tiptap,/secondary\.className=step==='text'\?'composer-button-modal-cancel':'composer-button-modal-back'/);
 });
