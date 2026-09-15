@@ -60,11 +60,12 @@ import {postDocumentToTiptap,tiptapToPostDocument} from './post-document-tiptap-
     const bounds=detailsTextBounds(start.node,start.from);
     return bounds&&selection.from<=bounds.from&&selection.to>=bounds.to?{from:start.from,to:start.to}:null;
   }
+  function removeDetails(editor,range){const {doc}=editor.state;return range.from===0&&range.to===doc.content.size?editor.commands.insertContentAt(range,{type:'paragraph'}):editor.commands.deleteRange(range)}
 
   const Spoiler=Mark.create({name:'spoiler',parseHTML(){return[{tag:'span[data-cosmo-spoiler]'}]},renderHTML({HTMLAttributes}){return['span',mergeAttributes(HTMLAttributes,{'data-cosmo-spoiler':'1'}),0]}});
   const DetailsSummary=Node.create({name:'detailsSummary',content:'inline*',defining:true,parseHTML(){return[{tag:'summary'}]},renderHTML({HTMLAttributes}){return['summary',mergeAttributes(HTMLAttributes),0]}});
   const DetailsBody=Node.create({name:'detailsBody',content:'block+',defining:true,parseHTML(){return[{tag:'div[data-cosmo-details-body]'}]},renderHTML({HTMLAttributes}){return['div',mergeAttributes(HTMLAttributes,{'data-cosmo-details-body':'1'}),0]}});
-  const Details=Node.create({name:'details',priority:1000,group:'block',content:'detailsSummary detailsBody',isolating:true,parseHTML(){return[{tag:'details'}]},renderHTML({HTMLAttributes}){return['details',mergeAttributes(HTMLAttributes),0]},addKeyboardShortcuts(){return{Backspace:()=>{const {selection}=this.editor.state,selected=selectedWholeDetails(selection);if(selected)return this.editor.commands.deleteRange(selected);if(!selection.empty)return false;const current=detailsAtResolvedPos(selection.$from);return current&&current.node.textContent.length===0?this.editor.commands.deleteRange({from:current.from,to:current.to}):false}}}});
+  const Details=Node.create({name:'details',priority:1000,group:'block',content:'detailsSummary detailsBody',isolating:true,parseHTML(){return[{tag:'details'}]},renderHTML({HTMLAttributes}){return['details',mergeAttributes(HTMLAttributes),0]},addKeyboardShortcuts(){return{Backspace:()=>{const {selection}=this.editor.state,selected=selectedWholeDetails(selection);if(selected)return removeDetails(this.editor,selected);if(!selection.empty)return false;const current=detailsAtResolvedPos(selection.$from);return current&&current.node.textContent.length===0?removeDetails(this.editor,{from:current.from,to:current.to}):false}}}});
 
   const plainDocument=value=>({type:'doc',content:String(value||'').replace(/\r\n?/g,'\n').split('\n').map(line=>({type:'paragraph',content:line?[{type:'text',text:line}]:undefined}))});
   const changeListeners=new Set();
