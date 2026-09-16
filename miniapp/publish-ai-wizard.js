@@ -59,7 +59,8 @@
     const controller=new AbortController();
     activeController=controller;
     setPending(true);
-    let shouldScrollResponse=false,completed=false,failed=false;
+    let shouldScrollResponse=false;
+    let completed=false,failed=false;
     try{
       const response=await fetch('/api/miniapp/ai/chat',{method:'POST',headers:{Authorization:`tma ${tg?.initData||''}`,'content-type':'application/json'},body:JSON.stringify(selectedIdea?{message,mode,selectedIdea:{title:selectedIdea.title,text:selectedIdea.text}}:{message,mode}),signal:controller.signal});
       const result=await response.json().catch(()=>null);
