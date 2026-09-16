@@ -12,10 +12,10 @@ async function sign(values: Record<string, string>) {
   params.set('hash', [...hash].map((byte) => byte.toString(16).padStart(2, '0')).join(''));
   return params.toString();
 }
-const values = () => ({ auth_date: String(now), query_id: 'AAEAAAE', user: JSON.stringify({ id: 42, first_name: 'Анна', username: 'anna' }) });
+const values = () => ({ auth_date: String(now), query_id: 'AAEAAAE', user: JSON.stringify({ id: 42, first_name: 'Анна', last_name: 'Смирнова', username: 'anna', photo_url: 'https://example.com/avatar.jpg' }) });
 
 describe('Telegram Mini App initData validation', () => {
-  it('accepts valid initData', async () => expect((await validateTelegramMiniAppInitData(await sign(values()), token, now)).user.id).toBe(42));
+  it('accepts the signed Telegram user profile', async () => expect((await validateTelegramMiniAppInitData(await sign(values()), token, now)).user).toMatchObject({ id: 42, first_name: 'Анна', last_name: 'Смирнова', username: 'anna', photo_url: 'https://example.com/avatar.jpg' }));
   it('rejects an invalid hash', async () => expect(validateTelegramMiniAppInitData(`${await sign(values())}0`, token, now)).rejects.toMatchObject({ code: 'MINIAPP_AUTH_INVALID' }));
   it('rejects a missing hash', async () => expect(validateTelegramMiniAppInitData(new URLSearchParams(values()).toString(), token, now)).rejects.toMatchObject({ code: 'MINIAPP_AUTH_INVALID' }));
   it('rejects expired auth_date', async () => expect(validateTelegramMiniAppInitData(await sign({ ...values(), auth_date: String(now - 601) }), token, now)).rejects.toMatchObject({ code: 'MINIAPP_AUTH_EXPIRED' }));
