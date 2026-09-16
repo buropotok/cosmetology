@@ -1,4 +1,5 @@
 import {initComposerMediaGallery} from './composer-media-gallery.js';
+import {prefetchComposerGallery} from './composer-media-gallery-prefetch.js';
 
 export function initComposerMediaGalleryBridge(){
  const composer=document.querySelector('#composer-screen');
@@ -14,5 +15,7 @@ export function initComposerMediaGalleryBridge(){
  addDevice.insertAdjacentElement('afterend',gallery);
  actions.classList.add('composer-image-actions--gallery');
  const disposeGallery=initComposerMediaGallery({trigger:gallery,onAdd:files=>window.CosmoComposerImages?.addFiles?.(files),getComposerImageCount:()=>window.CosmoComposerImages?.getFiles?.().length||0});
- return()=>{disposeGallery();gallery.remove();actions.classList.remove('composer-image-actions--gallery');addDevice.textContent=previousLabel};
+ const prefetch=()=>{window.removeEventListener('cosmo-new-post-choice',prefetch);void prefetchComposerGallery().catch(()=>undefined)};
+ window.addEventListener('cosmo-new-post-choice',prefetch);
+ return()=>{window.removeEventListener('cosmo-new-post-choice',prefetch);disposeGallery();gallery.remove();actions.classList.remove('composer-image-actions--gallery');addDevice.textContent=previousLabel};
 }
