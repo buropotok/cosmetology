@@ -1,3 +1,5 @@
+import {runAfterBackButtonPress} from './back-button-feedback.js';
+
 (()=>{
 const ROUTES=Object.freeze({HOME:'home',AI:'ai',COMPOSER:'composer',SETTINGS:'settings',ONBOARDING:'onboarding'}),screenIds=Object.freeze({home:'home-screen',ai:'ai-screen',composer:'composer-screen',settings:'settings-screen',onboarding:'onboarding-root'}),listeners=new Set();
 const telegram=window.CosmoTelegramGateway.create();let current=null,settingsReturn='home',onboardingHandler=null;
@@ -8,6 +10,6 @@ function closeSettings(){return show(settingsReturn||'home')}
 function setOnboardingHandler(handler){onboardingHandler=handler}
 function openOnboarding(options={}){if(!onboardingHandler)throw new Error('Onboarding router unavailable');return onboardingHandler({...options,returnTo:options.returnTo==='settings'?'settings':options.returnTo||current||'home'})}
 function subscribe(listener,{immediate=true}={}){if(typeof listener!=='function')return()=>{};listeners.add(listener);if(immediate&&current)listener(current);return()=>listeners.delete(listener)}
-document.addEventListener('click',event=>{const target=event.target.closest?.('#open-settings,.cosmo-flow-settings,#close-settings');if(!target)return;if(target.id==='close-settings')closeSettings();else openSettings()});
+document.addEventListener('click',event=>{const target=event.target.closest?.('#open-settings,.cosmo-flow-settings,#close-settings');if(!target)return;if(target.id==='close-settings')runAfterBackButtonPress(target,closeSettings);else openSettings()});
 window.CosmoRouter=Object.freeze({ROUTES,show,openSettings,closeSettings,openOnboarding,setOnboardingHandler,subscribe,get current(){return current},get settingsReturn(){return settingsReturn}});
 })();

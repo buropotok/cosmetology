@@ -48,7 +48,8 @@
   box-shadow:-5px -5px 9px rgba(255,255,255,1),8px 9px 12px rgba(112,130,149,.36),0 4px 6px rgba(105,123,142,.2) !important;
 }
 
-.back-button:active {
+.back-button:active,
+.back-button.back-button-activating {
   transform:translateY(2px) scale(.98);
   background:linear-gradient(145deg,#f7f9fb 0%,#fff 72%,#fff 100%) !important;
   box-shadow:inset 4px 4px 7px rgba(112,130,149,.22),inset -4px -4px 7px rgba(255,255,255,.9),0 2px 3px rgba(105,123,142,.16) !important;

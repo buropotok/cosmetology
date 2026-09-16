@@ -1,4 +1,5 @@
 import {createNavigationStack,NAVIGATION_STATES as STATES} from './navigation-stack.js';
+import {runAfterBackButtonPress} from './back-button-feedback.js';
 
 (()=>{
 const tg=window.Telegram?.WebApp,router=window.CosmoRouter;
@@ -169,7 +170,7 @@ async function renderState(state,options={}){
 const navigation=createNavigationStack({render:renderState});
 window.CosmoNavigation=navigation;
 
-const nav=composer.querySelector('.composer-nav');if(nav&&!nav.querySelector('#flow-composer-back')){const backButton=document.createElement('button');backButton.id='flow-composer-back';backButton.className='cosmo-composer-back back-button';backButton.type='button';backButton.setAttribute('aria-label','Назад');backButton.textContent='‹ Назад';nav.prepend(backButton);backButton.addEventListener('click',()=>{void navigation.back()})}
+const nav=composer.querySelector('.composer-nav');if(nav&&!nav.querySelector('#flow-composer-back')){const backButton=document.createElement('button');backButton.id='flow-composer-back';backButton.className='cosmo-composer-back back-button';backButton.type='button';backButton.setAttribute('aria-label','Назад');backButton.textContent='‹ Назад';nav.prepend(backButton);backButton.addEventListener('click',()=>{runAfterBackButtonPress(backButton,()=>{void navigation.back()})})}
 
 async function commitNewPost(draft){
   const composerView=await getNewPostEntryOrReport();

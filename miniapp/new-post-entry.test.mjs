@@ -49,10 +49,10 @@ test('Before/After Back and Save use the shared navigation API',()=>{
   assert.doesNotMatch(controller,/dispatchEvent\(new CustomEvent\('cosmo-before-after-close'/);
 });
 
-test('Composer Back preserves accessible label and the shared navigation path',()=>{
+test('Composer Back preserves accessible label and delays the shared navigation path until pressed feedback completes',()=>{
   assert.match(navigation,/backButton\.className='cosmo-composer-back back-button'/);
   assert.match(navigation,/backButton\.setAttribute\('aria-label','Назад'\)/);
-  assert.match(navigation,/backButton\.addEventListener\('click',\(\)=>\{void navigation\.back\(\)\}\)/);
+  assert.match(navigation,/backButton\.addEventListener\('click',\(\)=>\{runAfterBackButtonPress\(backButton,\(\)=>\{void navigation\.back\(\)\}\)\}\)/);
 });
 
 test('duplicate manual and before-after actions are removed from AI screen',()=>{

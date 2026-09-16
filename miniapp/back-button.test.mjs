@@ -3,9 +3,11 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 
 const css=await readFile(new URL('./back-button.css',import.meta.url),'utf8');
+const feedback=await readFile(new URL('./back-button-feedback.js',import.meta.url),'utf8');
 const indexHtml=await readFile(new URL('./index.html',import.meta.url),'utf8');
 const beforeAfterHtml=await readFile(new URL('./before-after.html',import.meta.url),'utf8');
 const navigation=await readFile(new URL('./navigation.js',import.meta.url),'utf8');
+const appRouter=await readFile(new URL('./app-router.js',import.meta.url),'utf8');
 const onboarding=await readFile(new URL('./onboarding-view.js',import.meta.url),'utf8');
 const gallery=await readFile(new URL('./composer-media-gallery.js',import.meta.url),'utf8');
 const tiptap=await readFile(new URL('./composer-tiptap.js',import.meta.url),'utf8');
@@ -24,16 +26,29 @@ test('screen Back controls use the shared round white pillow presentation',()=>{
   assert.match(css,/content:"←"/);
   assert.match(css,/font:400 30px\/1/);
   assert.match(css,/:focus-visible[\s\S]*outline:2px solid rgba\(83,97,112,\.72\) !important/);
-  assert.match(css,/:active[\s\S]*box-shadow:inset 4px 4px 7px/);
+  assert.match(css,/\.back-button:active,\s*\.back-button\.back-button-activating\s*\{[\s\S]*box-shadow:inset 4px 4px 7px/);
 });
 
-test('Settings, onboarding and Composer explicitly opt into the shared screen Back style',()=>{
+test('Settings, onboarding and Composer opt into the shared screen Back style and delayed feedback',()=>{
   assert.match(indexHtml,/id="close-settings" class="back-button" type="button" aria-label="Назад"/);
   assert.match(onboarding,/class="back-button" data-onboarding-back type="button" aria-label="Назад"/);
   assert.match(navigation,/backButton\.className='cosmo-composer-back back-button'/);
   assert.match(navigation,/backButton\.setAttribute\('aria-label','Назад'\)/);
-  assert.match(navigation,/backButton\.addEventListener\('click',\(\)=>\{void navigation\.back\(\)\}\)/);
-  assert.match(onboarding,/button\.matches\('\[data-onboarding-back\]'\)\)this\.controller\.back\(\)/);
+  assert.match(navigation,/runAfterBackButtonPress\(backButton,\(\)=>\{void navigation\.back\(\)\}\)/);
+  assert.match(onboarding,/runAfterBackButtonPress\(button,\(\)=>this\.controller\.back\(\)\)/);
+  assert.match(appRouter,/if\(target\.id==='close-settings'\)runAfterBackButtonPress\(target,closeSettings\)/);
+});
+
+test('shared Back feedback waits for the press transition before running navigation actions',()=>{
+  assert.match(feedback,/const TRANSITION_PROPERTY='transform'/);
+  assert.match(feedback,/button\.dataset\.backButtonActivation==='pending'/);
+  assert.match(feedback,/button\.classList\.add\('back-button-activating'\)/);
+  assert.match(feedback,/button\.addEventListener\('transitionend',finish\)/);
+  assert.match(feedback,/event\.propertyName!==TRANSITION_PROPERTY/);
+  assert.match(feedback,/fallbackTimer=setTimeout\(\(\)=>finish\(\),FALLBACK_MS\)/);
+  assert.match(feedback,/const FALLBACK_MS=160/);
+  assert.match(feedback,/window\.matchMedia\?\.\(REDUCED_MOTION_QUERY\)\?\.matches\)\{action\(\);return true\}/);
+  assert.doesNotMatch(feedback,/navigation\.|CosmoRouter|controller\./);
 });
 
 test('Before After, gallery and link-editor Back controls keep their component-owned presentation',()=>{
