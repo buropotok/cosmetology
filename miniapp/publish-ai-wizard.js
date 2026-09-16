@@ -8,6 +8,19 @@
   const PRODUCT_REVIEW_IMAGE_OPTIONS=Object.freeze({internetSearch:true,searchProfile:'cosmetic_product',sourcePolicy:'official'});
   function normalizeImageOptions(value){return value?.internetSearch===true?{internetSearch:true,searchProfile:typeof value.searchProfile==='string'?value.searchProfile.trim():'',sourcePolicy:typeof value.sourcePolicy==='string'?value.sourcePolicy.trim():''}:{...DEFAULT_IMAGE_OPTIONS}}
   function imageOptionsForPreset(preset){return preset==='Разбор препарата'?PRODUCT_REVIEW_IMAGE_OPTIONS:DEFAULT_IMAGE_OPTIONS}
+  function showGenerationResult(success){
+    const popup=success
+      ?{message:'Генерация завершена',buttons:[{id:'continue',type:'default',text:'Продолжить'}]}
+      :{message:'Генерация не удалась',buttons:[{id:'retry',type:'default',text:'Попробовать ещё раз'},{id:'cancel',type:'cancel',text:'Отмена'}]};
+    if(typeof tg?.showPopup==='function'){
+      return new Promise(resolve=>{
+        try{tg.showPopup(popup,buttonId=>resolve(buttonId||(success?'continue':'cancel')))}
+        catch{resolve(success?'continue':(window.confirm('Генерация не удалась\n\nПопробовать ещё раз?')?'retry':'cancel'))}
+      });
+    }
+    if(success){window.alert('Генерация завершена');return Promise.resolve('continue')}
+    return Promise.resolve(window.confirm('Генерация не удалась\n\nПопробовать ещё раз?')?'retry':'cancel')
+  }
   const READY_POST_FORMAT_CONTRACT=`Подготовь только готовый текст публикации. Не добавляй вводных фраз, пояснений о своей работе или заключений вне поста. Сразу начинай с публикации.\n\nИспользуй естественное форматирование ChatGPT: один основной заголовок, короткие читаемые абзацы, умеренное выделение ключевых утверждений жирным и italic только когда это улучшает чтение. Важные самостоятельные тезисы можно оформлять цитатами. Используй маркированные, нумерованные и вложенные списки там, где это естественно. Обычные источники оформляй обычными ссылками.\n\nЕсли есть большой дополнительный материал, который необязательно показывать сразу, оформи его строго так: заголовок «Подробнее» с italic-пояснением «(в Telegram текст будет раскрываемым)», после которого весь раскрываемый материал находится в следующем blockquote.\n\nЕсли нужен CTA button, оформи его обычной ссылкой и сразу после неё добавь italic-пояснение «(в Telegram будет отображаться в виде кнопки)».\n\nЭти два пояснения предназначены только для интерфейса ChatGPT и не являются частью публикации. Не используй Telegram-specific элементы без необходимости. Не выводи JSON, HTML, XML, служебную разметку, code fences, технические теги или инструкции пользователю.`;
   function productReviewPrompt(name){return `Подготовь доказательный разбор препарата «${name}».\n\nСначала найди актуальную информацию о конкретном препарате и убедись, что идентифицировал именно его, а не другой продукт с похожим названием.\n\nРазбери:\n- что это за препарат и для чего он используется;\n- состав;\n- активные компоненты и их роль;\n- механизм действия;\n- заявленные производителем показания;\n- какие из этих эффектов имеют доказательную поддержку;\n- качество и уровень имеющихся доказательств;\n- ограничения и противопоказания;\n- важные особенности применения;\n- практическую ценность препарата в косметологии.\n\nОтдельно различай:\n1. данные производителя;\n2. результаты исследований;\n3. выводы, которые можно обоснованно сделать на основании доступных данных.\n\nНе придумывай состав, свойства, исследования, регистрацию, показания или противопоказания.\n\nЕсли по какому-либо утверждению нет надёжной информации, прямо укажи, что достоверных данных недостаточно.\n\nДай краткий нейтральный вывод: что в препарате действительно обосновано, где доказательства ограничены и кому такой препарат потенциально может быть интересен.\n\nИспользуй актуальные достоверные источники. После нейтрального вывода, последним блоком публикации перечисли использованные источники обычными кликабельными ссылками. Не придумывай URL и не добавляй после источников никакого текста.\n\n${READY_POST_FORMAT_CONTRACT}`}
   const presets={
@@ -45,7 +58,7 @@
     const controller=new AbortController();
     activeController=controller;
     setPending(true);
-    let shouldScrollResponse=false;
+    let shouldScrollResponse=false,completed=false,failed=false;
     try{
       const response=await fetch('/api/miniapp/ai/chat',{method:'POST',headers:{Authorization:`tma ${tg?.initData||''}`,'content-type':'application/json'},body:JSON.stringify(selectedIdea?{message,mode,selectedIdea:{title:selectedIdea.title,text:selectedIdea.text}}:{message,mode}),signal:controller.signal});
       const result=await response.json().catch(()=>null);
@@ -60,12 +73,16 @@
         setResponse(result.text,{controlsState:'ready-post',imageOptions:requestImageOptions});
         shouldScrollResponse=true;
       }
+      completed=true;
       tg?.HapticFeedback?.notificationOccurred?.('success');
     }catch(error){
-      if(!controller.signal.aborted&&activeController===controller){setResponse(error instanceof Error?error.message:'Не удалось получить ответ AI.',{imageOptions:DEFAULT_IMAGE_OPTIONS});tg?.HapticFeedback?.notificationOccurred?.('error')}
+      if(!controller.signal.aborted&&activeController===controller){failed=true;tg?.HapticFeedback?.notificationOccurred?.('error')}
     }finally{
       if(activeController===controller){activeController=null;setPending(false);if(shouldScrollResponse)scrollResponseIntoView()}
     }
+    if(controller.signal.aborted)return;
+    if(failed){if(await showGenerationResult(false)==='retry')void requestAi(message,mode,requestImageOptions,selectedIdea);return}
+    if(completed)await showGenerationResult(true);
   }
   function confirmIdea(idea,n){if(!window.confirm(`Выбрать вариант ${n}: «${idea.title}»?`))return;const prompt=`Раскрой выбранный тезис и подготовь готовый пост для публикации, сохранив предметные требования выбранной темы.\n\nЭто отдельный API-запрос, поэтому весь выбранный тезис передан ниже. Используй именно его как предмет публикации и не ссылайся на предыдущий диалог.\n\nВыбранный тезис:\n${JSON.stringify(idea,null,2)}\n\nВерни полный новый готовый пост. Не комментируй изменения и не добавляй вводных фраз.\n\n${READY_POST_FORMAT_CONTRACT}`;void requestAi(prompt,'text',imageOptionsForPreset(activePreset()),idea)}
   function rewritePost(action){const previous=currentResponse.trim(),instruction=rewriteInstructions[action];if(!previous||!instruction||activeController)return;const prompt=`${instruction}\n\nЭто отдельный API-запрос, поэтому предыдущий готовый пост передан ниже. Работай именно с ним.\n\nПредыдущий готовый пост:\n${previous}\n\nВерни полный новый готовый пост. Не комментируй изменения и не добавляй вводных фраз.\n\n${READY_POST_FORMAT_CONTRACT}`;void requestAi(prompt,'text',currentImageOptions)}

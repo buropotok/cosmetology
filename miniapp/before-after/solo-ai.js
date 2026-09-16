@@ -78,16 +78,60 @@ export function createSoloAi({
     dotsTimer = window.setInterval(tick, 450);
   }
 
+  function showGenerationResult(success) {
+    const webApp = window.Telegram?.WebApp;
+    const popup = success
+      ? {
+          message: "Генерация завершена",
+          buttons: [{ id: "continue", type: "default", text: "Продолжить" }],
+        }
+      : {
+          message: "Генерация не удалась",
+          buttons: [
+            { id: "retry", type: "default", text: "Попробовать ещё раз" },
+            { id: "cancel", type: "cancel", text: "Отмена" },
+          ],
+        };
+    if (typeof webApp?.showPopup === "function") {
+      return new Promise((resolve) => {
+        try {
+          webApp.showPopup(popup, (buttonId) =>
+            resolve(buttonId || (success ? "continue" : "cancel")),
+          );
+        } catch {
+          resolve(
+            success
+              ? "continue"
+              : window.confirm("Генерация не удалась\n\nПопробовать ещё раз?")
+                ? "retry"
+                : "cancel",
+          );
+        }
+      });
+    }
+    if (success) {
+      window.alert("Генерация завершена");
+      return Promise.resolve("continue");
+    }
+    return Promise.resolve(
+      window.confirm("Генерация не удалась\n\nПопробовать ещё раз?")
+        ? "retry"
+        : "cancel",
+    );
+  }
+
   function abort() {
-    if (!controller) return;
     operation += 1;
-    controller.abort();
-    controller = null;
+    if (controller) {
+      controller.abort();
+      controller = null;
+    }
     hideLoading();
   }
 
-  async function run() {
-    const prompt = instruction.value.trim();
+  async function run(promptOverride) {
+    const prompt =
+      typeof promptOverride === "string" ? promptOverride : instruction.value.trim();
     if (!prompt) {
       showError("Введите пожелания для редактирования изображения.");
       return;
@@ -99,6 +143,8 @@ export function createSoloAi({
     const currentOperation = ++operation;
     controller = new AbortController();
     const signal = controller.signal;
+    let completed = false,
+      failed = false;
     showLoading();
     try {
       const image = await getCurrentBlob();
@@ -136,18 +182,24 @@ export function createSoloAi({
       }
       history.append(file, getGeometry?.() || null);
       render();
+      completed = true;
     } catch (error) {
       if (currentOperation === operation && error?.name !== "AbortError")
-        showError(
-          error?.message ||
-            "Не удалось применить изменения. Попробуйте ещё раз.",
-        );
+        failed = true;
     } finally {
       if (currentOperation === operation) {
         controller = null;
         hideLoading();
       }
     }
+    if (currentOperation !== operation) return;
+    if (failed) {
+      showError("");
+      if ((await showGenerationResult(false)) === "retry" && currentOperation === operation)
+        void run(prompt);
+      return;
+    }
+    if (completed) await showGenerationResult(true);
   }
 
   generate.onclick = () => void run();
