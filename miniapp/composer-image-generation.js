@@ -147,6 +147,23 @@ import{recordRuntimeDiagnostic}from'/runtime-diagnostics.js';
     return Promise.resolve(accepted);
   }
 
+  function showGenerationResult(webApp,operation,success){
+    const popup=success
+      ?{message:'Генерация завершена',buttons:[{id:'continue',type:'default',text:'Продолжить'}]}
+      :{message:'Генерация не удалась',buttons:[{id:'retry',type:'default',text:'Попробовать ещё раз'},{id:'cancel',type:'cancel',text:'Отмена'}]};
+    trace(operation,'result_popup.opened','shown',{result:success?'success':'failed'});
+    if(typeof webApp?.showPopup==='function'){
+      return new Promise(resolve=>{
+        try{webApp.showPopup(popup,buttonId=>{const choice=buttonId||(success?'continue':'cancel');trace(operation,'result_popup.selected','completed',{result:success?'success':'failed',choice});resolve(choice)})}
+        catch{const choice=success?'continue':(window.confirm('Генерация не удалась\n\nПопробовать ещё раз?')?'retry':'cancel');trace(operation,'result_popup.selected','completed',{result:success?'success':'failed',choice});resolve(choice)}
+      });
+    }
+    if(success){window.alert('Генерация завершена');trace(operation,'result_popup.selected','completed',{result:'success',choice:'continue'});return Promise.resolve('continue')}
+    const choice=window.confirm('Генерация не удалась\n\nПопробовать ещё раз?')?'retry':'cancel';
+    trace(operation,'result_popup.selected','completed',{result:'failed',choice});
+    return Promise.resolve(choice);
+  }
+
   function addImage(blob,prefix){
     const operation=activeRequest;
     const images=window.CosmoComposerImages;
@@ -219,28 +236,12 @@ import{recordRuntimeDiagnostic}from'/runtime-diagnostics.js';
     }
   }
 
-  generateButton.addEventListener('click',async()=>{
-    const postText=currentPostText();
-    if(!postText){
-      if(status){status.textContent='Сначала введите текст публикации.';status.className='error'}
-      focusComposer();
-      return;
-    }
-    const webApp=window.Telegram?.WebApp;
-    if(!webApp?.initData){
-      if(status){status.textContent='Откройте Mini App внутри Telegram.';status.className='error'}
-      return;
-    }
-    if((window.CosmoComposerImages?.getFiles?.().length||0)>=10){
-      if(status){status.textContent='Уже добавлено 10 изображений. Удалите одно, чтобы сгенерировать новое.';status.className='error'}
-      return;
-    }
-
-    const options=currentImageOptions();
+  async function runImageAcquisition(postText,options,webApp){
     const operation=beginRequest();
     trace(operation,'image.click','started',{internetSearch:options.internetSearch===true,searchProfile:options.searchProfile||'',sourcePolicy:options.sourcePolicy||'',textLength:postText.length,imageCount:window.CosmoComposerImages?.getFiles?.().length||0});
     generateButton.disabled=true;
     generateButton.textContent=options.internetSearch===true?'Ищем…':'Генерируем…';
+    let retry=false;
     try{
       if(options.internetSearch===true){
         try{
@@ -264,11 +265,13 @@ import{recordRuntimeDiagnostic}from'/runtime-diagnostics.js';
       assertCurrentRequest(operation);
       trace(operation,'image.completed','success');
       webApp.HapticFeedback?.notificationOccurred('success');
+      await showGenerationResult(webApp,operation,true);
     }catch(error){
       if(isExpectedCancellation(error,operation)){trace(operation,'image.completed','cancelled',{},error);return}
       trace(operation,'image.completed','failed',{errorCode:error?.code||''},error);
       if(status){status.textContent=error instanceof Error?error.message:'Не удалось получить изображение.';status.className='error'}
       webApp.HapticFeedback?.notificationOccurred('error');
+      retry=await showGenerationResult(webApp,operation,false)==='retry';
     }finally{
       if(activeRequest===operation){
         activeRequest=null;
@@ -277,5 +280,25 @@ import{recordRuntimeDiagnostic}from'/runtime-diagnostics.js';
         trace(operation,'image.ui_restored','completed',{buttonLabel:generateButton.textContent,statusText:status?.textContent||'',statusClass:status?.className||''});
       }
     }
+    if(retry&&!operation.controller.signal.aborted)void runImageAcquisition(postText,options,webApp);
+  }
+
+  generateButton.addEventListener('click',()=>{
+    const postText=currentPostText();
+    if(!postText){
+      if(status){status.textContent='Сначала введите текст публикации.';status.className='error'}
+      focusComposer();
+      return;
+    }
+    const webApp=window.Telegram?.WebApp;
+    if(!webApp?.initData){
+      if(status){status.textContent='Откройте Mini App внутри Telegram.';status.className='error'}
+      return;
+    }
+    if((window.CosmoComposerImages?.getFiles?.().length||0)>=10){
+      if(status){status.textContent='Уже добавлено 10 изображений. Удалите одно, чтобы сгенерировать новое.';status.className='error'}
+      return;
+    }
+    void runImageAcquisition(postText,currentImageOptions(),webApp);
   });
 })();
