@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
 
 const moduleUrl=new URL('./composer-media-gallery-prefetch.js',import.meta.url);
 
@@ -34,4 +35,17 @@ test('gallery prefetch retries metadata failure and keeps exactly 30 thumbnail r
    globalThis.window=originalWindow;
    globalThis.fetch=originalFetch;
  }
+});
+
+test('any New Post menu choice signals one background gallery prefetch with cleanup',async()=>{
+ const [entry,bridge]=await Promise.all([
+   readFile(new URL('./new-post-entry.js',import.meta.url),'utf8'),
+   readFile(new URL('./composer-media-gallery-bridge.js',import.meta.url),'utf8')
+ ]);
+ const choiceHandler=entry.slice(entry.indexOf("controls.addEventListener('click'"),entry.indexOf('window.CosmoComposerView'));
+ assert.match(choiceHandler,/closest\?\.\('\[data-new-post-choice\]'\)/);
+ assert.match(choiceHandler,/dispatchEvent\(new CustomEvent\('cosmo-new-post-choice'/);
+ assert.match(bridge,/addEventListener\('cosmo-new-post-choice',prefetch\)/);
+ assert.match(bridge,/removeEventListener\('cosmo-new-post-choice',prefetch\)/);
+ assert.match(bridge,/prefetchComposerGallery\(\)\.catch\(\(\)=>undefined\)/);
 });
