@@ -47,7 +47,7 @@ test('shared Back feedback waits for the press transition before running navigat
   assert.match(feedback,/event\.propertyName!==TRANSITION_PROPERTY/);
   assert.match(feedback,/fallbackTimer=setTimeout\(\(\)=>finish\(\),FALLBACK_MS\)/);
   assert.match(feedback,/const FALLBACK_MS=160/);
-  assert.match(feedback,/window\.matchMedia\?\.\(REDUCED_MOTION_QUERY\)\.matches\)\{action\(\);return true\}/);
+  assert.match(feedback,/window\.matchMedia\?\.\(REDUCED_MOTION_QUERY\)\?\.matches\)\{action\(\);return true\}/);
   assert.doesNotMatch(feedback,/navigation\.|CosmoRouter|controller\./);
 });
 
