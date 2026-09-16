@@ -9,6 +9,7 @@ export interface TelegramIdentityProfile {
   lastName?: string;
   username?: string;
   photoUrl?: string;
+  authDate: number;
 }
 
 export async function resolveTelegramIdentity(
@@ -26,7 +27,7 @@ export async function resolveTelegramIdentity(
   return row ? { userId: row.user_id } : null;
 }
 
-async function syncTelegramIdentityProfile(
+export async function syncTelegramIdentityProfile(
   env: Env,
   telegramUserId: string,
   profile: TelegramIdentityProfile,
@@ -37,12 +38,14 @@ async function syncTelegramIdentityProfile(
   const photoUrl = profile.photoUrl ?? null;
   await env.DB.prepare(
     `UPDATE telegram_identities
-     SET first_name=?,last_name=?,username=?,photo_url=?,updated_at=CURRENT_TIMESTAMP
-     WHERE telegram_user_id=? AND (
-       first_name IS NOT ? OR last_name IS NOT ? OR username IS NOT ? OR photo_url IS NOT ?
-     )`,
+     SET first_name=?,last_name=?,username=?,photo_url=?,profile_auth_date=?,updated_at=CURRENT_TIMESTAMP
+     WHERE telegram_user_id=?
+       AND (profile_auth_date IS NULL OR profile_auth_date <= ?)
+       AND (
+         profile_auth_date IS NOT ? OR first_name IS NOT ? OR last_name IS NOT ? OR username IS NOT ? OR photo_url IS NOT ?
+       )`,
   )
-    .bind(firstName, lastName, username, photoUrl, telegramUserId, firstName, lastName, username, photoUrl)
+    .bind(firstName, lastName, username, photoUrl, profile.authDate, telegramUserId, profile.authDate, profile.authDate, firstName, lastName, username, photoUrl)
     .run();
 }
 
