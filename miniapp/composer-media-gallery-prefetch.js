@@ -29,4 +29,5 @@ export function prefetchComposerGallery(){
 }
 
 export function consumeComposerGalleryPrefetch(){const value=snapshot;snapshot=null;return value}
+export function getComposerGalleryPrefetch(){return metadataPromise}
 export function getComposerGalleryThumbnail(url){return thumbnailPromises.get(url)||null}
