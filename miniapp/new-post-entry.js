@@ -92,9 +92,10 @@
   controls.addEventListener('click',event=>{
     const button=event.target.closest?.('[data-new-post-choice]');
     if(!button)return;
+    const choice=button.dataset.newPostChoice;
+    window.dispatchEvent(new CustomEvent('cosmo-new-post-choice',{detail:{choice}}));
     const navigation=window.CosmoNavigation;
     if(!navigation)return;
-    const choice=button.dataset.newPostChoice;
     runAfterPillowPress(button,()=>{
       if(choice==='ai')return navigation.push(navigation.STATES.AI);
       if(choice==='manual')return navigation.push(navigation.STATES.PUBLISH,{manual:true});
