@@ -42,7 +42,11 @@ test('any New Post menu choice signals one background gallery prefetch with clea
    readFile(new URL('./new-post-entry.js',import.meta.url),'utf8'),
    readFile(new URL('./composer-media-gallery-bridge.js',import.meta.url),'utf8')
  ]);
- const choiceHandler=entry.slice(entry.indexOf("controls.addEventListener('click'"),entry.indexOf('window.CosmoComposerView'));
+ const handlerStart=entry.indexOf("controls.addEventListener('click'");
+ const handlerEnd=entry.indexOf('window.CosmoComposerView',handlerStart);
+ assert.notEqual(handlerStart,-1);
+ assert.notEqual(handlerEnd,-1);
+ const choiceHandler=entry.slice(handlerStart,handlerEnd);
  assert.match(choiceHandler,/closest\?\.\('\[data-new-post-choice\]'\)/);
  assert.match(choiceHandler,/dispatchEvent\(new CustomEvent\('cosmo-new-post-choice'/);
  assert.match(bridge,/addEventListener\('cosmo-new-post-choice',prefetch\)/);
