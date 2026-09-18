@@ -24,8 +24,8 @@ test('generation opens a titleless wishes modal and cancel does not start genera
   assert.match(source,/if\(options\.internetSearch!==true&&!generationRequest\.resolved\)\{\s*const choice=await requestGenerationWishes\(\);\s*if\(!choice\.proceed\)return;/);
 });
 
-test('search fallback asks for wishes before generated fallback and retries reuse the resolved choice',()=>{
+test('search fallback asks for wishes before generated fallback and keeps the existing retry contract',()=>{
   assert.match(source,/if\(!generationRequest\.resolved\)\{\s*const choice=await requestGenerationWishes\(\);/);
   assert.match(source,/generateImage\(postText,generationRequest\.wishes,operation\)/);
-  assert.match(source,/runImageAcquisition\(postText,options,webApp,generationRequest\)/);
+  assert.match(source,/if\(retry&&!operation\.controller\.signal\.aborted\)void runImageAcquisition\(postText,options,webApp\)/);
 });

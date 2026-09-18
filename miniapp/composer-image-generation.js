@@ -281,8 +281,8 @@ import{combineImageGenerationText,imageWishesAction,normalizeImageWishes}from'./
     }
   }
 
-  async function runImageAcquisition(postText,options,webApp,generationInput={resolved:false,wishes:''}){
-    let generationRequest={resolved:generationInput?.resolved===true,wishes:normalizeImageWishes(generationInput?.wishes)};
+  async function runImageAcquisition(postText,options,webApp){
+    let generationRequest={resolved:false,wishes:''};
     if(options.internetSearch!==true&&!generationRequest.resolved){
       const choice=await requestGenerationWishes();
       if(!choice.proceed)return;
@@ -341,7 +341,7 @@ import{combineImageGenerationText,imageWishesAction,normalizeImageWishes}from'./
         trace(operation,'image.ui_restored','completed',{buttonLabel:generateButton.textContent,statusText:status?.textContent||'',statusClass:status?.className||''});
       }
     }
-    if(retry&&!operation.controller.signal.aborted)void runImageAcquisition(postText,options,webApp,generationRequest);
+    if(retry&&!operation.controller.signal.aborted)void runImageAcquisition(postText,options,webApp);
   }
 
   generateButton.addEventListener('click',()=>{
