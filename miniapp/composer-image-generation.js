@@ -58,7 +58,7 @@ import{combineImageGenerationText,imageWishesAction,normalizeImageWishes}from'./
     root.setAttribute('role','dialog');
     root.setAttribute('aria-modal','true');
     root.setAttribute('aria-label','Напишите сюда ваши пожелания');
-    root.innerHTML='<div class="composer-image-wishes-dialog"><textarea rows="5" maxlength="2000" placeholder="Напишите сюда ваши пожелания"></textarea><button type="button" class="composer-image-wishes-action">Пропустить</button><button type="button" class="composer-image-wishes-cancel">Отмена</button></div>';
+    root.innerHTML='<div class="composer-image-wishes-dialog"><textarea rows="5" placeholder="Напишите сюда ваши пожелания"></textarea><button type="button" class="composer-image-wishes-action">Пропустить</button><button type="button" class="composer-image-wishes-cancel">Отмена</button></div>';
     const textarea=root.querySelector('textarea');
     const action=root.querySelector('.composer-image-wishes-action');
     const cancel=root.querySelector('.composer-image-wishes-cancel');
