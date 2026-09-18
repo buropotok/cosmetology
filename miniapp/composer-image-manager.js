@@ -1,13 +1,22 @@
 import {insertionSide,moveItem} from './composer-image-reorder.js';
 
 (()=>{
-const input=document.querySelector('#image'),previews=document.querySelector('#previews'),removeAll=document.querySelector('#remove-image'),status=document.querySelector('#status');
+const input=document.querySelector('#image'),previews=document.querySelector('#previews'),removeAll=document.querySelector('#remove-image'),status=document.querySelector('#status'),photoStage=document.querySelector('.composer-image');
 if(!input||!previews)return;
 // The delete badge intentionally extends beyond a thumbnail; reserve scrollport space so it is not clipped.
 previews.style.paddingTop='7px';
 previews.style.paddingInline='7px';
 let files=Array.from(input.files||[]).slice(0,10),internalChange=false,wideCheckGeneration=0,telegramLayout='slideshow',dragState=null;
 const VK_MAX_ASPECT=16/9;
+const photoEditHint=document.createElement('div');
+photoEditHint.className='composer-photo-edit-hint';
+photoEditHint.textContent='Нажмите на фото для редактирования';
+photoEditHint.hidden=true;
+photoStage?.before(photoEditHint);
+const syncPhotoUi=()=>{photoEditHint.hidden=!files.length};
+const openPickerFromEmptyStage=()=>{if(!files.length)input.click()};
+photoStage?.addEventListener('click',openPickerFromEmptyStage);
+syncPhotoUi();
 
 const telegramLayoutRow=document.createElement('div');
 telegramLayoutRow.className='composer-telegram-photo-layout';
@@ -45,6 +54,7 @@ function syncInput(nextFiles=files){
 
 function notifyChange(){
  updateTelegramLayoutVisibility();
+ syncPhotoUi();
  void updateVkAspectWarning();
  if(!syncInput())return false;
  internalChange=true;
@@ -128,7 +138,7 @@ input.addEventListener('change',event=>{
  if(internalChange)return;
  const incoming=Array.from(input.files||[]).slice(0,10);
  if(event.isTrusted)addFiles(incoming);
- else{files=incoming;internalChange=true;try{input.dispatchEvent(new Event('change',{bubbles:true}))}finally{internalChange=false}updateTelegramLayoutVisibility();void updateVkAspectWarning()}
+ else{files=incoming;internalChange=true;try{input.dispatchEvent(new Event('change',{bubbles:true}))}finally{internalChange=false}updateTelegramLayoutVisibility();syncPhotoUi();void updateVkAspectWarning()}
 });
 
 removeAll?.addEventListener('click',()=>{files=[];notifyChange()});
