@@ -1,4 +1,5 @@
 import { AppError, type Env } from '../types';
+import { syncTelegramIdentityProfile } from './telegram-identity';
 
 const encoder = new TextEncoder();
 export const MINIAPP_INIT_DATA_MAX_AGE_SECONDS = 10 * 60;
@@ -9,6 +10,7 @@ export interface TelegramMiniAppUser {
   first_name: string;
   last_name?: string;
   username?: string;
+  photo_url?: string;
   language_code?: string;
   is_premium?: boolean;
 }
@@ -79,6 +81,13 @@ export async function bootstrapTelegramMiniAppSession(request: Request, env: Env
   const telegramUserId = String(validated.user.id);
   const initialExpiry = validated.authDate + MINIAPP_SESSION_TTL_SECONDS;
   await env.DB.prepare(`INSERT INTO miniapp_sessions(telegram_user_id,expires_at,created_at,updated_at) VALUES(?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP) ON CONFLICT(telegram_user_id) DO UPDATE SET expires_at=MAX(expires_at,excluded.expires_at),updated_at=CURRENT_TIMESTAMP`).bind(telegramUserId, initialExpiry).run();
+  await syncTelegramIdentityProfile(env, telegramUserId, {
+    firstName: validated.user.first_name,
+    lastName: validated.user.last_name,
+    username: validated.user.username,
+    photoUrl: validated.user.photo_url,
+    authDate: validated.authDate,
+  });
   return validated;
 }
 
