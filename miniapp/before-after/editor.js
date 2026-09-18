@@ -15,7 +15,7 @@ export function createEditor({ $, editor, stage, editImage, wmImage, rotation, o
     if (!editing) return;
     const p = photos[editing];
     editImage.style.width = `${p.img.naturalWidth}px`; editImage.style.height = `${p.img.naturalHeight}px`;
-    editImage.style.transform = `translate(calc(-50% + ${p.x * g}px),calc(-50% + ${p.y * g}px)) scale(${p.scale * g}) rotate(${p.rotation}deg)`;
+    editImage.style.transform = `translate(calc(-50% + ${p.x * g}px),calc(-50% + ${p.y * g}px)) rotate(${p.rotation}deg) scale(${(p.flipX ? -1 : 1) * p.scale * g},${(p.flipY ? -1 : 1) * p.scale * g})`;
   }
   function close() { editor.hidden = true; editing = null; snapshot = null; mode = 'photo'; opacityControl.hidden = true; pointers.clear(); gesture = null; }
   function openPhoto(role) {

@@ -14,6 +14,8 @@ export function createSoloImageHistory({
           y: Number(geometry.y) || 0,
           scale: Number(geometry.scale) || 1,
           rotation: Number(geometry.rotation) || 0,
+          ...(Object.prototype.hasOwnProperty.call(geometry, "flipX") ? { flipX: geometry.flipX === true } : {}),
+          ...(Object.prototype.hasOwnProperty.call(geometry, "flipY") ? { flipY: geometry.flipY === true } : {}),
           fitted: geometry.fitted !== false,
         }
       : null;
