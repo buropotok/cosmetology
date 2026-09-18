@@ -10,7 +10,7 @@ export function createBeforeAfterState({ loadImage, onChange }) {
   const notify = () => { if (!restoring) onChange?.(); };
   const photoState = (photo, imageIndex) => photo ? ({
     imageIndex, x: photo.x, y: photo.y, scale: photo.scale,
-    rotation: photo.rotation, fitted: photo.fitted,
+    rotation: photo.rotation, flipX: photo.flipX === true, flipY: photo.flipY === true, fitted: photo.fitted,
   }) : null;
 
   function snapshot() {
@@ -38,6 +38,7 @@ export function createBeforeAfterState({ loadImage, onChange }) {
         file: fileValue, url, img,
         x: Number(saved.x) || 0, y: Number(saved.y) || 0,
         scale: Number(saved.scale) || 1, rotation: Number(saved.rotation) || 0,
+        flipX: saved.flipX === true, flipY: saved.flipY === true,
         fitted: saved.fitted !== false,
       };
     } catch (error) {

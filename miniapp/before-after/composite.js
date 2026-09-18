@@ -4,7 +4,7 @@ export function createComposite({ slots, photos, compositeResult, cropHandle, no
     ctx.save(); ctx.beginPath();
     ctx.rect(rect.x * scale, rect.y * scale, rect.width * scale, rect.height * scale); ctx.clip();
     ctx.translate((rect.x + rect.width / 2 + photo.x) * scale, (rect.y + rect.height / 2 + photo.y) * scale);
-    ctx.rotate(photo.rotation * Math.PI / 180); ctx.scale(photo.scale * scale, photo.scale * scale);
+    ctx.rotate(photo.rotation * Math.PI / 180); ctx.scale((photo.flipX ? -1 : 1) * photo.scale * scale, (photo.flipY ? -1 : 1) * photo.scale * scale);
     ctx.drawImage(photo.img, -photo.img.naturalWidth / 2, -photo.img.naturalHeight / 2); ctx.restore();
   }
   function baseCanvas() {

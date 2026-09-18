@@ -14,7 +14,7 @@ const wmFile = $('watermarkFile'), wmCarousel = $('watermarkCarousel'), webApp =
 const authHeaders = () => webApp?.initData ? { Authorization: `tma ${webApp.initData}` } : {};
 const loadImage = src => new Promise((resolve, reject) => { const image = new Image(); image.onload = () => resolve(image); image.onerror = reject; image.src = src; });
 const showError = message => { $('error').textContent = message || ''; };
-const transformFor = photo => `translate(calc(-50% + ${photo.x}px),calc(-50% + ${photo.y}px)) scale(${photo.scale}) rotate(${photo.rotation}deg)`;
+const transformFor = photo => `translate(calc(-50% + ${photo.x}px),calc(-50% + ${photo.y}px)) rotate(${photo.rotation}deg) scale(${(photo.flipX ? -1 : 1) * photo.scale},${(photo.flipY ? -1 : 1) * photo.scale})`;
 const previewWatermark = document.createElement('img'); previewWatermark.id = 'previewWatermark'; previewWatermark.alt = ''; previewWatermark.hidden = true; previewWatermark.draggable = false; previewWatermark.style.cssText = 'position:absolute;left:50%;top:50%;max-width:none;transform-origin:center;z-index:5;pointer-events:none;user-select:none;-webkit-user-drag:none;filter:grayscale(1)'; slots.append(previewWatermark);
 
 const state = createBeforeAfterState({ loadImage, onChange: () => window.dispatchEvent(new CustomEvent('cosmo-before-after-change')) });
@@ -52,7 +52,12 @@ function render() {
     previewWatermark.style.opacity = String(watermarkState.opacity);
     previewWatermark.style.transform = `translate(calc(-50% + ${watermarkState.x}px),calc(-50% + ${watermarkState.y}px)) scale(${watermarkState.scale}) rotate(${watermarkState.rotation}deg)`;
   } else previewWatermark.hidden = true;
-  if (mode === 'solo') { const value = String(state.photos.before?.rotation || 0), soloRotation = $('soloRotation'), soloAngle = $('soloAngle'); if (soloRotation) soloRotation.value = value; if (soloAngle) soloAngle.textContent = `${value}°`; }
+  if (mode === 'solo') {
+    const photo = state.photos.before, value = String(photo?.rotation || 0), soloRotation = $('soloRotation'), soloAngle = $('soloAngle');
+    if (soloRotation) soloRotation.value = value;
+    if (soloAngle) soloAngle.textContent = `${value}°`;
+    document.querySelectorAll('[data-solo-flip]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.soloFlip === 'horizontal' ? photo?.flipX === true : photo?.flipY === true)));
+  }
   $('finish').disabled = !(state.photos.before || state.photos.after);
   state.notify();
 }
@@ -97,10 +102,32 @@ function applySoloFit(kind) {
   composite.clearCommitted();
   render();
 }
+function normalizeSoloRotation(value) {
+  const numeric = Number(value) || 0;
+  const normalized = ((numeric + 180) % 360 + 360) % 360 - 180;
+  return normalized === -180 && numeric > 0 ? 180 : normalized;
+}
+function setSoloRotation(value) {
+  if (mode !== 'solo') return;
+  const photo = state.photos.before;
+  if (!photo) return;
+  photo.rotation = normalizeSoloRotation(value);
+  composite.clearCommitted();
+  render();
+}
+function toggleSoloFlip(axis) {
+  if (mode !== 'solo') return;
+  const photo = state.photos.before;
+  if (!photo) return;
+  if (axis === 'horizontal') photo.flipX = !photo.flipX;
+  if (axis === 'vertical') photo.flipY = !photo.flipY;
+  composite.clearCommitted();
+  render();
+}
 function captureSoloGeometry() {
   const photo = state.photos.before;
   if (mode !== 'solo' || !photo) return null;
-  return { ratio: state.selectedRatio, cropHeight: state.cropHeight, x: photo.x, y: photo.y, scale: photo.scale, rotation: photo.rotation, fitted: photo.fitted };
+  return { ratio: state.selectedRatio, cropHeight: state.cropHeight, x: photo.x, y: photo.y, scale: photo.scale, rotation: photo.rotation, flipX: photo.flipX === true, flipY: photo.flipY === true, fitted: photo.fitted };
 }
 async function applySoloVersion(fileValue, versionGeometry = null) {
   const sharedWatermark = state.selectedWatermark;
@@ -111,8 +138,10 @@ async function applySoloVersion(fileValue, versionGeometry = null) {
     y: versionGeometry.y || 0,
     scale: versionGeometry.scale || 1,
     rotation: versionGeometry.rotation || 0,
+    flipX: versionGeometry.flipX === true,
+    flipY: versionGeometry.flipY === true,
     fitted: versionGeometry.fitted !== false,
-  } : { imageIndex: 0, x: 0, y: 0, scale: 1, rotation: 0, fitted: false };
+  } : { imageIndex: 0, x: 0, y: 0, scale: 1, rotation: 0, flipX: false, flipY: false, fitted: false };
   await state.restore({ version: 1, layout: 'horizontal', ratio: versionGeometry?.ratio || '16/9', cropHeight: versionGeometry?.cropHeight ?? null, before: savedPhoto, after: null, watermark: null, watermarkState: sharedWatermarkState }, [fileValue], watermarks.find);
   state.selectedWatermark = sharedWatermark;
   state.watermarkState = sharedWatermarkState;
@@ -137,10 +166,13 @@ function configureMode() {
   soloGestureHint.setAttribute('aria-hidden', 'true');
   soloGestureHint.innerHTML = '<img src="/assets/two-finger-swipe-left.svg" alt="" draggable="false">';
   slots.append(soloGestureHint);
-  const controls = document.createElement('section'); controls.className = 'solo-rotation'; controls.innerHTML = '<div class="solo-rotation-head"><strong>Поворот</strong><span id="soloAngle">0°</span></div>';
+  const controls = document.createElement('section'); controls.className = 'solo-rotation'; controls.innerHTML = '<div class="solo-rotation-head"><strong>Поворот</strong><div class="solo-rotation-actions"><button type="button" data-solo-rotation="reset">0°</button><button type="button" data-solo-rotation="step">+45°</button><button type="button" class="solo-rotation-icon" data-solo-flip="horizontal" aria-label="Отразить по горизонтали" aria-pressed="false"><img src="/icons/flip-horizontal.svg" alt="" aria-hidden="true"></button><button type="button" class="solo-rotation-icon" data-solo-flip="vertical" aria-label="Отразить по вертикали" aria-pressed="false"><img src="/icons/flip-vertical.svg" alt="" aria-hidden="true"></button></div><span id="soloAngle">0°</span></div>';
   const slider = rotation.cloneNode(true); slider.id = 'soloRotation'; slider.min = '-180'; slider.max = '180'; slider.step = '1'; controls.append(slider);
   const fitActions = document.createElement('div'); fitActions.className = 'solo-fit-actions'; fitActions.innerHTML = '<button type="button" data-solo-fit="width">По ширине</button><button type="button" data-solo-fit="height">По высоте</button><button type="button" data-solo-fit="contain">Вписать целиком</button>'; controls.append(fitActions); const versionStrip = $('soloVersions'); if (versionStrip) versionStrip.after(controls); else slots.after(controls);
-  slider.addEventListener('input', () => { const photo = state.photos.before; if (!photo) return; photo.rotation = Number(slider.value); controls.querySelector('#soloAngle').textContent = `${slider.value}°`; composite.clearCommitted(); render(); });
+  slider.addEventListener('input', () => setSoloRotation(slider.value));
+  controls.querySelector('[data-solo-rotation="reset"]').addEventListener('click', () => setSoloRotation(0));
+  controls.querySelector('[data-solo-rotation="step"]').addEventListener('click', () => setSoloRotation((state.photos.before?.rotation || 0) + 45));
+  controls.querySelectorAll('[data-solo-flip]').forEach(button => button.addEventListener('click', () => toggleSoloFlip(button.dataset.soloFlip)));
   fitActions.querySelectorAll('[data-solo-fit]').forEach(button => button.addEventListener('click', () => applySoloFit(button.dataset.soloFit)));
 }
 
@@ -154,7 +186,7 @@ file.onchange = () => {
   const url = URL.createObjectURL(selected), image = new Image();
   image.onload = () => {
     if (state.photos[pending]) URL.revokeObjectURL(state.photos[pending].url);
-    state.photos[pending] = { file: selected, url, img: image, x: 0, y: 0, scale: 1, rotation: 0, fitted: false };
+    state.photos[pending] = { file: selected, url, img: image, x: 0, y: 0, scale: 1, rotation: 0, flipX: false, flipY: false, fitted: false };
     composite.clearCommitted(); render(); if (mode === 'dual') editor.openPhoto(pending);
   };
   image.src = url;

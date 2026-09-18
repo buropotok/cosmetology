@@ -1,4 +1,5 @@
 import{recordRuntimeDiagnostic}from'/runtime-diagnostics.js';
+import{combineImageGenerationText,imageWishesAction,normalizeImageWishes}from'./composer-image-wishes.js';
 
 (()=>{
   const addButton=document.querySelector('#composer-add-photo');
@@ -30,6 +31,47 @@ import{recordRuntimeDiagnostic}from'/runtime-diagnostics.js';
 
   let requestSequence=0;
   let activeRequest=null;
+  let wishesModal=null;
+
+  function ensureWishesStyles(){
+    if(document.querySelector('link[data-cosmo-image-wishes]'))return;
+    const link=document.createElement('link');
+    link.rel='stylesheet';
+    link.href='/composer-image-generation.css';
+    link.dataset.cosmoImageWishes='';
+    document.head.append(link);
+  }
+
+  function closeWishesModal(result={proceed:false,wishes:''}){
+    if(!wishesModal)return;
+    const current=wishesModal;
+    wishesModal=null;
+    current.root.remove();
+    current.resolve(result);
+  }
+
+  function requestGenerationWishes(){
+    if(wishesModal)return wishesModal.promise;
+    ensureWishesStyles();
+    const root=document.createElement('div');
+    root.className='composer-image-wishes-modal';
+    root.setAttribute('role','dialog');
+    root.setAttribute('aria-modal','true');
+    root.setAttribute('aria-label','Напишите сюда ваши пожелания');
+    root.innerHTML='<div class="composer-image-wishes-dialog"><textarea rows="5" maxlength="2000" placeholder="Напишите сюда ваши пожелания"></textarea><button type="button" class="composer-image-wishes-action">Пропустить</button><button type="button" class="composer-image-wishes-cancel">Отмена</button></div>';
+    const textarea=root.querySelector('textarea');
+    const action=root.querySelector('.composer-image-wishes-action');
+    const cancel=root.querySelector('.composer-image-wishes-cancel');
+    let resolvePromise;
+    const promise=new Promise(resolve=>{resolvePromise=resolve});
+    wishesModal={root,promise,resolve:resolvePromise};
+    const syncAction=()=>{action.textContent=imageWishesAction(textarea.value)};
+    textarea.addEventListener('input',syncAction);
+    action.addEventListener('click',()=>closeWishesModal({proceed:true,wishes:normalizeImageWishes(textarea.value)}));
+    cancel.addEventListener('click',()=>closeWishesModal());
+    document.body.append(root);
+    return promise;
+  }
 
   function syncButtonLabel(){if(!generateButton.disabled)generateButton.textContent=buttonLabel(currentImageOptions())}
   function isCurrentRequest(operation){return activeRequest===operation&&operation.id===requestSequence&&!operation.controller.signal.aborted}
@@ -43,6 +85,7 @@ import{recordRuntimeDiagnostic}from'/runtime-diagnostics.js';
     return operation;
   }
   function cancelActiveRequest(){
+    closeWishesModal();
     requestSequence+=1;
     const operation=activeRequest;
     activeRequest=null;
@@ -201,11 +244,13 @@ import{recordRuntimeDiagnostic}from'/runtime-diagnostics.js';
     return afterCount-beforeCount;
   }
 
-  async function generateImage(postText,operation){
+  async function generateImage(postText,wishes,operation){
     assertCurrentRequest(operation);
-    trace(operation,'generation.started','started',{textLength:postText.length});
+    const normalizedWishes=normalizeImageWishes(wishes);
+    const generationText=combineImageGenerationText(postText,normalizedWishes);
+    trace(operation,'generation.started','started',{textLength:postText.length,wishesLength:normalizedWishes.length});
     if(status){status.textContent='Gemini создаёт изображение по тексту публикации…';status.className=''}
-    const {blob}=await requestImage('/api/miniapp/ai/image',{text:postText},operation);
+    const {blob}=await requestImage('/api/miniapp/ai/image',{text:generationText},operation);
     assertCurrentRequest(operation);
     addImage(blob,'gemini');
     assertCurrentRequest(operation);
@@ -236,7 +281,13 @@ import{recordRuntimeDiagnostic}from'/runtime-diagnostics.js';
     }
   }
 
-  async function runImageAcquisition(postText,options,webApp){
+  async function runImageAcquisition(postText,options,webApp,generationInput={resolved:false,wishes:''}){
+    let generationRequest={resolved:generationInput?.resolved===true,wishes:normalizeImageWishes(generationInput?.wishes)};
+    if(options.internetSearch!==true&&!generationRequest.resolved){
+      const choice=await requestGenerationWishes();
+      if(!choice.proceed)return;
+      generationRequest={resolved:true,wishes:choice.wishes};
+    }
     const operation=beginRequest();
     trace(operation,'image.click','started',{internetSearch:options.internetSearch===true,searchProfile:options.searchProfile||'',sourcePolicy:options.sourcePolicy||'',textLength:postText.length,imageCount:window.CosmoComposerImages?.getFiles?.().length||0});
     generateButton.disabled=true;
@@ -257,10 +308,20 @@ import{recordRuntimeDiagnostic}from'/runtime-diagnostics.js';
             return;
           }
           assertCurrentRequest(operation);
-          await generateImage(postText,operation);
+          if(!generationRequest.resolved){
+            const choice=await requestGenerationWishes();
+            assertCurrentRequest(operation);
+            if(!choice.proceed){
+              if(status){status.textContent='Поиск изображения отменён.';status.className=''}
+              trace(operation,'image.completed','cancelled',{reason:'generation_wishes_cancelled'});
+              return;
+            }
+            generationRequest={resolved:true,wishes:choice.wishes};
+          }
+          await generateImage(postText,generationRequest.wishes,operation);
         }
       }else{
-        await generateImage(postText,operation);
+        await generateImage(postText,generationRequest.wishes,operation);
       }
       assertCurrentRequest(operation);
       trace(operation,'image.completed','success');
@@ -280,7 +341,7 @@ import{recordRuntimeDiagnostic}from'/runtime-diagnostics.js';
         trace(operation,'image.ui_restored','completed',{buttonLabel:generateButton.textContent,statusText:status?.textContent||'',statusClass:status?.className||''});
       }
     }
-    if(retry&&!operation.controller.signal.aborted)void runImageAcquisition(postText,options,webApp);
+    if(retry&&!operation.controller.signal.aborted)void runImageAcquisition(postText,options,webApp,generationRequest);
   }
 
   generateButton.addEventListener('click',()=>{
