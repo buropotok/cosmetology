@@ -18,6 +18,9 @@ test('generation opens a titleless wishes modal and cancel does not start genera
   assert.match(source,/class="composer-image-wishes-action">Пропустить</);
   assert.match(source,/class="composer-image-wishes-cancel">Отмена</);
   assert.doesNotMatch(source,/composer-image-wishes-title/);
+  assert.match(source,/action\.textContent=imageWishesAction\(textarea\.value\)/);
+  assert.match(source,/cancel\.addEventListener\('click',\(\)=>closeWishesModal\(\)\)/);
+  assert.match(source,/requestImage\('\/api\/miniapp\/ai\/image',\{text:generationText\},operation\)/);
   assert.match(source,/if\(options\.internetSearch!==true&&!generationRequest\.resolved\)\{\s*const choice=await requestGenerationWishes\(\);\s*if\(!choice\.proceed\)return;/);
 });
 
