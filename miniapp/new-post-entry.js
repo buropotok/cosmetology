@@ -67,10 +67,10 @@ import {beginNewPostSignature,insertDefaultSignature} from './post-signature.js'
   }
 
   function showEditor({manual=false,focus=true}={}){
-    insertDefaultSignature(window.CosmoRichEditor);
     controls.hidden=true;
     wizard.hidden=true;
     composerContent.hidden=false;
+    insertDefaultSignature(window.CosmoRichEditor);
     publishMode('compose');
     if(manual)window.dispatchEvent(new CustomEvent('cosmo-ai-wizard-manual'));
     if(focus)queueMicrotask(()=>window.CosmoRichEditor?.focus?.());
