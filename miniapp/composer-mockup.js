@@ -80,5 +80,5 @@ import {createRichEditorToolbar,bindRichEditorToolbarMenus} from './rich-editor-
     finally{telegramPreview.disabled=false;telegramPreview.textContent='Предпросмотр в Telegram'}
   });
 
-  bindRichEditorToolbarMenus(toolbar);
+  if(toolbar.querySelectorAll('.composer-menu-trigger').length)bindRichEditorToolbarMenus(toolbar);
 })();
