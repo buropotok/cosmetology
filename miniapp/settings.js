@@ -1,5 +1,3 @@
-import {readSignature} from './post-signature.js';
-
 (()=>{
 const $=selector=>document.querySelector(selector),settings=$('#settings-screen'),controller=window.CosmoOnboardingControllerInstance,accountState=window.CosmoAccountState;
 if(!settings||!controller||!accountState)return;
@@ -34,7 +32,15 @@ groupUi.button?.addEventListener('click',()=>act(()=>controller.connectTelegramG
 let vkAction=null;
 vkUi.button?.addEventListener('click',()=>{if(vkAction)return;vkUi.button.disabled=true;const run=window.CosmoVkDestinationSelection.open().catch(error=>window.CosmoTelegramGateway.create().showAlert(error instanceof Error?error.message:'Не удалось открыть выбор группы.')).finally(()=>{if(vkAction===run){vkAction=null;vkUi.button.disabled=false}});vkAction=run});
 const signatureStatus=$('#settings-signature-status');
-function refreshSignatureStatus(){if(signatureStatus)signatureStatus.textContent=readSignature()?'Сохранена':'Не задана'}
+async function refreshSignatureStatus(){
+  if(!signatureStatus)return;
+  try{
+    const {readSignature}=await import('/post-signature.js');
+    if(signatureStatus.isConnected)signatureStatus.textContent=readSignature()?'Сохранена':'Не задана';
+  }catch(error){
+    if(signatureStatus.isConnected)signatureStatus.textContent='Не удалось загрузить';
+  }
+}
 refreshSignatureStatus();
 $('#settings-signature-edit')?.addEventListener('click',()=>{
   void import('/settings-signature.js')
