@@ -51,10 +51,12 @@
     });
   }
 
-  async function loadPostDocument(doc,imageOptions=currentImageOptions){
+  async function loadPostDocument(sourceDocument,imageOptions=currentImageOptions){
     const editor=await waitForEditor();
     if(!editor)return false;
+    const doc=window.CosmoComposerView?.prepareDocumentForEditor?.(sourceDocument)||sourceDocument;
     if(editor.setDocument(doc)!==true)return false;
+    window.CosmoComposerView?.markDocumentInitialized?.();
     window.CosmoComposerState?.setImageOptions?.(normalizeImageOptions(imageOptions));
     return true;
   }
