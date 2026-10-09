@@ -34,7 +34,7 @@ export function loadComposerEditorRuntime(){
       const tiptap=await loadRuntimeModule({
         stage:STAGE,
         module:'composer-tiptap',
-        load:()=>import(`/composer-tiptap.js?v=${encodeURIComponent(RICH_LOADER_VERSION)}`),
+        load:()=>import(`/composer-tiptap.js?v=${encodeURIComponent(RICH_LOADER_VERSION)}`).then(module=>{module.initComposerTiptap();return module}),
         validate:()=>Boolean(window.CosmoRichEditor),
         validationError:'Tiptap editor did not initialize'
       });
