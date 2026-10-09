@@ -1,4 +1,4 @@
-import {initialDocumentWithSignature,appendSignatureToDocument} from './post-signature.js';
+import {beginNewPostSignature,insertDefaultSignature} from './post-signature.js';
 
 (()=>{
   const screen=document.querySelector('#composer-screen');
@@ -34,28 +34,7 @@ import {initialDocumentWithSignature,appendSignatureToDocument} from './post-sig
   controls.innerHTML=`<h2 class="new-post-entry__title">Новый пост</h2><p class="new-post-entry__subtitle">Выберите способ создания публикации</p><div class="new-post-entry__actions"><button type="button" class="new-post-entry__button" data-new-post-choice="ai"><span class="new-post-entry__icon new-post-entry__icon--ai" aria-hidden="true">✨</span><span>Создать пост с помощью AI</span></button><button type="button" class="new-post-entry__button new-post-entry__button--manual" data-new-post-choice="manual"><span class="new-post-entry__icon" aria-hidden="true"><img src="/assets/icons/manual-edit.svg" alt=""></span><span data-manual-label>Создать пост вручную с нуля</span></button><button type="button" class="new-post-entry__button new-post-entry__button--before-after" data-new-post-choice="before-after"><span class="new-post-entry__icon new-post-entry__pair" aria-hidden="true"><img src="/assets/icons/account-box.svg" alt=""><img src="/assets/icons/account-box.svg" alt=""></span><span>ДО / ПОСЛЕ</span></button></div>`;
   wizard.insertAdjacentElement('beforebegin',controls);
   const manualLabel=controls.querySelector('[data-manual-label]');
-  // New-post lifecycle owns one-time defaults. Resume never emits this event.
-  let signaturePending=false;
-  window.addEventListener('cosmo-new-post',()=>{signaturePending=true});
-  function prepareDocumentForEditor(document){
-    return signaturePending?appendSignatureToDocument(document):document;
-  }
-  function markDocumentInitialized(){signaturePending=false}
-  function insertDefaultSignature(){
-    if(!signaturePending)return;
-    const editor=window.CosmoRichEditor;
-    if(!editor?.setDocument)return;
-    if(!editor.getPlainText?.().trim()){
-      const document=initialDocumentWithSignature();
-      if(document){
-        editor.setDocument(document);
-        // An empty first paragraph lets the user type immediately above the signature.
-        editor.editor?.commands?.setTextSelection?.(1);
-      }
-    }
-    signaturePending=false;
-  }
-
+  window.addEventListener('cosmo-new-post',beginNewPostSignature);
 
   function publishMode(mode){
     screen.dataset.publishMode=mode;
@@ -88,7 +67,7 @@ import {initialDocumentWithSignature,appendSignatureToDocument} from './post-sig
   }
 
   function showEditor({manual=false,focus=true}={}){
-    insertDefaultSignature();
+    insertDefaultSignature(window.CosmoRichEditor);
     controls.hidden=true;
     wizard.hidden=true;
     composerContent.hidden=false;
@@ -128,5 +107,5 @@ import {initialDocumentWithSignature,appendSignatureToDocument} from './post-sig
     });
   });
 
-  window.CosmoComposerView=Object.freeze({showEntry,showAi,showEditor,prepareDocumentForEditor,markDocumentInitialized});
+  window.CosmoComposerView=Object.freeze({showEntry,showAi,showEditor});
 })();
