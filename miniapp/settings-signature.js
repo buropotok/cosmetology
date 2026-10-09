@@ -28,7 +28,7 @@ export async function openSignatureSettings(onSaved=()=>{}){
   const cancel=document.createElement('button');
   cancel.type='button';cancel.className='signature-modal-cancel';cancel.textContent='Отмена';
   const save=document.createElement('button');
-  save.type='button';save.textContent='Сохранить';
+  save.type='button';save.textContent='Сохранить';save.disabled=true;
   actions.append(cancel,save);
   dialog.append(title,toolbar,host,error,actions);
   overlay.append(dialog);
@@ -51,6 +51,7 @@ export async function openSignatureSettings(onSaved=()=>{}){
     if(activeDialog!==overlay)return;
     editor=module.mountRichTextEditor(host,toolbar,{enableButtons:false,editorLabel:'Постоянная подпись'});
     if(!editor)throw new Error('Редактор недоступен.');
+    save.disabled=false;
     const saved=readSignature();
     if(saved)editor.setDocument(saved);
     save.addEventListener('click',()=>{
