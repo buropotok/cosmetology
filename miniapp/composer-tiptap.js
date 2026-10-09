@@ -2,14 +2,13 @@ import {Editor,Mark,Node,mergeAttributes} from 'https://esm.sh/@tiptap/core@3.0.
 import StarterKit from 'https://esm.sh/@tiptap/starter-kit@3.0.2';
 import {postDocumentToTiptap,tiptapToPostDocument} from './post-document-tiptap-adapter.js';
 
-(()=>{
+export function mountRichTextEditor(host,toolbar,{enableButtons=true,editorLabel='Текст публикации'}={}){
   const diag=(kind,data={})=>window.CosmoDiagnostics?.log?.(kind,data);
-  const host=document.querySelector('#composer-editor-host'),toolbar=document.querySelector('.composer-toolbar');
-  if(!(host instanceof HTMLElement)||!toolbar){diag('tiptap-abort',{hostFound:!!host,toolbarFound:!!toolbar});return}
+  if(!(host instanceof HTMLElement)||!(toolbar instanceof HTMLElement)){diag('tiptap-abort',{hostFound:!!host,toolbarFound:!!toolbar});return null}
 
   const RICH_PREFIX='\u2063COSMO_RICH_V1:';
   const DRAFT_PREFIX='\u2063COSMO_DRAFT_V3:';
-  const editorFooter=toolbar.parentElement?.querySelector('.composer-editor-footer');
+  const editorFooter=enableButtons?toolbar.parentElement?.querySelector('.composer-editor-footer'):null;
   if(editorFooter)editorFooter.parentElement.insertBefore(toolbar,editorFooter);
 
   const style=document.createElement('style');
@@ -77,9 +76,9 @@ import {postDocumentToTiptap,tiptapToPostDocument} from './post-document-tiptap-
   function notifyChange(reason='content'){const change=Object.freeze({reason});changeListeners.forEach(listener=>listener(change))}
   function subscribe(listener){if(typeof listener!=='function')return()=>{};changeListeners.add(listener);return()=>changeListeners.delete(listener)}
 
-  const editor=new Editor({element:host,extensions:[StarterKit.configure({heading:{levels:[1]}}),Spoiler,DetailsSummary,DetailsBody,Details],content:plainDocument(''),editorProps:{attributes:{spellcheck:'true','aria-label':'Текст публикации'}},onUpdate(){notifyChange('content')}});
+  const editor=new Editor({element:host,extensions:[StarterKit.configure({heading:{levels:[1]}}),Spoiler,DetailsSummary,DetailsBody,Details],content:plainDocument(''),editorProps:{attributes:{spellcheck:'true','aria-label':editorLabel}},onUpdate(){notifyChange('content')}});
 
-  const buttonDock=document.createElement('div');buttonDock.className='composer-button-dock';buttonDock.setAttribute('aria-label','Кнопки публикации');host.append(buttonDock);
+  const buttonDock=document.createElement('div');buttonDock.className='composer-button-dock';buttonDock.setAttribute('aria-label','Кнопки публикации');if(enableButtons)host.append(buttonDock);
   function renderButtons(){buttonDock.replaceChildren();buttonDock.classList.toggle('has-buttons',buttons.length>0);buttons.forEach((button,index)=>{const el=document.createElement('button');el.type='button';el.className='composer-link-button';el.textContent=button.text||'Ссылка';el.title=button.url||'';el.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();openButtonEditor(index)});buttonDock.append(el)})}
   function persistButtons(){renderButtons();notifyChange('buttons');window.dispatchEvent(new CustomEvent('cosmo-rich-buttons-change',{detail:{buttons:[...buttons]}}))}
   function closeButtonEditor(){document.querySelector('.composer-button-modal-backdrop')?.remove()}
@@ -128,7 +127,7 @@ import {postDocumentToTiptap,tiptapToPostDocument} from './post-document-tiptap-
   listItems.forEach((item,index)=>item.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();const c=editor.chain().focus();if(index===0)c.toggleOrderedList().run();else if(index===1)c.toggleBulletList().run();else if(index===2)insertDetails();else if(index===3)c.sinkListItem('listItem').run();else if(index===4)c.liftListItem('listItem').run();else if(index===5){if(editor.isActive('orderedList'))c.toggleOrderedList().run();else if(editor.isActive('bulletList'))c.toggleBulletList().run()}closeMenu(listMenu)}));
 
   if(linkItems[0])linkItems[0].addEventListener('click',e=>{e.preventDefault();e.stopPropagation();const previous=editor.getAttributes('link').href||'https://',href=prompt('Ссылка',previous);if(!href)return;try{const u=new URL(href);if(!/^https?:$/.test(u.protocol))throw 0;editor.chain().focus().extendMarkRange('link').setLink({href:u.href}).run();closeMenu(linkMenu)}catch{alert('Нужна ссылка http:// или https://')}});
-  if(linkItems[1])linkItems[1].addEventListener('click',e=>{e.preventDefault();e.stopPropagation();closeMenu(linkMenu);openButtonEditor(null)});
+  if(enableButtons&&linkItems[1])linkItems[1].addEventListener('click',e=>{e.preventDefault();e.stopPropagation();closeMenu(linkMenu);openButtonEditor(null)});
 
   toolbar.querySelector('[title="Отменить"]')?.addEventListener('click',e=>{e.preventDefault();editor.chain().focus().undo().run()});
   toolbar.querySelector('[title="Повторить"]')?.addEventListener('click',e=>{e.preventDefault();editor.chain().focus().redo().run()});
@@ -142,6 +141,19 @@ import {postDocumentToTiptap,tiptapToPostDocument} from './post-document-tiptap-
   const emojiBtn=toolbar.querySelector('[title="Emoji"]');if(emojiBtn){emojiBtn.addEventListener('mousedown',preserve);emojiBtn.addEventListener('click',e=>{e.preventDefault();const existing=document.querySelector('.composer-emoji-panel');if(existing){existing.remove();return}const panel=document.createElement('div');panel.className='composer-emoji-panel';panel.style.visibility='hidden';const handle=document.createElement('div');handle.className='composer-emoji-drag-handle';handle.setAttribute('aria-label','Переместить панель эмодзи');panel.append(handle);const scroll=document.createElement('div');scroll.className='composer-emoji-scroll';scroll.setAttribute('aria-label','Эмодзи');for(const emoji of EMOJIS){const b=document.createElement('button');b.type='button';b.textContent=emoji;b.setAttribute('aria-label',emoji);b.addEventListener('pointerdown',preserve);b.addEventListener('mousedown',preserve);b.addEventListener('click',()=>{editor.chain().focus().insertContent(emoji).run();panel.remove()});scroll.append(b)}panel.append(scroll);document.body.append(panel);positionEmojiPanel(panel,emojiBtn);makeEmojiPanelDraggable(panel,handle);panel.style.visibility=''})}
 
   renderButtons();
-  window.CosmoRichEditor={element:host,editor,toPostDocument,getPlainText,focus,getSubmissionValue,setDocument,subscribe,draftValue,restoreDraft,restorePlain,clear,openButtonEditor};
-  window.dispatchEvent(new CustomEvent('cosmo-rich-ready'));diag('tiptap-ready',{version:'3.0.2',blockItems:blockItems.length,formatItems:formatItems.length,listItems:listItems.length});
-})();
+  diag('tiptap-ready',{version:'3.0.2',blockItems:blockItems.length,formatItems:formatItems.length,listItems:listItems.length});
+  return {element:host,editor,toPostDocument,getPlainText,focus,getSubmissionValue,setDocument,subscribe,draftValue,restoreDraft,restorePlain,clear,openButtonEditor,
+    destroy(){changeListeners.clear();editor.destroy();style.remove()}
+  };
+}
+
+export function initComposerTiptap(){
+  const host=document.querySelector('#composer-editor-host'),toolbar=document.querySelector('.composer-toolbar');
+  if(window.CosmoRichEditor)return window.CosmoRichEditor;
+  const instance=mountRichTextEditor(host,toolbar);
+  if(!instance)return null;
+  window.CosmoRichEditor={element:host,editor:instance.editor,toPostDocument:instance.toPostDocument,getPlainText:instance.getPlainText,focus:instance.focus,getSubmissionValue:instance.getSubmissionValue,setDocument:instance.setDocument,subscribe:instance.subscribe,draftValue:instance.draftValue,restoreDraft:instance.restoreDraft,restorePlain:instance.restorePlain,clear:instance.clear,openButtonEditor:instance.openButtonEditor};
+  window.dispatchEvent(new CustomEvent('cosmo-rich-ready'));
+  return window.CosmoRichEditor;
+}
+
