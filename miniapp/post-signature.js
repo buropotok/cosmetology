@@ -45,3 +45,23 @@ export function appendSignatureToDocument(document,signature=readSignature()){
   if(!hasSignatureText(signature)||!Array.isArray(document?.blocks))return document;
   return {...document,blocks:[...document.blocks,divider(),...signature.blocks]};
 }
+
+// The default is consumed exactly once by a fresh New Post session.
+// Restoring a draft does not start this lifecycle.
+let newPostPending=false;
+export function beginNewPostSignature(){newPostPending=true}
+export function finishNewPostSignature(){newPostPending=false}
+export function signatureForIncomingPost(document){
+  return newPostPending?appendSignatureToDocument(document):document;
+}
+export function insertDefaultSignature(editor){
+  if(!newPostPending||!editor?.setDocument)return;
+  if(!editor.getPlainText?.().trim()){
+    const document=initialDocumentWithSignature();
+    if(document){
+      editor.setDocument(document);
+      editor.editor?.commands?.setTextSelection?.(1);
+    }
+  }
+  finishNewPostSignature();
+}
