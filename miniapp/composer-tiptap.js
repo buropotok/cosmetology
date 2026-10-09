@@ -157,3 +157,6 @@ export function initComposerTiptap(){
   return window.CosmoRichEditor;
 }
 
+
+// Preserve direct initialization when Composer is already mounted; runtime can also mount later.
+if(document.querySelector('#composer-editor-host'))initComposerTiptap();
