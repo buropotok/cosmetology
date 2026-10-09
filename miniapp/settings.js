@@ -1,3 +1,5 @@
+import {readSignature} from './post-signature.js';
+
 (()=>{
 const $=selector=>document.querySelector(selector),settings=$('#settings-screen'),controller=window.CosmoOnboardingControllerInstance,accountState=window.CosmoAccountState;
 if(!settings||!controller||!accountState)return;
@@ -31,4 +33,13 @@ botUi.button?.addEventListener('click',()=>{const account=controller.getState().
 groupUi.button?.addEventListener('click',()=>act(()=>controller.connectTelegramGroup()));
 let vkAction=null;
 vkUi.button?.addEventListener('click',()=>{if(vkAction)return;vkUi.button.disabled=true;const run=window.CosmoVkDestinationSelection.open().catch(error=>window.CosmoTelegramGateway.create().showAlert(error instanceof Error?error.message:'Не удалось открыть выбор группы.')).finally(()=>{if(vkAction===run){vkAction=null;vkUi.button.disabled=false}});vkAction=run});
+const signatureStatus=$('#settings-signature-status');
+function refreshSignatureStatus(){if(signatureStatus)signatureStatus.textContent=readSignature()?'Сохранена':'Не задана'}
+refreshSignatureStatus();
+$('#settings-signature-edit')?.addEventListener('click',()=>{
+  void import('/settings-signature.js')
+    .then(module=>module.openSignatureSettings(refreshSignatureStatus))
+    .catch(error=>window.CosmoTelegramGateway?.create?.().showAlert(error instanceof Error?error.message:'Не удалось открыть редактор подписи.'));
+});
+
 })();
