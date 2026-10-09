@@ -1,3 +1,5 @@
+import {signatureForIncomingPost,finishNewPostSignature} from './post-signature.js';
+
 (()=>{
   const controlPanel=document.querySelector('#publish-ai-wizard [data-ai-control-panel]');
   if(!controlPanel)return;
@@ -54,9 +56,9 @@
   async function loadPostDocument(sourceDocument,imageOptions=currentImageOptions){
     const editor=await waitForEditor();
     if(!editor)return false;
-    const doc=window.CosmoComposerView?.prepareDocumentForEditor?.(sourceDocument)||sourceDocument;
+    const doc=signatureForIncomingPost(sourceDocument);
     if(editor.setDocument(doc)!==true)return false;
-    window.CosmoComposerView?.markDocumentInitialized?.();
+    finishNewPostSignature();
     window.CosmoComposerState?.setImageOptions?.(normalizeImageOptions(imageOptions));
     return true;
   }
