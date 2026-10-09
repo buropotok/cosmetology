@@ -64,3 +64,16 @@
 .new-post-entry .new-post-entry__pair img{
   filter:grayscale(1) opacity(.72);
 }
+
+
+/* Signature settings dialog: editor and toolbar reuse Composer's existing controls. */
+.signature-modal-overlay{position:fixed;inset:0;z-index:22000;display:flex;justify-content:center;align-items:flex-start;overflow:auto;padding:calc(20px + env(safe-area-inset-top)) 12px calc(20px + env(safe-area-inset-bottom));background:rgba(0,0,0,.45)}
+.signature-modal-card{width:min(100%,520px);padding:16px;border-radius:16px;background:#fff;color:#111;box-shadow:0 18px 50px #0003}
+.signature-modal-card h2{font-size:18px;margin:0 0 14px}
+.signature-modal-card .composer-toolbar{margin-bottom:10px}
+.signature-editor-host{max-height:45vh;overflow:auto;border:1px solid #e5e5ea!important;border-radius:10px;padding:10px!important}
+.signature-modal-error{color:#d14343;font-size:13px;margin:8px 0}
+.signature-modal-error:empty{display:none}
+.signature-modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}
+.signature-modal-actions button{font-size:15px;padding:11px 15px}
+.signature-modal-cancel{background:#f2f2f7;color:#2481cc}
