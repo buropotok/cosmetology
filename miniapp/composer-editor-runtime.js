@@ -1,6 +1,6 @@
 import {loadRuntimeModule,recordRuntimeDiagnostic,skipRuntimeModule} from './runtime-diagnostics.js';
 
-const RICH_LOADER_VERSION='2026-09-15.3';
+const RICH_LOADER_VERSION='2026-10-09.1';
 const STAGE='new-post.editor-runtime';
 let runtimePromise,runtimeReady=false;
 
@@ -34,7 +34,7 @@ export function loadComposerEditorRuntime(){
       const tiptap=await loadRuntimeModule({
         stage:STAGE,
         module:'composer-tiptap',
-        load:()=>import(`/composer-tiptap.js?v=${encodeURIComponent(RICH_LOADER_VERSION)}`),
+        load:()=>import(`/composer-tiptap.js?v=${encodeURIComponent(RICH_LOADER_VERSION)}`).then(module=>{module.initComposerTiptap();return module}),
         validate:()=>Boolean(window.CosmoRichEditor),
         validationError:'Tiptap editor did not initialize'
       });

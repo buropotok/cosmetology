@@ -31,4 +31,21 @@ botUi.button?.addEventListener('click',()=>{const account=controller.getState().
 groupUi.button?.addEventListener('click',()=>act(()=>controller.connectTelegramGroup()));
 let vkAction=null;
 vkUi.button?.addEventListener('click',()=>{if(vkAction)return;vkUi.button.disabled=true;const run=window.CosmoVkDestinationSelection.open().catch(error=>window.CosmoTelegramGateway.create().showAlert(error instanceof Error?error.message:'Не удалось открыть выбор группы.')).finally(()=>{if(vkAction===run){vkAction=null;vkUi.button.disabled=false}});vkAction=run});
+const signatureStatus=$('#settings-signature-status');
+async function refreshSignatureStatus(){
+  if(!signatureStatus)return;
+  try{
+    const {readSignature}=await import('/post-signature.js');
+    if(signatureStatus.isConnected)signatureStatus.textContent=readSignature()?'Сохранена':'Не задана';
+  }catch(error){
+    if(signatureStatus.isConnected)signatureStatus.textContent='Не удалось загрузить';
+  }
+}
+refreshSignatureStatus();
+$('#settings-signature-edit')?.addEventListener('click',()=>{
+  void import('/settings-signature.js')
+    .then(module=>module.openSignatureSettings(refreshSignatureStatus))
+    .catch(error=>window.CosmoTelegramGateway?.create?.().showAlert(error instanceof Error?error.message:'Не удалось открыть редактор подписи.'));
+});
+
 })();
